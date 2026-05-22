@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
+import { AnimatePresence } from 'framer-motion'
 import MotionIndicator from './MotionIndicator'
 import TrailingVignette from './TrailingVignette'
 import { usePanMotionHandler } from './usePanMotionHandler'
+import TopBar from './components/TopBar'
+import NotificationsPanel from './components/NotificationsPanel'
+import ProfilePanel from './components/ProfilePanel'
+import PlusFab from './components/PlusFab'
+import type { Notification, NotificationTab } from './types'
 
 const CANVAS_SIZE = 3000
 const meshColors = ['#e8f0fa', '#f5f8fc', '#dde8f5', '#ecf2f8', '#e0ebf5']
@@ -75,15 +81,62 @@ function getMinScale() {
   return Math.max(window.innerWidth / CANVAS_SIZE, window.innerHeight / CANVAS_SIZE)
 }
 
+const currentUser = {
+  name: 'James',
+  initial: 'J',
+  avatarColor: '#c4a373',
+  email: 'james@cutline.app',
+}
+
+const placeholderNotifications: Notification[] = [
+  {
+    id: '1',
+    avatar: { initial: 'S', color: '#7c5cbf' },
+    message: 'Sofia commented on your HU canvas',
+    timestamp: '2h ago',
+    isUnread: true,
+    type: 'mention',
+  },
+  {
+    id: '2',
+    avatar: { initial: 'M', color: '#3a86c8' },
+    message: 'New question added to CE Lecture 4',
+    timestamp: '5h ago',
+    isUnread: true,
+    type: 'all',
+  },
+  {
+    id: '3',
+    avatar: { initial: 'T', color: '#3ecf6e' },
+    message: 'Tom shared "Biochem Finals" with you',
+    timestamp: '1d ago',
+    isUnread: false,
+    type: 'all',
+  },
+]
+
 function App() {
   const [minScale, setMinScale] = useState(getMinScale)
   const onPanning = usePanMotionHandler()
+
+  const [openPanel, setOpenPanel] = useState<'notifications' | 'profile' | null>(null)
+  const [activeTab, setActiveTab] = useState<NotificationTab>('all')
 
   useEffect(() => {
     const handleResize = () => setMinScale(getMinScale())
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpenPanel(null)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  const unreadCount = placeholderNotifications.filter((n) => n.isUnread).length
 
   return (
     <div
@@ -97,6 +150,52 @@ function App() {
     >
       <MotionIndicator />
       <TrailingVignette />
+
+      <TopBar
+        user={currentUser}
+        unreadCount={unreadCount}
+        onSearch={() => {}}
+        onNotificationClick={() =>
+          setOpenPanel((p) => (p === 'notifications' ? null : 'notifications'))
+        }
+        onProfileClick={() =>
+          setOpenPanel((p) => (p === 'profile' ? null : 'profile'))
+        }
+      />
+
+      <PlusFab
+        onAddToCanvas={(type) => console.log('add to canvas', type)}
+        onStudyAction={(action) => console.log('study action', action)}
+      />
+
+      <AnimatePresence>
+        {openPanel === 'notifications' && (
+          <NotificationsPanel
+            key="notifications"
+            isOpen
+            onClose={() => setOpenPanel(null)}
+            notifications={placeholderNotifications}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onMarkAllRead={() => console.log('mark all read')}
+            onNotificationClick={(id) => console.log('notification clicked', id)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {openPanel === 'profile' && (
+          <ProfilePanel
+            key="profile"
+            isOpen
+            onClose={() => setOpenPanel(null)}
+            user={currentUser}
+            onNavigate={(dest) => console.log('navigate', dest)}
+            onSignOut={() => console.log('sign out')}
+          />
+        )}
+      </AnimatePresence>
+
       <TransformWrapper
         initialScale={1}
         minScale={minScale}

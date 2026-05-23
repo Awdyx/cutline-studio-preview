@@ -26,7 +26,7 @@ export const MAX_BLOB_DEPTH = 1
 
 const BLOB_LIGHTNESS_STOPS = [-1, -0.55, 0, 0.45, 0.85] as const
 /** Subtle cap so blobs stay ambient, not decorative color washes. */
-const MAX_BLOB_LIGHTNESS_DELTA = 0.042
+const MAX_BLOB_LIGHTNESS_DELTA = 0.0504
 
 /** Center first, then adjacent, then corner blobs. */
 const BLOB_REVEAL_ORDER = [2, 1, 3, 0, 4] as const

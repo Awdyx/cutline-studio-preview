@@ -5,7 +5,6 @@ const PANEL_IDS = new Set([
   'notifications',
   'profile',
   'cutline',
-  'customize',
   'whats-new',
 ])
 

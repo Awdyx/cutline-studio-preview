@@ -1,7 +1,13 @@
 import { useRef, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { BellOff } from 'lucide-react'
-import { CHROME_CARD_CLASS, card, font } from '../styles/tokens'
+import {
+  CHROME_CARD_CLASS,
+  CHROME_PRESERVE_CASE_CLASS,
+  card,
+  chromeLabel,
+  font,
+} from '../styles/tokens'
 import type { Notification, NotificationTab } from '../types'
 
 interface NotificationsPanelProps {
@@ -85,6 +91,7 @@ function NotificationRow({
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p
+          className={CHROME_PRESERVE_CASE_CLASS}
           style={{
             margin: 0,
             fontSize: 13,
@@ -135,7 +142,7 @@ function EmptyState() {
     >
       <BellOff size={22} color={font.colorFaint} strokeWidth={1.5} />
       <p style={{ margin: 0, fontSize: 13, color: font.colorMuted }}>
-        You're all caught up.
+        {chromeLabel("You're all caught up.")}
       </p>
     </div>
   )
@@ -193,7 +200,7 @@ export default function NotificationsPanel({
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: 16, fontWeight: 600 }}>Notifications</span>
+        <span style={{ fontSize: 16, fontWeight: 600 }}>{chromeLabel('Notifications')}</span>
         <button
           onClick={onMarkAllRead}
           style={{
@@ -206,7 +213,7 @@ export default function NotificationsPanel({
             fontFamily: font.family,
           }}
         >
-          Mark all read
+          {chromeLabel('Mark all read')}
         </button>
       </div>
 
@@ -217,7 +224,7 @@ export default function NotificationsPanel({
           gap: 0,
           padding: '10px 16px 0',
           flexShrink: 0,
-          borderBottom: '1px solid rgba(20, 30, 50, 0.07)',
+          borderBottom: '1px solid var(--ui-divider)',
         }}
       >
         {TABS.map(({ key, label }) => (
@@ -241,7 +248,7 @@ export default function NotificationsPanel({
               transition: 'color 150ms ease',
             }}
           >
-            {label}
+            {chromeLabel(label)}
           </button>
         ))}
       </div>

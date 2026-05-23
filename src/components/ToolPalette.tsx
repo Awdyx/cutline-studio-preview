@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { playSound } from '../sound/playSound'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Eraser, Highlighter, Pen, Redo2, Trash2, Undo2 } from 'lucide-react'
-import { CHROME_GLASS_CLASS, card, font, glass } from '../styles/tokens'
+import {
+  CHROME_GLASS_CLASS,
+  card,
+  font,
+  glass,
+  menuDividerVerticalStyle,
+} from '../styles/tokens'
 import { useHistoryUiStore } from '../canvasHistory/canvasHistory'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { hasAnyAnnotations } from '../canvasLock/layer'
@@ -22,12 +28,6 @@ const FAB_GAP = 12
 /** Left of the + FAB: 24px margin + 52px + 12px gap */
 const TOOLS_FAB_RIGHT = 24 + FAB_SIZE + FAB_GAP
 
-const dividerStyle: React.CSSProperties = {
-  width: 1,
-  height: 28,
-  background: 'rgba(20, 30, 50, 0.1)',
-  flexShrink: 0,
-}
 
 function ToolButton({
   active,
@@ -267,7 +267,7 @@ export default function ToolPalette() {
               </ToolButton>
             </ShortcutTooltip>
 
-            <div style={dividerStyle} />
+            <div style={menuDividerVerticalStyle} />
 
             <ToolButton label="Pen" active={mode === 'pen'} onClick={handlePenClick}>
               <Pen size={18} strokeWidth={2} />
@@ -283,13 +283,13 @@ export default function ToolPalette() {
               <ColorDot color={highlighterDisplayColor} />
             </ToolButton>
 
-            <div style={dividerStyle} />
+            <div style={menuDividerVerticalStyle} />
 
             <ToolButton label="Eraser" active={isErase} onClick={handleEraserClick}>
               <Eraser size={18} strokeWidth={2} />
             </ToolButton>
 
-            <div style={dividerStyle} />
+            <div style={menuDividerVerticalStyle} />
 
             <ToolButton
               label="Clear temporary annotations"

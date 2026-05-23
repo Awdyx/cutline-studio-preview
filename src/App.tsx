@@ -23,6 +23,8 @@ import ToolPalette from './components/ToolPalette'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useBackgroundMusic } from './hooks/useBackgroundMusic'
 import { usePanelSounds } from './hooks/usePanelSounds'
+import { useThemeChangeFeedback } from './hooks/useThemeChangeFeedback'
+import ThemeAmbientPulse from './components/ThemeAmbientPulse'
 import { useSoundStore } from './sound/soundStore'
 import { playSound } from './sound/playSound'
 import ActionToast from './components/ActionToast'
@@ -39,17 +41,15 @@ import { useCanvasWorkspaceStore } from './spaces/canvasWorkspaceStore'
 import SpaceBackPill from './components/SpaceBackPill'
 import SpaceTransitionOverlay from './components/SpaceTransitionOverlay'
 import CutlineMenu from './components/CutlineMenu'
-import CustomizePanel from './components/CustomizePanel'
 import WhatsNewPanel from './components/WhatsNewPanel'
 import UnlockAnnotationsModal from './components/UnlockAnnotationsModal'
 import type { Notification, NotificationTab } from './types'
-import {
-  canvasBackgroundColor,
-  meshBlobVisibilities,
-} from './theme/paletteGenerator'
+import { meshBlobVisibilities } from './theme/paletteGenerator'
 import { useThemeCssVars } from './theme/useThemeCssVars'
 import { useThemeStore } from './theme/themeStore'
 import { useEffectiveMode } from './theme/useEffectiveMode'
+import { useProfileStore } from './profile/profileStore'
+import { profileToTopBarUser } from './profile/profileUtils'
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -121,12 +121,6 @@ const meshKeyframesCss = meshBlobMotion
   )
   .join('\n')
 
-const currentUser = {
-  name: 'James',
-  initial: 'J',
-  avatarColor: '#c4a373',
-  email: 'james@cutline.app',
-}
 
 const placeholderNotifications: Notification[] = [
   {
@@ -159,7 +153,6 @@ type OpenPanel =
   | 'notifications'
   | 'profile'
   | 'cutline'
-  | 'customize'
   | 'whats-new'
   | null
 
@@ -174,10 +167,10 @@ function App() {
   const themeModeStore = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeModeStore)
   const { generated } = useThemeCssVars()
+  const themePulse = useThemeChangeFeedback(effectiveMode)
   const meshColors = generated.meshColors
   const meshBlobVisibility = meshBlobVisibilities(palette.blobDepth)
   const meshLayerOpacity = effectiveMode === 'light' ? 0.92 : 0.88
-  const canvasBg = canvasBackgroundColor(palette, effectiveMode)
   const pauseMeshMotion = prefersSolidCompositorLayers()
 
   const transformRef = useRef<ReactZoomPanPinchContentRef | null>(null)
@@ -245,6 +238,8 @@ function App() {
 
   const themeMode = useThemeStore((s) => s.mode)
   const setMode = useThemeStore((s) => s.setMode)
+  const profile = useProfileStore((s) => s.profile)
+  const topBarUser = profileToTopBarUser(profile)
 
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
   const [activeTab, setActiveTab] = useState<NotificationTab>('all')
@@ -278,10 +273,11 @@ function App() {
     >
       <MotionIndicator />
       <TrailingVignette />
+      <ThemeAmbientPulse pulse={themePulse} />
       <ActionToast />
 
       <TopBar
-        user={currentUser}
+        user={topBarUser}
         unreadCount={unreadCount}
         cutlineMenuOpen={openPanel === 'cutline'}
         transformRef={transformRef}
@@ -325,7 +321,6 @@ function App() {
             onClose={() => setOpenPanel(null)}
             mode={themeMode}
             onModeChange={setMode}
-            onCustomizeCanvas={() => setOpenPanel('customize')}
             onNavigate={(dest) => {
               if (dest === 'whats-new') setOpenPanel('whats-new')
               else console.log('cutline navigate', dest)
@@ -337,12 +332,6 @@ function App() {
               else lockCanvas()
             }}
           />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {openPanel === 'customize' && (
-          <CustomizePanel key="customize" isOpen onClose={closePanel} />
         )}
       </AnimatePresence>
 
@@ -385,9 +374,13 @@ function App() {
             key="profile"
             isOpen
             onClose={() => setOpenPanel(null)}
-            user={currentUser}
-            onNavigate={(dest) => console.log('navigate', dest)}
+            user={profile}
+            onNavigate={(dest) => {
+              if (dest === 'help') console.log('help & support')
+            }}
             onSignOut={() => console.log('sign out')}
+            onManageBilling={() => console.log('manage billing')}
+            onChangePlan={() => console.log('change plan')}
           />
         )}
       </AnimatePresence>
@@ -444,7 +437,7 @@ function App() {
               canvasRef.current = node
               setCanvasMount(node)
             }}
-            className="cutline-draw-target draw-target"
+            className="cutline-draw-target draw-target cutline-canvas-bg"
             onPointerDown={(e) => {
               if (e.target !== e.currentTarget) return
               clearCanvasSelectionTap.onPointerDown(e)
@@ -456,8 +449,7 @@ function App() {
               width: CANVAS_WIDTH,
               height: CANVAS_HEIGHT,
               position: 'relative',
-              backgroundColor: canvasBg,
-              transition: 'background-color 400ms ease, opacity 280ms ease-out',
+              transition: 'opacity 280ms ease-out',
               opacity: canvasFaded ? 0 : 1,
             }}
           >
@@ -481,10 +473,8 @@ function App() {
                     animation: pauseMeshMotion
                       ? 'none'
                       : `meshBlob${index} ${meshBlobMotion[index].period}s ease-in-out infinite`,
-                    willChange: pauseMeshMotion ? undefined : 'background-position, opacity',
+                    willChange: pauseMeshMotion ? undefined : 'background-position',
                     pointerEvents: 'none',
-                    transition:
-                      'background-image 400ms ease, opacity 400ms ease',
                   }}
                 />
               )

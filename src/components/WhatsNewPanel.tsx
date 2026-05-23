@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Sparkles, X } from 'lucide-react'
-import { CHROME_CARD_CLASS, card, font } from '../styles/tokens'
+import { CHROME_CARD_CLASS, card, chromeLabel, font } from '../styles/tokens'
 import { WHATS_NEW_RELEASES } from '../content/whatsNew'
 
 interface WhatsNewPanelProps {
@@ -62,9 +62,9 @@ export default function WhatsNewPanel({ isOpen, onClose }: WhatsNewPanelProps) {
       >
         <Sparkles size={18} strokeWidth={1.8} color={font.colorMuted} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>What&apos;s new</div>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{chromeLabel("What's new")}</div>
           <div style={{ fontSize: 12, color: font.colorMuted, marginTop: 2 }}>
-            Highlights from building Cutline Studio
+            {chromeLabel('Highlights from building Cutline Studio')}
           </div>
         </div>
         <button
@@ -122,13 +122,12 @@ export default function WhatsNewPanel({ isOpen, onClose }: WhatsNewPanelProps) {
                   fontSize: 11,
                   fontWeight: 700,
                   letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
                   color: 'var(--ui-accent)',
                 }}
               >
                 v{release.version}
               </span>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{release.title}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{chromeLabel(release.title)}</span>
             </div>
             <ul
               style={{
@@ -147,7 +146,7 @@ export default function WhatsNewPanel({ isOpen, onClose }: WhatsNewPanelProps) {
                     marginBottom: 6,
                   }}
                 >
-                  {item}
+                  {chromeLabel(item)}
                 </li>
               ))}
             </ul>

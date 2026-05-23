@@ -8,20 +8,10 @@ export type ThemeState = {
   mode: ThemeMode
   palette: PaletteConfig
   setMode: (mode: ThemeMode) => void
-  setPalette: (partial: Partial<PaletteConfig>) => void
-  resetCanvasAppearance: () => void
 }
 
 export const defaultPalette: PaletteConfig = {
-  blobDepth: 0.45,
-}
-
-function clampPalette(partial: Partial<PaletteConfig>): Partial<PaletteConfig> {
-  const next = { ...partial }
-  if (next.blobDepth !== undefined) {
-    next.blobDepth = Math.min(1, Math.max(0, next.blobDepth))
-  }
-  return next
+  blobDepth: 1,
 }
 
 type PersistedV1 = {
@@ -51,26 +41,19 @@ export const useThemeStore = create<ThemeState>()(
       palette: defaultPalette,
 
       setMode: (mode) => set({ mode }),
-
-      setPalette: (partial) =>
-        set((state) => ({
-          palette: { ...state.palette, ...clampPalette(partial) },
-        })),
-
-      resetCanvasAppearance: () =>
-        set((state) => ({
-          palette: defaultPalette,
-          mode: state.mode,
-        })),
     }),
     {
       name: 'cutline-theme-v1',
-      version: 2,
-      migrate: (persisted: unknown) => {
+      version: 3,
+      migrate: (persisted: unknown, fromVersion) => {
         const state = persisted as PersistedV1
+        const palette =
+          fromVersion < 3
+            ? defaultPalette
+            : migratePalette(state.palette)
         return {
           mode: state.mode ?? 'light',
-          palette: migratePalette(state.palette),
+          palette,
         }
       },
     },

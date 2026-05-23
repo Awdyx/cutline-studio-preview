@@ -9,7 +9,14 @@ import {
   type CanvasSearchEntry,
 } from '../canvasSearch/canvasSearchEntries'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
-import { CHROME_CARD_CLASS, CHROME_GLASS_CLASS, card, font, glass } from '../styles/tokens'
+import {
+  CHROME_CARD_CLASS,
+  CHROME_GLASS_CLASS,
+  CHROME_PRESERVE_CASE_CLASS,
+  card,
+  font,
+  glass,
+} from '../styles/tokens'
 import { SHORTCUTS_BY_ID } from '../shortcuts/shortcutDefs'
 import { modKeyLabel } from '../shortcuts/modKey'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
@@ -195,7 +202,7 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
               else inputRef.current?.blur()
             }
           }}
-          placeholder="Search stickies, text, and spaces…"
+          placeholder="search stickies, text, and spaces…"
           className="theme-surface"
           style={{
             flex: 1,
@@ -315,6 +322,7 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
                     >
                       {entry.kind === 'text' && entry.preview ? (
                         <span
+                          className={CHROME_PRESERVE_CASE_CLASS}
                           style={{
                             fontSize: 8,
                             lineHeight: 1.1,
@@ -343,6 +351,7 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
                         }}
                       >
                         <span
+                          className={CHROME_PRESERVE_CASE_CLASS}
                           style={{
                             fontSize: 13,
                             fontWeight: 600,
@@ -358,7 +367,6 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
                           style={{
                             fontSize: 10,
                             fontWeight: 600,
-                            textTransform: 'uppercase',
                             letterSpacing: '0.04em',
                             color: font.colorFaint,
                             flexShrink: 0,
@@ -368,6 +376,7 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
                         </span>
                       </div>
                       <p
+                        className={CHROME_PRESERVE_CASE_CLASS}
                         style={{
                           margin: 0,
                           fontSize: 12,

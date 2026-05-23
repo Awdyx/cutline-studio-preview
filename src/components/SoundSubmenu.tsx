@@ -2,7 +2,7 @@ import { useLayoutEffect, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Music, Volume2 } from 'lucide-react'
-import { CHROME_CARD_CLASS, card, font } from '../styles/tokens'
+import { CHROME_CARD_CLASS, card, chromeLabel, font, menuDividerStyle } from '../styles/tokens'
 import { useSubmenuPosition } from './useSubmenuPosition'
 import { backgroundMusic } from '../sound/backgroundMusic'
 import { useSoundStore } from '../sound/soundStore'
@@ -26,7 +26,9 @@ function ToggleRow({
         padding: '10px 14px',
       }}
     >
-      <span style={{ flex: 1, fontSize: 14, color: font.colorPrimary }}>{label}</span>
+      <span style={{ flex: 1, fontSize: 14, color: font.colorPrimary }}>
+        {chromeLabel(label)}
+      </span>
       <button
         type="button"
         role="switch"
@@ -107,7 +109,7 @@ export default function SoundSubmenu({
         borderRadius: card.radius,
         fontFamily: font.family,
         overflow: 'hidden',
-        zIndex: 40,
+        zIndex: 50,
       }}
       className={`theme-surface ${CHROME_CARD_CLASS}`}
       onClick={(e) => e.stopPropagation()}
@@ -122,7 +124,6 @@ export default function SoundSubmenu({
           fontSize: 11,
           fontWeight: 600,
           letterSpacing: '0.04em',
-          textTransform: 'uppercase',
           color: font.colorMuted,
         }}
       >
@@ -132,13 +133,7 @@ export default function SoundSubmenu({
 
       <ToggleRow label="Sound effects" enabled={!muted} onChange={handleSfxToggle} />
 
-      <div
-        style={{
-          height: 1,
-          background: 'rgba(20, 30, 50, 0.07)',
-          margin: '4px 10px',
-        }}
-      />
+      <div style={menuDividerStyle} />
 
       <div
         style={{
@@ -149,7 +144,6 @@ export default function SoundSubmenu({
           fontSize: 11,
           fontWeight: 600,
           letterSpacing: '0.04em',
-          textTransform: 'uppercase',
           color: font.colorMuted,
         }}
       >

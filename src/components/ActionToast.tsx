@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CHROME_GLASS_CLASS, font, glass } from '../styles/tokens'
+import { CHROME_GLASS_CLASS, chromeLabel, font, glass } from '../styles/tokens'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { ShortcutKeycaps } from './ShortcutKeycaps'
 
@@ -56,7 +56,7 @@ export default function ActionToast() {
             <Icon size={16} strokeWidth={2} color={font.colorMuted} style={{ flexShrink: 0 }} />
           )}
           <span style={{ fontSize: 13, fontWeight: 500, color: font.colorPrimary }}>
-            {toast.label}
+            {chromeLabel(toast.label)}
           </span>
           <ShortcutKeycaps keys={toast.keys} size="sm" />
         </motion.div>

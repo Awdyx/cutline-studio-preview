@@ -2,7 +2,7 @@ import { useLayoutEffect, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Sun, Moon, Monitor, Check } from 'lucide-react'
-import { CHROME_CARD_CLASS, card, font } from '../styles/tokens'
+import { CHROME_CARD_CLASS, card, chromeLabel, font } from '../styles/tokens'
 import type { ThemeMode } from '../theme/themeStore'
 import { useSubmenuPosition } from './useSubmenuPosition'
 
@@ -52,7 +52,7 @@ export default function ThemeSubmenu({
         borderRadius: card.radius,
         fontFamily: font.family,
         overflow: 'hidden',
-        zIndex: 40,
+        zIndex: 50,
       }}
       className={`theme-surface ${CHROME_CARD_CLASS}`}
       onClick={(e) => e.stopPropagation()}
@@ -87,7 +87,7 @@ export default function ThemeSubmenu({
           }}
         >
           <Icon size={15} strokeWidth={1.8} color={font.colorMuted} />
-          <span style={{ flex: 1, fontSize: 14, textAlign: 'left' }}>{label}</span>
+          <span style={{ flex: 1, fontSize: 14, textAlign: 'left' }}>{chromeLabel(label)}</span>
           {currentMode === mode && (
             <Check size={14} strokeWidth={2.5} color={font.colorPrimary} />
           )}

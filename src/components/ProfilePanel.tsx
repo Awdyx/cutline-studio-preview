@@ -1,16 +1,31 @@
 import { useRef, useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { User, Settings, CreditCard, HelpCircle, LogOut } from 'lucide-react'
-import { CHROME_CARD_CLASS, card, font } from '../styles/tokens'
+import { motion, AnimatePresence } from 'framer-motion'
+import { User, CreditCard, HelpCircle, LogOut } from 'lucide-react'
+import {
+  CHROME_CARD_CLASS,
+  CHROME_PRESERVE_CASE_CLASS,
+  card,
+  chromeLabel,
+  font,
+  menuDividerStyle,
+} from '../styles/tokens'
+import type { UserProfile } from '../profile/types'
+import UserAvatar from './UserAvatar'
+import ProfileIdentityTags from './ProfileIdentityTags'
+import ProfileSubmenu from './ProfileSubmenu'
+import SubscriptionSubmenu from './SubscriptionSubmenu'
 
-type ProfileDestination = 'profile' | 'preferences' | 'subscription' | 'help'
+type ProfileDestination = 'profile' | 'subscription' | 'help'
+type ProfileSubmenuId = 'profile' | 'subscription'
 
 interface ProfilePanelProps {
   isOpen: boolean
   onClose: () => void
-  user: { name: string; email: string; initial: string; avatarColor: string }
+  user: UserProfile
   onNavigate: (destination: ProfileDestination) => void
   onSignOut: () => void
+  onManageBilling?: () => void
+  onChangePlan?: () => void
 }
 
 const cardBase: React.CSSProperties = {
@@ -28,19 +43,12 @@ const cardBase: React.CSSProperties = {
   overflow: 'hidden',
 }
 
-const divider: React.CSSProperties = {
-  height: 1,
-  background: 'rgba(20, 30, 50, 0.07)',
-  margin: '4px 0',
-}
-
 const NAV_ITEMS: {
   icon: React.ElementType
   label: string
   destination: ProfileDestination
 }[] = [
   { icon: User, label: 'Profile', destination: 'profile' },
-  { icon: Settings, label: 'Preferences', destination: 'preferences' },
   { icon: CreditCard, label: 'Subscription', destination: 'subscription' },
   { icon: HelpCircle, label: 'Help & support', destination: 'help' },
 ]
@@ -59,6 +67,7 @@ function NavRow({
   const [hovered, setHovered] = useState(false)
   return (
     <button
+      type="button"
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -89,7 +98,7 @@ function NavRow({
           color: danger ? '#c0392b' : font.colorPrimary,
         }}
       >
-        {label}
+        {chromeLabel(label)}
       </span>
     </button>
   )
@@ -101,17 +110,26 @@ export default function ProfilePanel({
   user,
   onNavigate,
   onSignOut,
+  onManageBilling,
+  onChangePlan,
 }: ProfilePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const [openSubmenu, setOpenSubmenu] = useState<ProfileSubmenuId | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) setOpenSubmenu(null)
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) return
     function handleMouseDown(e: MouseEvent) {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(e.target as Node) &&
-        !(e.target as Element).closest('[data-panel-trigger="profile"]')
-      ) {
+      const target = e.target as Element
+      if (target.closest('[data-profile-submenu]')) return
+      if (target.closest('[data-profile-save-bubble]')) return
+      if (target.closest('[data-subscription-submenu]')) return
+      if (target.closest('[data-panel-trigger="profile"]')) return
+      if (panelRef.current && !panelRef.current.contains(target)) {
+        setOpenSubmenu(null)
         onClose()
       }
     }
@@ -119,71 +137,110 @@ export default function ProfilePanel({
     return () => document.removeEventListener('mousedown', handleMouseDown)
   }, [isOpen, onClose])
 
+  const handleNav = (destination: ProfileDestination) => {
+    if (destination === 'profile') {
+      setOpenSubmenu((current) => (current === 'profile' ? null : 'profile'))
+      return
+    }
+    if (destination === 'subscription') {
+      setOpenSubmenu((current) => (current === 'subscription' ? null : 'subscription'))
+      return
+    }
+    setOpenSubmenu(null)
+    onNavigate(destination)
+  }
+
   return (
-    <motion.div
-      ref={panelRef}
-      className={`theme-surface ${CHROME_CARD_CLASS}`}
-      style={cardBase}
-      initial={{ opacity: 0, scale: 0.96, y: -4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96, y: -4 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          padding: '20px 16px 16px',
-          gap: 8,
-        }}
+    <>
+      <motion.div
+        ref={panelRef}
+        className={`theme-surface ${CHROME_CARD_CLASS}`}
+        style={cardBase}
+        initial={{ opacity: 0, scale: 0.96, y: -4 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: -4 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
       >
-        <span
+        <div
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: '50%',
-            backgroundColor: user.avatarColor,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            fontWeight: 700,
-            color: '#fff',
-            letterSpacing: '0.02em',
+            padding: '20px 16px 16px',
+            gap: 8,
           }}
         >
-          {user.initial}
-        </span>
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{user.name}</p>
-          <p style={{ margin: '2px 0 0', fontSize: 12, color: font.colorMuted }}>
-            {user.email}
-          </p>
-        </div>
-      </div>
-
-      <div style={divider} />
-
-      {/* Nav */}
-      <div style={{ padding: '4px 0' }}>
-        {NAV_ITEMS.map(({ icon, label, destination }) => (
-          <NavRow
-            key={destination}
-            icon={icon}
-            label={label}
-            onClick={() => onNavigate(destination)}
+          <UserAvatar
+            displayName={user.displayName}
+            avatarColor={user.avatarColor}
+            avatarImageUrl={user.avatarImageUrl}
+            size={44}
+            fontSize={18}
           />
-        ))}
-      </div>
+          <div className={CHROME_PRESERVE_CASE_CLASS}>
+            <ProfileIdentityTags
+              displayName={user.displayName}
+              handle={user.handle}
+              studentCohort={user.studentCohort}
+            />
+            <div style={{ textAlign: 'center', width: '100%' }}>
+              {user.bio && (
+                <p
+                  style={{
+                    margin: '8px 0 0',
+                    fontSize: 12,
+                    color: font.colorFaint,
+                    lineHeight: 1.4,
+                    maxWidth: 240,
+                  }}
+                >
+                  {user.bio}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
 
-      <div style={divider} />
+        <div style={menuDividerStyle} />
 
-      {/* Footer */}
-      <div style={{ padding: '4px 0 8px' }}>
-        <NavRow icon={LogOut} label="Sign out" onClick={onSignOut} danger />
-      </div>
-    </motion.div>
+        <div style={{ padding: '4px 0' }}>
+          {NAV_ITEMS.map(({ icon, label, destination }) => {
+            const row = (
+              <NavRow
+                icon={icon}
+                label={label}
+                onClick={() => handleNav(destination)}
+              />
+            )
+            return <div key={destination}>{row}</div>
+          })}
+        </div>
+
+        <div style={menuDividerStyle} />
+
+        <div style={{ padding: '4px 0 8px' }}>
+          <NavRow icon={LogOut} label="Sign out" onClick={onSignOut} danger />
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {openSubmenu === 'profile' && (
+          <ProfileSubmenu
+            key="profile-submenu"
+            panelRef={panelRef}
+            onClose={() => setOpenSubmenu(null)}
+          />
+        )}
+        {openSubmenu === 'subscription' && (
+          <SubscriptionSubmenu
+            key="subscription-submenu"
+            panelRef={panelRef}
+            onClose={() => setOpenSubmenu(null)}
+            onManageBilling={onManageBilling}
+            onChangePlan={onChangePlan}
+          />
+        )}
+      </AnimatePresence>
+    </>
   )
 }

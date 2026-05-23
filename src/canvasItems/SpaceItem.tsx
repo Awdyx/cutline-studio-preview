@@ -7,7 +7,7 @@ import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import DragHandle from './DragHandle'
 import { useCanvasItemDrag } from './useCanvasItemDrag'
-import { useDeferredImageSrc } from '../hooks/useDeferredImageSrc'
+import SpaceCardPreview from '../spaces/SpaceCardPreview'
 import { card, font, glass, SPACE_GLASS_CLASS } from '../styles/tokens'
 import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import type { SpaceCanvasItem } from './types'
@@ -33,13 +33,14 @@ export default function SpaceItem({
   const transitionPhase = useCanvasWorkspaceStore((s) => s.transition.phase)
   const spaceMeta = useCanvasWorkspaceStore((s) => s.spaces[item.id])
   const displayName = spaceMeta?.name ?? item.name
-  const displaySnapshot = spaceMeta?.snapshot ?? item.snapshot
-  const snapshotSrc = useDeferredImageSrc(displaySnapshot)
+  const hasPreviewContent =
+    !!spaceMeta &&
+    (spaceMeta.items.length > 0 ||
+      spaceMeta.strokes.length > 0 ||
+      spaceMeta.annotationStrokes.length > 0)
   const cardRef = useRef<HTMLDivElement>(null)
 
-  const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id, {
-    suppressClickMenu: true,
-  })
+  const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id)
 
   const bodyPhaseRef = useRef<'idle' | 'pending' | 'navigating'>('idle')
   const bodyPointerRef = useRef({ startX: 0, startY: 0 })
@@ -207,19 +208,8 @@ export default function SpaceItem({
             boxShadow: 'inset 0 0 0 1px var(--glass-border)',
           }}
         >
-          {snapshotSrc ? (
-            <img
-              src={snapshotSrc}
-              alt=""
-              draggable={false}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-                borderRadius: 4,
-              }}
-            />
+          {hasPreviewContent ? (
+            <SpaceCardPreview spaceId={item.id} />
           ) : (
             <div
               style={{

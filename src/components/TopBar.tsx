@@ -1,8 +1,9 @@
 import { useState, type RefObject } from 'react'
 import { Bell } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { CHROME_GLASS_CLASS, glass, font, themeTransition } from '../styles/tokens'
+import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, glass, font } from '../styles/tokens'
 import CanvasSearchBar from './CanvasSearchBar'
+import UserAvatar from './UserAvatar'
 
 const islandBase: React.CSSProperties = {
   display: 'flex',
@@ -13,7 +14,6 @@ const islandBase: React.CSSProperties = {
   fontFamily: font.family,
   color: font.colorPrimary,
   userSelect: 'none',
-  transition: themeTransition,
 }
 
 // ─── Brand Pill ───────────────────────────────────────────────────────────────
@@ -79,7 +79,12 @@ export function BrandPill({ isOpen = false, onClick }: BrandPillProps) {
 // ─── User Cluster ─────────────────────────────────────────────────────────────
 
 interface UserClusterProps {
-  user: { name: string; initial: string; avatarColor: string }
+  user: {
+    name: string
+    initial: string
+    avatarColor: string
+    avatarImageUrl?: string | null
+  }
   unreadCount: number
   onNotificationClick: () => void
   onProfileClick: () => void
@@ -137,25 +142,17 @@ export function UserCluster({
           cursor: 'pointer',
         }}
       >
+        <UserAvatar
+          displayName={user.name}
+          avatarColor={user.avatarColor}
+          avatarImageUrl={user.avatarImageUrl}
+          size={24}
+          fontSize={11}
+        />
         <span
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: '50%',
-            backgroundColor: user.avatarColor,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 11,
-            fontWeight: 700,
-            color: '#fff',
-            flexShrink: 0,
-            letterSpacing: '0.02em',
-          }}
+          className={CHROME_PRESERVE_CASE_CLASS}
+          style={{ fontSize: 14, fontWeight: 500, color: font.colorPrimary }}
         >
-          {user.initial}
-        </span>
-        <span style={{ fontSize: 14, fontWeight: 500, color: font.colorPrimary }}>
           {user.name}
         </span>
       </button>

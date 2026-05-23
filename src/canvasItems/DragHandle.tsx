@@ -34,11 +34,11 @@ export default function DragHandle({
         border: 'none',
         borderRadius: 0,
         background: 'transparent',
-        color: 'rgba(30, 35, 45, 0.32)',
+        color: 'var(--canvas-handle-color)',
         cursor: 'grab',
         touchAction: 'none',
         pointerEvents: 'auto',
-        opacity: 0.38,
+        opacity: 'var(--canvas-handle-opacity)',
         transition: 'opacity 150ms ease, color 150ms ease',
         zIndex: 3,
       }}

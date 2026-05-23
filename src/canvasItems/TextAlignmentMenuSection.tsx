@@ -6,7 +6,7 @@ import {
   ArrowUpToLine,
   Minus,
 } from 'lucide-react'
-import { font } from '../styles/tokens'
+import { chromeLabel, font } from '../styles/tokens'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import type { ItemTextAlignment, TextAlignH, TextAlignV } from './textAlignment'
 
@@ -72,12 +72,11 @@ export default function TextAlignmentMenuSection({
           margin: '6px 14px 4px',
           fontSize: 11,
           fontWeight: 600,
-          textTransform: 'uppercase',
           letterSpacing: '0.4px',
           color: font.colorMuted,
         }}
       >
-        Text align
+        {chromeLabel('Text align')}
       </p>
       <div style={{ display: 'flex', gap: 4, padding: '0 6px 4px' }}>
         <AlignToggle

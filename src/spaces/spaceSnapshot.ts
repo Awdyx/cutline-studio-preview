@@ -7,11 +7,16 @@ export async function captureCanvasSnapshot(
 ): Promise<string | null> {
   try {
     const scale = Math.min(1, SNAPSHOT_TARGET_WIDTH / canvasEl.offsetWidth)
+    const canvasBg =
+      getComputedStyle(document.documentElement)
+        .getPropertyValue('--canvas-bg')
+        .trim() || '#f5f4f0'
+
     const canvas = await html2canvas(canvasEl, {
       scale,
       useCORS: true,
       logging: false,
-      backgroundColor: '#f5f4f0',
+      backgroundColor: canvasBg,
       ignoreElements: (el) =>
         el.hasAttribute('data-space-transition') ||
         el.hasAttribute('data-space-back-pill'),

@@ -12,3 +12,5 @@ export type SoundId =
   | 'redo'
   | 'delete'
   | 'modalOpen'
+  | 'themeToLight'
+  | 'themeToDark'

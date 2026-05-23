@@ -37,11 +37,11 @@ export default function ResizeHandle({
         border: 'none',
         borderRadius: 0,
         background: 'transparent',
-        color: 'rgba(30, 35, 45, 0.32)',
+        color: 'var(--canvas-handle-color)',
         cursor: 'nwse-resize',
         touchAction: 'none',
         pointerEvents: 'auto',
-        opacity: 0.28,
+        opacity: 'var(--canvas-resize-handle-opacity)',
         transition: 'opacity 150ms ease, color 150ms ease',
         zIndex: 3,
       }}

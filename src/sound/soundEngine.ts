@@ -153,6 +153,59 @@ function sweep(
   track(src)
 }
 
+/** Layered sine + shimmer noise — theme toggle only. */
+function glowLayer(
+  context: AudioContext,
+  freq: number,
+  peak: number,
+  attack: number,
+  release: number,
+  start: number,
+  harmonic = 2,
+  harmonicGain = 0.35,
+): void {
+  const osc = context.createOscillator()
+  const harm = context.createOscillator()
+  const mix = context.createGain()
+  mix.gain.value = 1
+  const g = env(context, peak, attack, release, start)
+  osc.type = 'sine'
+  harm.type = 'triangle'
+  osc.frequency.setValueAtTime(freq, start)
+  harm.frequency.setValueAtTime(freq * harmonic, start)
+  const harmGain = context.createGain()
+  harmGain.gain.value = harmonicGain
+  osc.connect(mix)
+  harm.connect(harmGain)
+  harmGain.connect(mix)
+  mix.connect(g)
+  g.connect(master!)
+  osc.start(start)
+  harm.start(start)
+  osc.stop(start + attack + release + 0.04)
+  harm.stop(start + attack + release + 0.04)
+  track(osc)
+  track(harm)
+}
+
+function themeGlowToLight(context: AudioContext, t0: number): void {
+  sweep(context, 360, 1280, 0.13, 0.065, t0)
+  glowLayer(context, 523, 0.058, 0.014, 0.2, t0)
+  glowLayer(context, 784, 0.038, 0.01, 0.22, t0 + 0.032, 2.01, 0.28)
+  glowLayer(context, 1047, 0.024, 0.008, 0.18, t0 + 0.058, 2, 0.22)
+  noiseBurst(context, 0.16, 0.048, t0 + 0.02, 2800, 1.3)
+  noiseBurst(context, 0.2, 0.026, t0 + 0.07, 4800, 0.55)
+}
+
+function themeGlowToDark(context: AudioContext, t0: number): void {
+  sweep(context, 960, 300, 0.14, 0.07, t0)
+  glowLayer(context, 466, 0.052, 0.016, 0.24, t0)
+  glowLayer(context, 349, 0.04, 0.012, 0.26, t0 + 0.034, 2, 0.3)
+  glowLayer(context, 233, 0.028, 0.01, 0.28, t0 + 0.062, 1.5, 0.25)
+  noiseBurst(context, 0.18, 0.042, t0 + 0.018, 720, 1)
+  noiseBurst(context, 0.14, 0.022, t0 + 0.085, 1600, 0.65)
+}
+
 /** Low, woody menu tap — shared palette for open/close. */
 function menuThump(
   context: AudioContext,
@@ -225,6 +278,14 @@ const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
   modalOpen(context, t0) {
     tone(context, 660, 0.1, 0.004, 0.14, t0)
     tone(context, 990, 0.05, 0.004, 0.12, t0 + 0.02, 'sine')
+  },
+
+  themeToLight(context, t0) {
+    themeGlowToLight(context, t0)
+  },
+
+  themeToDark(context, t0) {
+    themeGlowToDark(context, t0)
   },
 }
 

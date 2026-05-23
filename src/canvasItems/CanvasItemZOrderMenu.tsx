@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowDownToLine, ArrowUpToLine, Trash2 } from 'lucide-react'
-import { CHROME_GLASS_CLASS, glass, font } from '../styles/tokens'
+import { CHROME_GLASS_CLASS, chromeLabel, glass, font, menuDividerStyle } from '../styles/tokens'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import TextAlignmentMenuSection from './TextAlignmentMenuSection'
 import {
@@ -57,7 +57,7 @@ function MenuRow({
           flexShrink: 0,
         }}
       />
-      {label}
+      {chromeLabel(label)}
     </button>
   )
 }
@@ -71,6 +71,7 @@ export default function CanvasItemZOrderMenu() {
   const menuItem = useCanvasItemsStore((s) =>
     zMenu ? s.items.find((item) => item.id === zMenu.itemId) : undefined,
   )
+  const isSpace = menuItem?.type === 'space'
   const showTextAlign =
     menuItem?.type === 'sticky' || menuItem?.type === 'text'
 
@@ -135,29 +136,27 @@ export default function CanvasItemZOrderMenu() {
               alignment={menuItem.textAlign}
             />
           )}
-          <MenuRow
-            icon={ArrowUpToLine}
-            label="Bring to front"
-            onClick={() => {
-              bringToFront(itemId)
-              closeZMenu()
-            }}
-          />
-          <MenuRow
-            icon={ArrowDownToLine}
-            label="Send to back"
-            onClick={() => {
-              sendToBack(itemId)
-              closeZMenu()
-            }}
-          />
-          <div
-            style={{
-              height: 1,
-              margin: '4px 10px',
-              background: 'rgba(20, 30, 50, 0.08)',
-            }}
-          />
+          {!isSpace && (
+            <>
+              <MenuRow
+                icon={ArrowUpToLine}
+                label="Bring to front"
+                onClick={() => {
+                  bringToFront(itemId)
+                  closeZMenu()
+                }}
+              />
+              <MenuRow
+                icon={ArrowDownToLine}
+                label="Send to back"
+                onClick={() => {
+                  sendToBack(itemId)
+                  closeZMenu()
+                }}
+              />
+              <div style={menuDividerStyle} />
+            </>
+          )}
           <MenuRow
             icon={Trash2}
             label="Delete"

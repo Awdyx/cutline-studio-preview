@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { CHROME_CARD_CLASS, card, font } from '../styles/tokens'
+import { CHROME_CARD_CLASS, card, chromeLabel, font } from '../styles/tokens'
 
 interface UnlockAnnotationsModalProps {
   isOpen: boolean
@@ -86,7 +86,7 @@ export default function UnlockAnnotationsModal({
             letterSpacing: '-0.02em',
           }}
         >
-          Keep annotations?
+          {chromeLabel('Keep annotations?')}
         </h2>
         <p
           id="unlock-annotations-desc"
@@ -97,7 +97,9 @@ export default function UnlockAnnotationsModal({
             color: font.colorMuted,
           }}
         >
-          You added notes and marks while the canvas was locked. Choose what to do with them.
+          {chromeLabel(
+            'You added notes and marks while the canvas was locked. Choose what to do with them.',
+          )}
         </p>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -109,7 +111,7 @@ export default function UnlockAnnotationsModal({
               color: '#fff',
             }}
           >
-            Keep annotations
+            {chromeLabel('Keep annotations')}
           </button>
           <button
             type="button"
@@ -121,7 +123,7 @@ export default function UnlockAnnotationsModal({
             }}
             className="theme-surface"
           >
-            Discard
+            {chromeLabel('Discard')}
           </button>
           <button
             type="button"
@@ -134,7 +136,7 @@ export default function UnlockAnnotationsModal({
               color: font.colorMuted,
             }}
           >
-            Cancel
+            {chromeLabel('Cancel')}
           </button>
         </div>
       </motion.div>

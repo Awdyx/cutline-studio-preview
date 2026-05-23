@@ -1,7 +1,7 @@
 import { useLayoutEffect, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { CHROME_CARD_CLASS, card, font } from '../styles/tokens'
+import { CHROME_CARD_CLASS, card, chromeLabel, font } from '../styles/tokens'
 import { SHORTCUT_CATEGORIES, shortcutsByCategory } from '../shortcuts/shortcutDefs'
 import { ShortcutKeycaps } from './ShortcutKeycaps'
 import { useSubmenuPosition } from './useSubmenuPosition'
@@ -59,12 +59,11 @@ export default function ShortcutsSubmenu({
                 padding: '0 14px',
                 fontSize: 10,
                 fontWeight: 600,
-                textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 color: font.colorMuted,
               }}
             >
-              {category}
+              {chromeLabel(category)}
             </h3>
             <ul style={{ listStyle: 'none', margin: '0 0 12px', padding: 0 }}>
               {items.map((shortcut) => (
@@ -79,7 +78,7 @@ export default function ShortcutsSubmenu({
                   }}
                 >
                   <span style={{ fontSize: 13, color: font.colorPrimary }}>
-                    {shortcut.label}
+                    {chromeLabel(shortcut.label)}
                   </span>
                   <ShortcutKeycaps keys={shortcut.keys} size="sm" />
                 </li>

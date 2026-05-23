@@ -7,7 +7,7 @@ import {
   SPACE_NAME_MAX_LENGTH,
   clampSpaceName,
 } from '../spaces/types'
-import { CHROME_GLASS_CLASS, glass, font } from '../styles/tokens'
+import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, glass, font } from '../styles/tokens'
 
 export default function SpaceBackPill({
   onExit,
@@ -123,6 +123,7 @@ export default function SpaceBackPill({
         ) : (
           <button
             type="button"
+            className={CHROME_PRESERVE_CASE_CLASS}
             onClick={() => {
               setDraft(clampSpaceName(name))
               setEditing(true)

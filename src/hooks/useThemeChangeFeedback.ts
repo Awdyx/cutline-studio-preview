@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { playSound } from '../sound/playSound'
+import type { ThemeMode } from '../theme/themeStore'
 
 export type ThemePulse = {
   id: number
@@ -13,9 +14,10 @@ function prefersReducedMotion(): boolean {
   )
 }
 
-/** Glowy SFX + ambient pulse when resolved light/dark appearance changes. */
+/** Ambient SFX + visual pulse when the user explicitly switches light/dark. */
 export function useThemeChangeFeedback(
   effectiveMode: 'light' | 'dark',
+  themeMode: ThemeMode,
 ): ThemePulse | null {
   const ready = useRef(false)
   const prev = useRef(effectiveMode)
@@ -29,7 +31,10 @@ export function useThemeChangeFeedback(
     }
     if (prev.current === effectiveMode) return
 
-    playSound(effectiveMode === 'light' ? 'themeToLight' : 'themeToDark')
+    const systemDriven = themeMode === 'auto'
+    if (!systemDriven) {
+      playSound(effectiveMode === 'light' ? 'themeToLight' : 'themeToDark')
+    }
 
     if (!prefersReducedMotion()) {
       const root = document.documentElement
@@ -43,7 +48,7 @@ export function useThemeChangeFeedback(
     }
 
     prev.current = effectiveMode
-  }, [effectiveMode])
+  }, [effectiveMode, themeMode])
 
   return pulse
 }

@@ -1,11 +1,11 @@
 /** Stored on strokes / tool state — resolves per light/dark theme. */
 export const CONTRAST_INK = '__contrast__' as const
 
-/** Default pen ink on a light canvas. */
-export const CONTRAST_PEN_LIGHT = '#4f5568'
+/** Default pen ink on a light canvas — neutral grey (no color tint). */
+export const CONTRAST_PEN_LIGHT = '#525252'
 
-/** Same ink on a dark canvas — soft off-white, not full UI text brightness. */
-export const CONTRAST_PEN_DARK = '#d4d8e2'
+/** Same ink on a dark canvas — neutral off-white (no color tint). */
+export const CONTRAST_PEN_DARK = '#dadada'
 
 /** Pen inks — first swatch is theme-adaptive contrast ink. */
 export const PEN_PRESETS = [
@@ -33,9 +33,16 @@ export const HIGHLIGHTER_DARK_GLOW = [
 ] as const
 
 const LEGACY_CONTRAST_HEX = new Set(
-  [CONTRAST_PEN_LIGHT, CONTRAST_PEN_DARK, '#4f5568', '#e4e7ef', '#e8ebf2', '#d8dce6'].map((c) =>
-    c.toLowerCase(),
-  ),
+  [
+    CONTRAST_PEN_LIGHT,
+    CONTRAST_PEN_DARK,
+    '#4f5568',
+    '#595959',
+    '#d4d8e2',
+    '#e4e7ef',
+    '#e8ebf2',
+    '#d8dce6',
+  ].map((c) => c.toLowerCase()),
 )
 
 export function isContrastInk(color: string): boolean {

@@ -5,12 +5,13 @@ import {
   setMasterOutputGain,
 } from './soundEngine'
 import { SFX_ON_GAIN } from './soundLevels'
+import { CONTINUOUS_SFX_LEVEL } from './soundGains'
 import { useSoundStore } from './soundStore'
 
 const SPEED_MAX_PX = 1400
 const MIN_SPEED_PX = 20
-const GAIN_MIN = 0.001872
-const GAIN_MAX = 0.03744
+const GAIN_MIN = 0.001872 * CONTINUOUS_SFX_LEVEL
+const GAIN_MAX = 0.03744 * CONTINUOUS_SFX_LEVEL
 const FREQ_MIN = 300
 const FREQ_MAX = 720
 const RAMP_SEC = 0.05

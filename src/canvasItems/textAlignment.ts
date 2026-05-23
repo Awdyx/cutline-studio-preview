@@ -13,6 +13,11 @@ export const DEFAULT_TEXT_ALIGNMENT: ItemTextAlignment = {
   vertical: 'center',
 }
 
+export const DEFAULT_SPACE_NAME_ALIGNMENT: ItemTextAlignment = {
+  horizontal: 'left',
+  vertical: 'top',
+}
+
 export function normalizeTextAlignment(raw: unknown): ItemTextAlignment {
   if (!raw || typeof raw !== 'object') return DEFAULT_TEXT_ALIGNMENT
   const o = raw as Partial<ItemTextAlignment>
@@ -21,6 +26,18 @@ export function normalizeTextAlignment(raw: unknown): ItemTextAlignment {
   const vertical: TextAlignV =
     o.vertical === 'top' || o.vertical === 'bottom' ? o.vertical : 'center'
   return { horizontal, vertical }
+}
+
+export function resolveItemTextAlignment(item: {
+  type: string
+  textAlign?: ItemTextAlignment | unknown
+}): ItemTextAlignment {
+  if (item.textAlign != null) {
+    return normalizeTextAlignment(item.textAlign)
+  }
+  if (item.type === 'space') return DEFAULT_SPACE_NAME_ALIGNMENT
+  if (item.type === 'sticky' || item.type === 'text') return DEFAULT_TEXT_ALIGNMENT
+  return DEFAULT_TEXT_ALIGNMENT
 }
 
 export function textAlignmentContainerStyle(

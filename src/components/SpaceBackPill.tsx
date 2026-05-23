@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { motion } from 'framer-motion'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import {
@@ -8,6 +14,44 @@ import {
   clampSpaceName,
 } from '../spaces/types'
 import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, glass, font } from '../styles/tokens'
+
+const SPACE_NAME_PLACEHOLDER = 'untitled space'
+
+function isDefaultSpaceName(name: string): boolean {
+  return name.trim().toLowerCase() === DEFAULT_SPACE_NAME.toLowerCase()
+}
+
+const nameFontStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 500,
+  fontFamily: font.family,
+  lineHeight: 1.2,
+}
+
+const nameFieldPadding = '4px 0 4px 0'
+/** Extra breathing room after the name — matches visual inset of the back arrow. */
+const NAME_TRAILING_SPACE = 14
+const PILL_INSET_LEFT = 8
+const PILL_INSET_RIGHT = 14
+
+const PILL_EASE = [0.22, 1, 0.36, 1] as const
+
+export const SPACE_BACK_PILL_MOTION = {
+  initial: { opacity: 0, y: -3, filter: 'blur(6px)' },
+  animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
+  exit: { opacity: 0, y: -3, filter: 'blur(6px)' },
+  transition: {
+    opacity: { duration: 0.28, ease: PILL_EASE },
+    y: { duration: 0.34, ease: PILL_EASE },
+    filter: { duration: 0.38, ease: PILL_EASE },
+  },
+  style: {
+    position: 'fixed',
+    top: 64,
+    left: 16,
+    zIndex: 25,
+  } as const,
+}
 
 export default function SpaceBackPill({
   onExit,
@@ -20,10 +64,22 @@ export default function SpaceBackPill({
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [nameWidth, setNameWidth] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const measureRef = useRef<HTMLSpanElement>(null)
 
   const spaceId = activeCanvasId === 'main' ? null : activeCanvasId
   const name = spaceId ? getSpaceName(spaceId) : ''
+  const showingPlaceholder = !editing && isDefaultSpaceName(name)
+  const measureText = editing
+    ? draft || SPACE_NAME_PLACEHOLDER
+    : showingPlaceholder
+      ? SPACE_NAME_PLACEHOLDER
+      : name
+
+  useLayoutEffect(() => {
+    setNameWidth(measureRef.current?.offsetWidth ?? 0)
+  }, [measureText, editing])
 
   useEffect(() => {
     if (editing) inputRef.current?.focus()
@@ -39,33 +95,66 @@ export default function SpaceBackPill({
   if (!spaceId) return null
 
   const pillShellStyle: CSSProperties = {
-    display: 'flex',
+    display: 'inline-flex',
     alignItems: 'center',
-    gap: 10,
-    padding: '6px 12px 6px 8px',
+    width: 'fit-content',
+    maxWidth: 'calc(100vw - 32px)',
+    gap: 6,
+    padding: `6px ${PILL_INSET_RIGHT}px 6px ${PILL_INSET_LEFT}px`,
     borderRadius: 999,
     border: glass.border,
     background: glass.bg,
     boxShadow: glass.shadow,
     fontFamily: font.family,
     color: font.colorPrimary,
-    maxWidth: 'min(320px, calc(100vw - 32px))',
+  }
+
+  const nameFieldWrapStyle: CSSProperties = {
+    position: 'relative',
+    display: 'inline-block',
+    width: nameWidth > 0 ? nameWidth : undefined,
+    paddingRight: NAME_TRAILING_SPACE,
+    boxSizing: 'content-box',
+    flexShrink: 0,
+  }
+
+  const nameInputStyle: CSSProperties = {
+    ...nameFontStyle,
+    display: 'block',
+    border: 'none',
+    background: 'transparent',
+    color: font.colorPrimary,
+    outline: 'none',
+    margin: 0,
+    padding: nameFieldPadding,
+    width: '100%',
+    boxSizing: 'content-box',
+  }
+
+  const nameButtonStyle: CSSProperties = {
+    ...nameInputStyle,
+    cursor: 'text',
+    whiteSpace: 'nowrap',
+    textAlign: 'left',
   }
 
   return (
-    <motion.div
-      data-space-back-pill
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
-      style={{
-        position: 'fixed',
-        top: 64,
-        left: 16,
-        zIndex: 25,
-      }}
-    >
+    <div data-space-back-pill>
+      <span
+        ref={measureRef}
+        aria-hidden
+        className={CHROME_PRESERVE_CASE_CLASS}
+        style={{
+          ...nameFontStyle,
+          position: 'absolute',
+          visibility: 'hidden',
+          whiteSpace: 'pre',
+          pointerEvents: 'none',
+        }}
+      >
+        {measureText}
+      </span>
+
       <div className={`theme-surface ${CHROME_GLASS_CLASS}`} style={pillShellStyle}>
         <button
           type="button"
@@ -77,7 +166,6 @@ export default function SpaceBackPill({
             justifyContent: 'center',
             width: 32,
             height: 32,
-            marginRight: 2,
             padding: 0,
             border: 'none',
             borderRadius: 999,
@@ -90,66 +178,67 @@ export default function SpaceBackPill({
           <ChevronLeft size={18} strokeWidth={2} />
         </button>
         {editing ? (
-          <input
-            ref={inputRef}
-            value={draft}
-            maxLength={SPACE_NAME_MAX_LENGTH}
-            onChange={(e) => setDraft(clampSpaceName(e.target.value))}
-            onBlur={commitName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                commitName()
-              }
-              if (e.key === 'Escape') {
-                setEditing(false)
-              }
-            }}
-            aria-label="Space name"
-            style={{
-              border: 'none',
-              background: 'transparent',
-              fontSize: 14,
-              fontWeight: 500,
-              fontFamily: font.family,
-              color: font.colorPrimary,
-              outline: 'none',
-              width: 140,
-              maxWidth: '40vw',
-              padding: '4px 0',
-              margin: 0,
-            }}
-          />
+          <div style={nameFieldWrapStyle}>
+            {draft.length === 0 && (
+              <span
+                aria-hidden
+                className={CHROME_PRESERVE_CASE_CLASS}
+                style={{
+                  ...nameFontStyle,
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  padding: nameFieldPadding,
+                  color: font.colorFaint,
+                  opacity: 0.55,
+                  pointerEvents: 'none',
+                  whiteSpace: 'pre',
+                }}
+              >
+                {SPACE_NAME_PLACEHOLDER}
+              </span>
+            )}
+            <input
+              ref={inputRef}
+              value={draft}
+              maxLength={SPACE_NAME_MAX_LENGTH}
+              onChange={(e) => setDraft(clampSpaceName(e.target.value))}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  commitName()
+                }
+                if (e.key === 'Escape') {
+                  setEditing(false)
+                }
+              }}
+              aria-label="Space name"
+              className={CHROME_PRESERVE_CASE_CLASS}
+              style={nameInputStyle}
+            />
+          </div>
         ) : (
-          <button
-            type="button"
-            className={CHROME_PRESERVE_CASE_CLASS}
-            onClick={() => {
-              setDraft(clampSpaceName(name))
-              setEditing(true)
-            }}
-            aria-label={`Rename space: ${name}`}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              cursor: 'text',
-              fontSize: 14,
-              fontWeight: 500,
-              fontFamily: font.family,
-              color: font.colorPrimary,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: 200,
-              padding: '4px 0',
-              margin: 0,
-              textAlign: 'left',
-            }}
-          >
-            {name}
-          </button>
+          <div style={nameFieldWrapStyle}>
+            <button
+              type="button"
+              className={CHROME_PRESERVE_CASE_CLASS}
+              onClick={() => {
+                setDraft(isDefaultSpaceName(name) ? '' : clampSpaceName(name))
+                setEditing(true)
+              }}
+              aria-label={`Rename space: ${name}`}
+              style={{
+                ...nameButtonStyle,
+                color: showingPlaceholder ? font.colorFaint : font.colorPrimary,
+                opacity: showingPlaceholder ? 0.55 : 1,
+              }}
+            >
+              {showingPlaceholder ? SPACE_NAME_PLACEHOLDER : name}
+            </button>
+          </div>
         )}
       </div>
-    </motion.div>
+    </div>
   )
 }

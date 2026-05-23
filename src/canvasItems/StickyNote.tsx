@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
@@ -12,7 +12,9 @@ import {
 import { useThemeStore } from '../theme/themeStore'
 import { resolveStickyColor, resolveStickyTextColor } from '../theme/paletteGenerator'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
-import { useDeferredCanvasTap } from '../canvas/useDeferredCanvasTap'
+import { useEditableCanvasTap } from '../canvas/useEditableCanvasTap'
+import { shouldSkipItemSelectForOutsideDismiss } from '../canvas/canvasSelectionDismiss'
+import { useCanvasItemDrag } from './useCanvasItemDrag'
 import type { StickyCanvasItem } from './types'
 
 const textSaveDelayMs = 400
@@ -35,9 +37,11 @@ export default function StickyNote({
   const isLocked = useCanvasLockStore((s) => s.isLocked)
   const frozen = isItemFrozen(item, isLocked)
   const editableRef = useRef<HTMLDivElement>(null)
+  const shouldFocusRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const spawnedEmptyRef = useRef(item.text.length === 0)
-  const [showPlaceholder, setShowPlaceholder] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const isSelected = useCanvasItemsStore((s) => s.selectedIds.includes(item.id))
+  const { onGrabPointerDown } = useCanvasItemDrag(item.id)
   const scheduleSave = useCallback(
     (text: string) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -68,10 +72,10 @@ export default function StickyNote({
     }
   }, [item.text])
 
-  const focusEditor = useCallback((atEnd = false) => {
+  const focusEditor = useCallback((atEnd = true) => {
     const el = editableRef.current
     if (!el) return
-    el.focus()
+    el.focus({ preventScroll: true })
     if (!atEnd) return
     const range = document.createRange()
     range.selectNodeContents(el)
@@ -81,10 +85,25 @@ export default function StickyNote({
     sel?.addRange(range)
   }, [])
 
-  const editorTap = useDeferredCanvasTap((e) => {
-    useCanvasItemsStore.getState().selectItem(item.id, e.shiftKey)
-    focusEditor()
-    e.stopPropagation()
+  const beginEditing = useCallback((focus = true) => {
+    setIsEditing(true)
+    if (focus) shouldFocusRef.current = true
+  }, [])
+
+  const stopEditing = useCallback(() => {
+    setIsEditing(false)
+    editableRef.current?.blur()
+  }, [])
+
+  const editorTap = useEditableCanvasTap({
+    focusOnTouchStart: () => isEditing,
+    onFocus: () => focusEditor(),
+    onTap: (e) => {
+      if (shouldSkipItemSelectForOutsideDismiss(item.id)) return
+      useCanvasItemsStore.getState().selectItem(item.id, e.shiftKey)
+      beginEditing(true)
+    },
+    onPanCancel: stopEditing,
   })
 
   useEffect(() => {
@@ -108,11 +127,14 @@ export default function StickyNote({
   }, [commitTextEdit])
 
   useEffect(() => {
-    if (!spawnedEmptyRef.current || frozen) return
-    spawnedEmptyRef.current = false
-    setShowPlaceholder(true)
-    focusEditor(true)
-  }, [focusEditor, frozen])
+    if (!isSelected) setIsEditing(false)
+  }, [isSelected])
+
+  useLayoutEffect(() => {
+    if (!isEditing || !shouldFocusRef.current) return
+    shouldFocusRef.current = false
+    focusEditor()
+  }, [focusEditor, isEditing])
 
   return (
     <CanvasItemShell
@@ -147,14 +169,21 @@ export default function StickyNote({
           <div
             role="textbox"
             aria-label="Sticky note text"
-            aria-placeholder="Type something…"
             ref={editableRef}
-            contentEditable={!frozen}
+            contentEditable={!frozen && isEditing}
+            spellCheck={false}
             suppressContentEditableWarning
-            data-placeholder={showPlaceholder ? 'Type something…' : undefined}
+            tabIndex={isEditing ? 0 : -1}
+            enterKeyHint="done"
             onPointerDown={(e) => {
               if (e.pointerType === 'pen') {
                 e.preventDefault()
+                return
+              }
+              if (isSelected && !isEditing && !frozen) {
+                onGrabPointerDown(e, {
+                  onReleaseWithoutDrag: () => beginEditing(true),
+                })
                 return
               }
               editorTap.onPointerDown(e)
@@ -162,24 +191,19 @@ export default function StickyNote({
             onPointerMove={editorTap.onPointerMove}
             onPointerUp={editorTap.onPointerUp}
             onPointerCancel={editorTap.onPointerCancel}
-          onFocus={() => {
-            const text = editableRef.current?.textContent ?? ''
-            if (text.length === 0) setShowPlaceholder(true)
-          }}
           onInput={() => {
             const text = editableRef.current?.textContent ?? ''
             scheduleSave(text)
-            setShowPlaceholder(text.length === 0)
           }}
           onBlur={() => {
+            setIsEditing(false)
             flushSaveAndCommit()
-            setShowPlaceholder(false)
           }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
               e.preventDefault()
               flushSaveAndCommit()
-              editableRef.current?.blur()
+              stopEditing()
             }
           }}
             style={{
@@ -192,11 +216,7 @@ export default function StickyNote({
               pointerEvents: frozen ? 'none' : 'auto',
               ...textAlignmentEditorStyle(item.textAlign),
             }}
-            className={
-              showPlaceholder
-                ? 'sticky-note-editor sticky-note-editor--show-placeholder'
-                : 'sticky-note-editor'
-            }
+            className="sticky-note-editor"
           />
         </div>
       </div>

@@ -4,7 +4,7 @@ import { CHROME_GLASS_CLASS, chromeLabel, font, glass } from '../styles/tokens'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { ShortcutKeycaps } from './ShortcutKeycaps'
 
-const HOLD_MS = 1200
+const DEFAULT_HOLD_MS = 1200
 
 export default function ActionToast() {
   const toast = useShortcutUiStore((s) => s.toast)
@@ -14,10 +14,11 @@ export default function ActionToast() {
 
   useEffect(() => {
     if (!toast) return
+    const holdMs = toast.holdMs ?? DEFAULT_HOLD_MS
     if (timerRef.current) window.clearTimeout(timerRef.current)
     timerRef.current = window.setTimeout(() => {
       clearToast()
-    }, HOLD_MS)
+    }, holdMs)
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current)
     }
@@ -39,7 +40,7 @@ export default function ActionToast() {
             position: 'fixed',
             bottom: 28,
             left: '50%',
-            zIndex: 40,
+            zIndex: 200,
             display: 'flex',
             alignItems: 'center',
             gap: 10,

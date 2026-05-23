@@ -1,4 +1,5 @@
 import { useMemo, type RefObject } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { useCanvasLockFlattenStore } from '../canvasLock/canvasLockFlattenStore'
 import {
@@ -105,6 +106,7 @@ export default function CanvasItemsLayer({
           key={item.id}
           item={item}
           transformRef={transformRef}
+          onItemResizeStateChange={onItemResizeStateChange}
           liftZIndex={liftZIndex}
         />
       )
@@ -123,7 +125,9 @@ export default function CanvasItemsLayer({
           pointerEvents: 'none',
         }}
       >
-        {sorted.map((item) => renderItem(item))}
+        <AnimatePresence initial={false}>
+          {sorted.map((item) => renderItem(item))}
+        </AnimatePresence>
       </div>
       {overlayStickies.map((item) => (
         <StickyAnnotationOverlay key={`${item.id}-annotation`} item={item} />

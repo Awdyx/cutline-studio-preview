@@ -20,7 +20,7 @@ export default function ImageItem({
   onItemResizeStateChange?: (resizing: boolean) => void
   liftZIndex?: number
 }) {
-  const { url, status } = useMediaBlobUrl(item.mediaId)
+  const { url, status } = useMediaBlobUrl(item.mediaId, item.id)
 
   return (
     <CanvasItemShell
@@ -41,7 +41,6 @@ export default function ImageItem({
               height: '100%',
               objectFit: 'fill',
               display: 'block',
-              borderRadius: 8,
               filter: `saturate(${MEDIA_SATURATE})`,
               opacity: mediaLoadOpacity(status),
               ...mediaLoadTransitionStyle(),

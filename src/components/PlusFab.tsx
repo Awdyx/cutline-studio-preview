@@ -21,15 +21,22 @@ import {
 import {
   CHROME_CARD_CLASS,
   CHROME_GLASS_CLASS,
+  CHROME_MENU_TRANSITION,
+  chromeMenuMotionY,
+  chromeBottomRightFixed,
   chromeLabel,
   card,
   font,
   glass,
   menuDividerStyle,
 } from '../styles/tokens'
-import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
+import { useShortcutUiStore, type ChromeMenuSoundOpts } from '../shortcuts/shortcutUiStore'
+import { countSpaceWidgets, useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
+import { MAX_SPACE_WIDGETS } from '../canvasItems/types'
 import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
+import { isSwapChromeMenuTarget } from './chromeMenuDismiss'
+import { useCanvasMeshPauseWhile } from '../canvas/useCanvasMeshPause'
 
 type CanvasAddType = 'space' | 'sticky' | 'text' | 'image'
 type StudyActionType = 'mcq' | 'saq' | 'mini_exam'
@@ -112,26 +119,10 @@ const sectionHeaderStyle: React.CSSProperties = {
   margin: 0,
 }
 
-/** Snappy glass morph — no horizontal slide, no layout shrink. */
-const FAB_VIEW_SPRING = {
-  type: 'spring' as const,
-  stiffness: 640,
-  damping: 38,
-  mass: 0.52,
-}
+/** Snappy in-panel view swap — same timing as chrome menus, no blur. */
+const FAB_VIEW_TRANSITION = CHROME_MENU_TRANSITION
 
-const FAB_MENU_OPEN_TRANSITION = {
-  opacity: { duration: 0.11, ease: [0.22, 1, 0.36, 1] as const },
-  scale: FAB_VIEW_SPRING,
-  y: FAB_VIEW_SPRING,
-  filter: { duration: 0.14, ease: [0.22, 1, 0.36, 1] as const },
-}
-
-const FAB_VIEW_TRANSITION = {
-  opacity: { duration: 0.1, ease: [0.22, 1, 0.36, 1] as const },
-  scale: FAB_VIEW_SPRING,
-  filter: { duration: 0.12, ease: [0.22, 1, 0.36, 1] as const },
-}
+const PLUS_FAB_MENU_MOTION = chromeMenuMotionY(4)
 
 function SubmenuHeader({
   title,
@@ -216,14 +207,17 @@ function MainMenuContent({
   onAddToCanvas,
   onStudyItemClick,
   showSpaceOption,
+  spaceWidgetCount,
 }: {
   onAddToCanvas: (type: CanvasAddType) => void
   onStudyItemClick: (type: StudyActionType | 'tutor') => void
   showSpaceOption: boolean
+  spaceWidgetCount: number
 }) {
   const addItems = showSpaceOption
     ? ADD_TO_CANVAS_ITEMS
     : ADD_TO_CANVAS_ITEMS.filter((i) => i.type !== 'space')
+  const spacesFull = spaceWidgetCount >= MAX_SPACE_WIDGETS
 
   return (
     <>
@@ -233,6 +227,22 @@ function MainMenuContent({
           key={type}
           icon={icon}
           label={label}
+          disabled={type === 'space' && spacesFull}
+          right={
+            type === 'space' ? (
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 500,
+                  fontVariantNumeric: 'tabular-nums',
+                  color: spacesFull ? font.colorFaint : font.colorMuted,
+                  flexShrink: 0,
+                }}
+              >
+                {spaceWidgetCount}/{MAX_SPACE_WIDGETS}
+              </span>
+            ) : undefined
+          }
           onClick={() => onAddToCanvas(type)}
         />
       ))}
@@ -305,16 +315,16 @@ function SubjectPickerContent({
 function FabViewPanel({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.97, filter: 'blur(10px)' }}
-      animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-      exit={{ opacity: 0, scale: 0.985, filter: 'blur(6px)' }}
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96 }}
       transition={FAB_VIEW_TRANSITION}
       style={{
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        willChange: 'opacity, transform, filter',
+        willChange: 'opacity, transform',
       }}
     >
       {children}
@@ -333,7 +343,8 @@ export default function PlusFab({
     useState<StudyActionType | null>(null)
   const [pendingTutorAction, setPendingTutorAction] =
     useState<TutorActionType | null>(null)
-  const [fabHovered, setFabHovered] = useState(false)
+  const [fabHoverScale, setFabHoverScale] = useState(false)
+  const spaceWidgetCount = useCanvasItemsStore((s) => countSpaceWidgets(s.items))
 
   const containerRef = useRef<HTMLDivElement>(null)
   const menuStackRef = useRef<HTMLDivElement>(null)
@@ -341,26 +352,40 @@ export default function PlusFab({
   const isOpenRef = useRef(isOpen)
   isOpenRef.current = isOpen
 
+  useCanvasMeshPauseWhile(isOpen)
+
   function captureMenuShellHeight() {
     const h = menuStackRef.current?.offsetHeight
     if (h && h > 0) setMenuShellHeight(h)
   }
 
-  function resetView() {
-    setView('main')
-    setPendingStudyAction(null)
-    setPendingTutorAction(null)
+  function closeMenu(opts?: ChromeMenuSoundOpts) {
+    if (!opts?.silent && isOpenRef.current) playSound('menuClose')
+    setFabHoverScale(false)
+    setIsOpen(false)
   }
 
-  function closeMenu() {
-    if (isOpenRef.current) playSound('menuClose')
-    setIsOpen(false)
-    resetView()
-  }
+  useEffect(() => {
+    if (!isOpen) {
+      setView('main')
+      setPendingStudyAction(null)
+      setPendingTutorAction(null)
+    }
+  }, [isOpen])
 
   function openMenu() {
     playSound('menuOpen')
+    setFabHoverScale(false)
     setIsOpen(true)
+  }
+
+  function handleFabTriggerClick() {
+    if (isOpen) {
+      closeMenu()
+      return
+    }
+    useShortcutUiStore.getState().dismissPeerChromeForFab('plus')
+    openMenu()
   }
 
   function handleAddToCanvas(type: CanvasAddType) {
@@ -433,12 +458,11 @@ export default function PlusFab({
     if (!isOpen) return
 
     function handleMouseDown(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        closeMenu()
-      }
+      const target = e.target
+      if (!(target instanceof Node)) return
+      if (containerRef.current?.contains(target)) return
+      if (isSwapChromeMenuTarget(target)) return
+      closeMenu()
     }
 
     document.addEventListener('mousedown', handleMouseDown)
@@ -459,11 +483,11 @@ export default function PlusFab({
   return (
     <div
       ref={containerRef}
+      data-plus-fab=""
       style={{
-        position: 'fixed',
-        bottom: 24,
-        right: 24,
-        zIndex: 20,
+        ...chromeBottomRightFixed,
+        right: 'calc(16px + env(safe-area-inset-right, 0px))',
+        pointerEvents: 'none',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',
@@ -473,10 +497,7 @@ export default function PlusFab({
         {isOpen && (
           <motion.div
             key="fab-menu"
-            initial={{ opacity: 0, scale: 0.95, y: 10, filter: 'blur(14px)' }}
-            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, scale: 0.97, y: 6, filter: 'blur(10px)' }}
-            transition={FAB_MENU_OPEN_TRANSITION}
+            {...PLUS_FAB_MENU_MOTION}
             className={`theme-surface ${CHROME_GLASS_CLASS} ${CHROME_CARD_CLASS} plus-fab-menu-glass`}
             style={{
               width: 280,
@@ -487,6 +508,7 @@ export default function PlusFab({
               fontFamily: font.family,
               color: font.colorPrimary,
               overflow: 'hidden',
+              pointerEvents: 'auto',
             }}
           >
             <SubmenuSoundScope>
@@ -504,6 +526,7 @@ export default function PlusFab({
                       onAddToCanvas={handleAddToCanvas}
                       onStudyItemClick={handleStudyItemClick}
                       showSpaceOption={showSpaceOption}
+                      spaceWidgetCount={spaceWidgetCount}
                     />
                   </FabViewPanel>
                 )}
@@ -533,38 +556,24 @@ export default function PlusFab({
         )}
       </AnimatePresence>
 
-      <motion.button
+      <button
         type="button"
         data-fab-trigger
         aria-label={isOpen ? 'Close menu' : 'Open menu'}
         aria-expanded={isOpen}
-        onClick={() => (isOpen ? closeMenu() : openMenu())}
-        onMouseEnter={() => setFabHovered(true)}
-        onMouseLeave={() => setFabHovered(false)}
-        animate={{
-          scale: fabHovered ? 1.05 : 1,
-          rotate: isOpen ? 45 : 0,
-        }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className={`theme-surface ${CHROME_GLASS_CLASS}`}
+        onClick={handleFabTriggerClick}
+        onMouseEnter={() => setFabHoverScale(true)}
+        onMouseLeave={() => setFabHoverScale(false)}
+        className={`chrome-fab-trigger theme-surface ${CHROME_GLASS_CLASS} ${
+          isOpen ? 'chrome-fab-trigger--open' : ''
+        } ${fabHoverScale ? 'chrome-fab-trigger--hover' : ''}`}
         style={{
-          width: 52,
-          height: 52,
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
           background: isOpen ? 'var(--card-bg)' : glass.bg,
           border: glass.border,
-          boxShadow: fabHovered ? 'var(--card-shadow)' : glass.shadow,
-          transition:
-            'background 200ms ease-out, box-shadow 200ms ease-out, background-color 400ms ease',
-          flexShrink: 0,
         }}
       >
         <Plus size={22} color="var(--ui-text)" strokeWidth={2} />
-      </motion.button>
+      </button>
     </div>
   )
 }

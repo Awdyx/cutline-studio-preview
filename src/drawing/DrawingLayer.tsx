@@ -9,11 +9,12 @@ import { strokeToSvgPath } from './strokePath'
 import { useThemeStore } from '../theme/themeStore'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
 import type { Stroke } from './types'
-import { Z_ANNOTATION_STROKES, Z_STROKES } from '../canvasItems/canvasZOrder'
+import { Z_ANNOTATION_STROKES, Z_ACTIVE_STROKE, Z_STROKES } from '../canvasItems/canvasZOrder'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './canvasDimensions'
 
 const HIGHLIGHTER_GLOW_FILTER_ID = 'cutline-highlighter-glow'
 const ANNOTATION_GLOW_FILTER_ID = 'cutline-annotation-highlighter-glow'
+const ACTIVE_STROKE_GLOW_FILTER_ID = 'cutline-active-stroke-highlighter-glow'
 
 const CompletedStrokePath = memo(function CompletedStrokePath({
   stroke,
@@ -154,15 +155,12 @@ export default function DrawingLayer() {
   const hideCommittedStrokes =
     shouldFlattenCanvas(isLocked) && flattenReady && strokes.length > 0
 
-  const committedActive = lockActive ? null : activeStroke
-  const annotationActive = lockActive ? activeStroke : null
-
   return (
     <>
       {!hideCommittedStrokes && (
         <StrokeSvgLayer
           strokes={strokes}
-          activeStroke={committedActive}
+          activeStroke={null}
           zIndex={Z_STROKES}
           glowFilterId={HIGHLIGHTER_GLOW_FILTER_ID}
           strokeLayer="committed"
@@ -170,11 +168,20 @@ export default function DrawingLayer() {
       )}
       <StrokeSvgLayer
         strokes={annotationStrokes}
-        activeStroke={annotationActive}
+        activeStroke={null}
         zIndex={Z_ANNOTATION_STROKES}
         glowFilterId={ANNOTATION_GLOW_FILTER_ID}
         strokeLayer="annotation"
       />
+      {activeStroke && (
+        <StrokeSvgLayer
+          strokes={[]}
+          activeStroke={activeStroke}
+          zIndex={Z_ACTIVE_STROKE}
+          glowFilterId={ACTIVE_STROKE_GLOW_FILTER_ID}
+          strokeLayer={lockActive ? 'annotation' : 'committed'}
+        />
+      )}
     </>
   )
 }

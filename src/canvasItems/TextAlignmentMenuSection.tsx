@@ -7,7 +7,7 @@ import {
   Minus,
 } from 'lucide-react'
 import { playSubmenuHover, runSubmenuClick } from '../sound/submenuSound'
-import { chromeLabel, font } from '../styles/tokens'
+import { chromeLabel, font, menuDividerStyle } from '../styles/tokens'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import type { ItemTextAlignment, TextAlignH, TextAlignV } from './textAlignment'
 
@@ -51,9 +51,11 @@ function AlignToggle({
 export default function TextAlignmentMenuSection({
   itemId,
   alignment,
+  showVertical = true,
 }: {
   itemId: string
   alignment: ItemTextAlignment
+  showVertical?: boolean
 }) {
   const setItemTextAlignment = useCanvasItemsStore((s) => s.setItemTextAlignment)
 
@@ -66,21 +68,25 @@ export default function TextAlignmentMenuSection({
   }
 
   const iconProps = { size: 16, strokeWidth: 2 }
+  const labelStyle = {
+    margin: showVertical ? '6px 14px 4px' : '6px 14px 0',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '0.4px',
+    color: font.colorMuted,
+  } as const
+  const horizontalRowStyle = {
+    display: 'flex',
+    gap: 4,
+    padding: showVertical ? '0 6px 4px' : '12px 6px',
+  } as const
 
   return (
     <>
-      <p
-        style={{
-          margin: '6px 14px 4px',
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: '0.4px',
-          color: font.colorMuted,
-        }}
-      >
+      <p style={labelStyle}>
         {chromeLabel('Text align')}
       </p>
-      <div style={{ display: 'flex', gap: 4, padding: '0 6px 4px' }}>
+      <div style={horizontalRowStyle}>
         <AlignToggle
           active={alignment.horizontal === 'left'}
           label="Align left"
@@ -103,36 +109,32 @@ export default function TextAlignmentMenuSection({
           <AlignRight {...iconProps} />
         </AlignToggle>
       </div>
-      <div style={{ display: 'flex', gap: 4, padding: '0 6px 8px' }}>
-        <AlignToggle
-          active={alignment.vertical === 'top'}
-          label="Align top"
-          onClick={() => setVertical('top')}
-        >
-          <ArrowUpToLine {...iconProps} />
-        </AlignToggle>
-        <AlignToggle
-          active={alignment.vertical === 'center'}
-          label="Align middle"
-          onClick={() => setVertical('center')}
-        >
-          <Minus {...iconProps} />
-        </AlignToggle>
-        <AlignToggle
-          active={alignment.vertical === 'bottom'}
-          label="Align bottom"
-          onClick={() => setVertical('bottom')}
-        >
-          <ArrowDownToLine {...iconProps} />
-        </AlignToggle>
-      </div>
-      <div
-        style={{
-          height: 1,
-          margin: '0 10px 4px',
-          background: 'rgba(20, 30, 50, 0.08)',
-        }}
-      />
+      {showVertical && (
+        <div style={{ display: 'flex', gap: 4, padding: '0 6px 8px' }}>
+          <AlignToggle
+            active={alignment.vertical === 'top'}
+            label="Align top"
+            onClick={() => setVertical('top')}
+          >
+            <ArrowUpToLine {...iconProps} />
+          </AlignToggle>
+          <AlignToggle
+            active={alignment.vertical === 'center'}
+            label="Align middle"
+            onClick={() => setVertical('center')}
+          >
+            <Minus {...iconProps} />
+          </AlignToggle>
+          <AlignToggle
+            active={alignment.vertical === 'bottom'}
+            label="Align bottom"
+            onClick={() => setVertical('bottom')}
+          >
+            <ArrowDownToLine {...iconProps} />
+          </AlignToggle>
+        </div>
+      )}
+      <div style={{ ...menuDividerStyle, margin: '0 10px 4px' }} />
     </>
   )
 }

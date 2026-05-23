@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
@@ -7,6 +7,7 @@ import { useCanvasItemsStore } from './canvasItemsStore'
 import CanvasItemShell from './CanvasItemShell'
 import {
   isEditorEmpty,
+  isPointerOverTextContent,
   readEditorHtml,
   storedContentToHtml,
 } from './textEditorContent'
@@ -19,7 +20,9 @@ import {
   textAlignmentContainerStyle,
   textAlignmentEditorStyle,
 } from './textAlignment'
-import { useDeferredCanvasTap } from '../canvas/useDeferredCanvasTap'
+import { useEditableCanvasTap } from '../canvas/useEditableCanvasTap'
+import { shouldSkipItemSelectForOutsideDismiss } from '../canvas/canvasSelectionDismiss'
+import { useCanvasItemDrag } from './useCanvasItemDrag'
 import type { TextCanvasItem } from './types'
 
 const textSaveDelayMs = 400
@@ -38,9 +41,12 @@ export default function TextItem({
   const isLocked = useCanvasLockStore((s) => s.isLocked)
   const frozen = isItemFrozen(item, isLocked)
   const editorRef = useRef<HTMLDivElement>(null)
+  const shouldFocusRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const spawnedEmptyRef = useRef(item.text.length === 0)
   const [showPlaceholder, setShowPlaceholder] = useState(item.text.length === 0)
+  const [isEditing, setIsEditing] = useState(false)
+  const isSelected = useCanvasItemsStore((s) => s.selectedIds.includes(item.id))
+  const { onGrabPointerDown } = useCanvasItemDrag(item.id)
 
   const scheduleSave = useCallback(
     (html: string) => {
@@ -77,10 +83,10 @@ export default function TextItem({
     setShowPlaceholder(isEditorEmpty(el))
   }, [item.text])
 
-  const focusEditor = useCallback((atEnd = false) => {
+  const focusEditor = useCallback((atEnd = true) => {
     const el = editorRef.current
     if (!el) return
-    el.focus()
+    el.focus({ preventScroll: true })
     if (!atEnd) return
     const range = document.createRange()
     range.selectNodeContents(el)
@@ -90,10 +96,25 @@ export default function TextItem({
     sel?.addRange(range)
   }, [])
 
-  const editorTap = useDeferredCanvasTap((e) => {
-    useCanvasItemsStore.getState().selectItem(item.id, e.shiftKey)
-    focusEditor()
-    e.stopPropagation()
+  const beginEditing = useCallback((focus = true) => {
+    setIsEditing(true)
+    if (focus) shouldFocusRef.current = true
+  }, [])
+
+  const stopEditing = useCallback(() => {
+    setIsEditing(false)
+    editorRef.current?.blur()
+  }, [])
+
+  const editorTap = useEditableCanvasTap({
+    focusOnTouchStart: () => isEditing,
+    onFocus: () => focusEditor(),
+    onTap: (e) => {
+      if (shouldSkipItemSelectForOutsideDismiss(item.id)) return
+      useCanvasItemsStore.getState().selectItem(item.id, e.shiftKey)
+      beginEditing(true)
+    },
+    onPanCancel: stopEditing,
   })
 
   const applyFormatShortcut = useCallback(
@@ -127,10 +148,20 @@ export default function TextItem({
   }, [item.id])
 
   useEffect(() => {
-    if (!spawnedEmptyRef.current) return
-    spawnedEmptyRef.current = false
-    focusEditor(true)
-  }, [focusEditor])
+    if (!isSelected) setIsEditing(false)
+  }, [isSelected])
+
+  useLayoutEffect(() => {
+    if (!isEditing || !shouldFocusRef.current) return
+    shouldFocusRef.current = false
+    focusEditor()
+  }, [focusEditor, isEditing])
+
+  useEffect(() => {
+    if (frozen) return
+    if (!useCanvasItemsStore.getState().takePendingEditorFocus(item.id)) return
+    beginEditing(true)
+  }, [beginEditing, frozen, item.id])
 
   useEffect(() => {
     const el = editorRef.current
@@ -146,8 +177,9 @@ export default function TextItem({
         el.blur()
       }
     }
-    document.addEventListener('pointerdown', onDocPointerDown)
-    return () => document.removeEventListener('pointerdown', onDocPointerDown)
+    document.addEventListener('pointerdown', onDocPointerDown, { capture: true })
+    return () =>
+      document.removeEventListener('pointerdown', onDocPointerDown, { capture: true })
   }, [])
 
   return (
@@ -169,12 +201,28 @@ export default function TextItem({
             aria-label="Canvas text"
             aria-multiline
             ref={editorRef}
-            contentEditable={!frozen}
+            contentEditable={!frozen && isEditing}
+            spellCheck={false}
             suppressContentEditableWarning
+            tabIndex={isEditing ? 0 : -1}
+            enterKeyHint="done"
             data-placeholder={showPlaceholder ? 'Type something…' : undefined}
             onPointerDown={(e) => {
               if (e.pointerType === 'pen') {
                 e.preventDefault()
+                return
+              }
+              const editor = editorRef.current
+              if (
+                !editor ||
+                !isPointerOverTextContent(editor, e.clientX, e.clientY)
+              ) {
+                return
+              }
+              if (isSelected && !isEditing && !frozen) {
+                onGrabPointerDown(e, {
+                  onReleaseWithoutDrag: () => beginEditing(true),
+                })
                 return
               }
               editorTap.onPointerDown(e)
@@ -189,6 +237,7 @@ export default function TextItem({
             setShowPlaceholder(isEditorEmpty(el))
           }}
           onBlur={() => {
+            setIsEditing(false)
             flushSaveAndCommit()
           }}
           onKeyDown={(e) => {
@@ -196,7 +245,7 @@ export default function TextItem({
             if (e.key === 'Escape') {
               e.preventDefault()
               flushSaveAndCommit()
-              editorRef.current?.blur()
+              stopEditing()
             }
           }}
             style={{
@@ -213,6 +262,8 @@ export default function TextItem({
               cursor: frozen ? 'default' : 'text',
               pointerEvents: frozen ? 'none' : 'auto',
               ...textAlignmentEditorStyle(item.textAlign),
+              maxWidth: '100%',
+              width: 'fit-content',
             }}
             className={`canvas-text-editor${showPlaceholder ? ' canvas-text-editor--empty' : ''}`}
           />

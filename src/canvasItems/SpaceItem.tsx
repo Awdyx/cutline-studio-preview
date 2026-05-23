@@ -6,13 +6,22 @@ import { playSound } from '../sound/playSound'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { useDeferredCanvasTap } from '../canvas/useDeferredCanvasTap'
+import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
+import { shouldSkipItemSelectForOutsideDismiss } from '../canvas/canvasSelectionDismiss'
 import DragHandle from './DragHandle'
+import { getSoleSelectedItemId } from './canvasItemZMenuLayout'
 import { getGrabHandlePlacement } from './grabZone'
 import { useCanvasItemDrag } from './useCanvasItemDrag'
+import { useSpacePreviewPanDrag } from './useSpacePreviewPanDrag'
+import { useCanvasItemsStore } from './canvasItemsStore'
 import SpaceCardPreview from '../spaces/SpaceCardPreview'
 import { card, font, glass, SPACE_GLASS_CLASS } from '../styles/tokens'
-import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import type { SpaceCanvasItem } from './types'
+import {
+  canvasItemDeleteExit,
+  canvasItemDeleteExitTransition,
+} from './canvasItemMotion'
 
 const DRAG_THRESHOLD_PX = 10
 const liftSpring = { type: 'spring' as const, stiffness: 380, damping: 28, mass: 0.7 }
@@ -34,6 +43,8 @@ export default function SpaceItem({
   const frozen = isItemFrozen(item, isLocked)
   const transitionPhase = useCanvasWorkspaceStore((s) => s.transition.phase)
   const spaceMeta = useCanvasWorkspaceStore((s) => s.spaces[item.id])
+  const selectedIds = useCanvasItemsStore((s) => s.selectedIds)
+  const selectItem = useCanvasItemsStore((s) => s.selectItem)
   const displayName = spaceMeta?.name ?? item.name
   const hasPreviewContent =
     !!spaceMeta &&
@@ -41,12 +52,24 @@ export default function SpaceItem({
       spaceMeta.strokes.length > 0 ||
       spaceMeta.annotationStrokes.length > 0)
   const cardRef = useRef<HTMLDivElement>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
+  const previewPhaseRef = useRef<'idle' | 'pending'>('idle')
+  const previewPointerRef = useRef({ startX: 0, startY: 0 })
+
+  const previewAdjustSpaceId = useCanvasItemsStore((s) => s.previewAdjustSpaceId)
+  const isPreviewAdjusting = previewAdjustSpaceId === item.id
 
   const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id)
+  const {
+    isPanDragging,
+    onPreviewAdjustPointerDown,
+    onPreviewAdjustPointerMove,
+    onPreviewAdjustPointerUp,
+    onPreviewAdjustPointerCancel,
+  } = useSpacePreviewPanDrag(item, previewRef, isPreviewAdjusting)
 
-  const bodyPhaseRef = useRef<'idle' | 'pending' | 'navigating'>('idle')
-  const bodyPointerRef = useRef({ startX: 0, startY: 0 })
-  const isSelected = liftZIndex != null
+  const isSelected = liftZIndex != null || selectedIds.includes(item.id)
+  const hideDragHandle = getSoleSelectedItemId(selectedIds) === item.id
 
   const enterSpace = useCallback(() => {
     const el = cardRef.current
@@ -60,23 +83,48 @@ export default function SpaceItem({
     }, 280)
   }, [item.id, transformRef, transitionPhase])
 
-  const handleBodyPointerDown = useCallback(
+  const shellSelectTap = useDeferredCanvasTap((e) => {
+    if (shouldSkipItemSelectForOutsideDismiss(item.id)) return
+    selectItem(item.id, e.shiftKey)
+  })
+
+  const handleShellPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (frozen || e.pointerType === 'pen') return
+      if (isSelected) {
+        onGrabPointerDown(e as React.PointerEvent<HTMLElement>)
+        return
+      }
+      shellSelectTap.onPointerDown(e)
+    },
+    [frozen, isSelected, onGrabPointerDown, shellSelectTap],
+  )
+
+  const handlePreviewPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.pointerType === 'pen') return
       e.stopPropagation()
-      bodyPhaseRef.current = 'pending'
-      bodyPointerRef.current = { startX: e.clientX, startY: e.clientY }
+      if (isPreviewAdjusting) {
+        onPreviewAdjustPointerDown(e)
+        return
+      }
+      previewPhaseRef.current = 'pending'
+      previewPointerRef.current = { startX: e.clientX, startY: e.clientY }
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     },
-    [],
+    [isPreviewAdjusting, onPreviewAdjustPointerDown],
   )
 
-  const handleBodyPointerMove = useCallback(
+  const handlePreviewPointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (bodyPhaseRef.current !== 'pending') return
-      const { startX, startY } = bodyPointerRef.current
+      if (isPreviewAdjusting) {
+        onPreviewAdjustPointerMove(e)
+        return
+      }
+      if (previewPhaseRef.current !== 'pending') return
+      const { startX, startY } = previewPointerRef.current
       if (dist(e.clientX, e.clientY, startX, startY) > DRAG_THRESHOLD_PX) {
-        bodyPhaseRef.current = 'idle'
+        previewPhaseRef.current = 'idle'
         try {
           ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
         } catch {
@@ -84,25 +132,40 @@ export default function SpaceItem({
         }
       }
     },
-    [],
+    [isPreviewAdjusting, onPreviewAdjustPointerMove],
   )
 
-  const handleBodyPointerUp = useCallback(
+  const handlePreviewPointerUp = useCallback(
     (e: React.PointerEvent) => {
+      if (isPreviewAdjusting) {
+        onPreviewAdjustPointerUp(e)
+        return
+      }
       if (
-        bodyPhaseRef.current === 'pending' &&
+        previewPhaseRef.current === 'pending' &&
         !useCanvasNavigationStore.getState().shouldSuppressItemTap()
       ) {
         enterSpace()
       }
-      bodyPhaseRef.current = 'idle'
+      previewPhaseRef.current = 'idle'
       try {
         ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
       } catch {
         // ignore
       }
     },
-    [enterSpace],
+    [enterSpace, isPreviewAdjusting, onPreviewAdjustPointerUp],
+  )
+
+  const handlePreviewPointerCancel = useCallback(
+    (e: React.PointerEvent) => {
+      if (isPreviewAdjusting) {
+        onPreviewAdjustPointerCancel(e)
+        return
+      }
+      handlePreviewPointerUp(e)
+    },
+    [handlePreviewPointerUp, isPreviewAdjusting, onPreviewAdjustPointerCancel],
   )
 
   const [hovered, setHovered] = useState(false)
@@ -128,6 +191,10 @@ export default function SpaceItem({
       data-item-id={item.id}
       data-active={lifted || undefined}
       data-selected={isSelected || undefined}
+      exit={{
+        ...canvasItemDeleteExit,
+        transition: canvasItemDeleteExitTransition,
+      }}
       animate={{
         scale: lifted ? 1.03 : canHover && hovered ? 1.01 : 1,
         boxShadow: lifted ? card.shadow : glass.shadow,
@@ -143,14 +210,17 @@ export default function SpaceItem({
         height: item.height,
         zIndex: liftZIndex ?? item.zIndex,
         transformOrigin: 'top left',
+        overflow: 'visible',
         pointerEvents: 'none',
       }}
     >
-      {!frozen && (
-        <DragHandle
-          placement={grabHandlePlacement}
-          onPointerDown={onGrabPointerDown}
-        />
+      {!frozen && !hideDragHandle && (
+        <div data-lock-flatten-skip>
+          <DragHandle
+            placement={grabHandlePlacement}
+            onPointerDown={onGrabPointerDown}
+          />
+        </div>
       )}
 
       {/* Stacked card shadow */}
@@ -171,19 +241,10 @@ export default function SpaceItem({
       />
 
       <div
-        role="button"
-        tabIndex={0}
-        aria-label={`Open space: ${displayName}`}
-        onPointerDown={handleBodyPointerDown}
-        onPointerMove={handleBodyPointerMove}
-        onPointerUp={handleBodyPointerUp}
-        onPointerCancel={handleBodyPointerUp}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            enterSpace()
-          }
-        }}
+        onPointerDown={handleShellPointerDown}
+        onPointerMove={shellSelectTap.onPointerMove}
+        onPointerUp={shellSelectTap.onPointerUp}
+        onPointerCancel={shellSelectTap.onPointerCancel}
         className={`theme-surface ${SPACE_GLASS_CLASS}${isSelected ? ' canvas-item-selected-focus' : ''}`}
         style={{
           position: 'relative',
@@ -195,14 +256,14 @@ export default function SpaceItem({
           boxShadow: glass.shadow,
           overflow: 'hidden',
           pointerEvents: 'auto',
-          cursor: canHover ? 'pointer' : 'default',
+          cursor: 'default',
           display: 'flex',
           flexDirection: 'column',
         }}
       >
         <div
           style={{
-            padding: '10px 12px 6px 36px',
+            padding: '10px 12px 12px',
             fontSize: 16,
             fontWeight: 500,
             color: font.colorMuted,
@@ -214,6 +275,27 @@ export default function SpaceItem({
           {displayName}
         </div>
         <div
+          ref={previewRef}
+          role="button"
+          tabIndex={0}
+          data-space-preview=""
+          className={isPreviewAdjusting ? 'space-preview-adjust' : undefined}
+          aria-label={
+            isPreviewAdjusting
+              ? `Adjust preview for space: ${displayName}`
+              : `Open space: ${displayName}`
+          }
+          onPointerDown={handlePreviewPointerDown}
+          onPointerMove={handlePreviewPointerMove}
+          onPointerUp={handlePreviewPointerUp}
+          onPointerCancel={handlePreviewPointerCancel}
+          onKeyDown={(e) => {
+            if (isPreviewAdjusting) return
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              enterSpace()
+            }
+          }}
           style={{
             flex: 1,
             margin: '0 10px 10px',
@@ -223,28 +305,28 @@ export default function SpaceItem({
             minHeight: 0,
             background: card.bg,
             boxShadow: 'inset 0 0 0 1px var(--glass-border)',
+            cursor: isPreviewAdjusting
+              ? isPanDragging
+                ? 'grabbing'
+                : 'grab'
+              : canHover
+                ? 'pointer'
+                : 'default',
+            touchAction: isPreviewAdjusting ? 'none' : undefined,
           }}
         >
           {hasPreviewContent ? (
-            <SpaceCardPreview spaceId={item.id} />
+            <SpaceCardPreview spaceId={item.id} previewPan={item.previewPan} />
           ) : (
             <div
               style={{
                 width: '100%',
                 height: '100%',
                 borderRadius: 4,
-                border: `1.5px dashed ${font.colorFaint}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: font.colorFaint,
-                fontSize: 13,
-                fontWeight: 500,
-                background: card.bg,
+                border: '1.5px dashed var(--glass-border)',
+                background: 'var(--canvas-bg)',
               }}
-            >
-              Empty space
-            </div>
+            />
           )}
         </div>
       </div>

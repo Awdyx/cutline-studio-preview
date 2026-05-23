@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useCallback, useRef, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { User, CreditCard, HelpCircle, LogOut } from 'lucide-react'
 import {
@@ -9,11 +9,15 @@ import {
   font,
   menuDividerStyle,
 } from '../styles/tokens'
-import type { UserProfile } from '../profile/types'
-import UserAvatar from './UserAvatar'
+import { useProfileStore } from '../profile/profileStore'
+import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
+import ProfileBannerHeader from './ProfileBannerHeader'
 import ProfileIdentityTags from './ProfileIdentityTags'
+import ProfileSocialPills from './ProfileSocialPills'
 import ProfileSubmenu from './ProfileSubmenu'
 import SubscriptionSubmenu from './SubscriptionSubmenu'
+import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
+import { useVisualViewportOffset } from '../platform/useVisualViewportOffset'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 
 type ProfileDestination = 'profile' | 'subscription' | 'help'
@@ -22,16 +26,17 @@ type ProfileSubmenuId = 'profile' | 'subscription'
 interface ProfilePanelProps {
   isOpen: boolean
   onClose: () => void
-  user: UserProfile
   onNavigate: (destination: ProfileDestination) => void
   onSignOut: () => void
   onManageBilling?: () => void
   onChangePlan?: () => void
 }
 
+const PROFILE_PANEL_TOP = 64
+
 const cardBase: React.CSSProperties = {
   position: 'fixed',
-  top: 64,
+  top: PROFILE_PANEL_TOP,
   right: 16,
   width: 280,
   background: card.bg,
@@ -114,7 +119,6 @@ function NavRow({
 export default function ProfilePanel({
   isOpen,
   onClose,
-  user,
   onNavigate,
   onSignOut,
   onManageBilling,
@@ -122,27 +126,48 @@ export default function ProfilePanel({
 }: ProfilePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const [openSubmenu, setOpenSubmenu] = useState<ProfileSubmenuId | null>(null)
+  const profile = useProfileStore((s) => s.profile)
+  const visualViewportOffsetTop = useVisualViewportOffset()
+
+  const closeAllSubmenus = useCallback(() => {
+    setOpenSubmenu(null)
+  }, [])
 
   useEffect(() => {
-    if (!isOpen) setOpenSubmenu(null)
-  }, [isOpen])
+    if (!isOpen) closeAllSubmenus()
+  }, [closeAllSubmenus, isOpen])
 
   useEffect(() => {
-    if (!isOpen) return
-    function handleMouseDown(e: MouseEvent) {
-      const target = e.target as Element
-      if (target.closest('[data-profile-submenu]')) return
-      if (target.closest('[data-profile-save-bubble]')) return
-      if (target.closest('[data-subscription-submenu]')) return
-      if (target.closest('[data-panel-trigger="profile"]')) return
-      if (panelRef.current && !panelRef.current.contains(target)) {
-        setOpenSubmenu(null)
-        onClose()
+    useShortcutUiStore.getState().registerProfileMenu({ closeSubmenus: closeAllSubmenus })
+    return () => useShortcutUiStore.getState().registerProfileMenu(null)
+  }, [closeAllSubmenus])
+
+  const dismissFromOutside = useCallback(
+    (target: Element) => {
+      if (target.closest('[data-panel-trigger]')) {
+        closeAllSubmenus()
+        return
       }
-    }
-    document.addEventListener('mousedown', handleMouseDown)
-    return () => document.removeEventListener('mousedown', handleMouseDown)
-  }, [isOpen, onClose])
+      if (panelRef.current?.contains(target)) {
+        closeAllSubmenus()
+        return
+      }
+      closeAllSubmenus()
+      onClose()
+    },
+    [closeAllSubmenus, onClose],
+  )
+
+  useMenuOutsideDismiss({
+    active: isOpen,
+    panelRef,
+    onDismiss: dismissFromOutside,
+    isInside: (target) =>
+      !!target.closest('[data-profile-submenu]') ||
+      !!target.closest('[data-profile-save-bubble]') ||
+      !!target.closest('[data-subscription-submenu]'),
+    dismissInsidePanel: openSubmenu !== null,
+  })
 
   const handleNav = (destination: ProfileDestination) => {
     if (destination === 'profile') {
@@ -162,65 +187,54 @@ export default function ProfilePanel({
       <motion.div
         ref={panelRef}
         className={`theme-surface ${CHROME_CARD_CLASS}`}
-        style={cardBase}
+        style={{ ...cardBase, top: PROFILE_PANEL_TOP + visualViewportOffsetTop }}
         initial={{ opacity: 0, scale: 0.96, y: -4 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: -4 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '20px 16px 16px',
-            gap: 8,
-          }}
-        >
-          <UserAvatar
-            displayName={user.displayName}
-            avatarColor={user.avatarColor}
-            avatarImageUrl={user.avatarImageUrl}
-            size={44}
-            fontSize={18}
-          />
-          <div className={CHROME_PRESERVE_CASE_CLASS}>
-            <ProfileIdentityTags
-              displayName={user.displayName}
-              handle={user.handle}
-              studentCohort={user.studentCohort}
-            />
-            <div style={{ textAlign: 'center', width: '100%' }}>
-              {user.bio && (
+        <div>
+          <ProfileBannerHeader
+            bannerImageUrl={profile.bannerImageUrl}
+            displayName={profile.displayName}
+            avatarColor={profile.avatarColor}
+            avatarImageUrl={profile.avatarImageUrl}
+            edgeToEdge
+          >
+            <div className={CHROME_PRESERVE_CASE_CLASS}>
+              <ProfileIdentityTags
+                displayName={profile.displayName}
+                handle={profile.handle}
+                studentCohort={profile.studentCohort}
+              />
+              {profile.bio && (
                 <p
                   style={{
-                    margin: '8px 0 0',
+                    margin: '16px 0 0',
                     fontSize: 12,
                     color: font.colorFaint,
-                    lineHeight: 1.4,
-                    maxWidth: 240,
+                    lineHeight: 1.45,
                   }}
                 >
-                  {user.bio}
+                  {profile.bio}
                 </p>
               )}
+              <ProfileSocialPills socials={profile.socials} centered />
             </div>
-          </div>
+          </ProfileBannerHeader>
         </div>
 
         <div style={menuDividerStyle} />
 
         <div style={{ padding: '4px 0' }}>
-          {NAV_ITEMS.map(({ icon, label, destination }) => {
-            const row = (
-              <NavRow
-                icon={icon}
-                label={label}
-                onClick={() => handleNav(destination)}
-              />
-            )
-            return <div key={destination}>{row}</div>
-          })}
+          {NAV_ITEMS.map(({ icon, label, destination }) => (
+            <NavRow
+              key={destination}
+              icon={icon}
+              label={label}
+              onClick={() => handleNav(destination)}
+            />
+          ))}
         </div>
 
         <div style={menuDividerStyle} />

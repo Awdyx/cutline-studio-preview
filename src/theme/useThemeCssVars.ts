@@ -21,6 +21,7 @@ export function useThemeCssVars() {
     root.style.setProperty('--glass-bg', p.uiGlassBg)
     root.style.setProperty('--glass-border', p.uiGlassBorder)
     root.style.setProperty('--card-bg', p.uiCardBg)
+    root.style.setProperty('--chrome-solid-bg', p.uiSolidBg)
     root.style.setProperty('--ui-text', p.uiText)
     root.style.setProperty('--ui-text-muted', p.uiTextMuted)
     root.style.setProperty('--ui-text-faint', p.uiTextFaint)
@@ -40,6 +41,9 @@ export function useThemeCssVars() {
     )
     root.style.setProperty('--vignette', p.vignetteColor)
     root.style.setProperty('--vignette-rgba', p.vignetteRgba)
+    root.style.setProperty('--vignette-rgba-mid', p.vignetteRgbaMid)
+    root.style.setProperty('--vignette-rgba-soft', p.vignetteRgbaSoft)
+    root.style.setProperty('--vignette-glow-rgba', p.vignetteGlowRgba)
     root.style.setProperty('--canvas-bg', canvasBg)
     root.style.setProperty(
       '--glass-shadow',

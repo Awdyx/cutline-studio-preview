@@ -1,4 +1,5 @@
 import { getMediaBlob, getSnapshotBlob } from './mediaBlobStore'
+import { tryRecoverMediaBlob } from './tryRecoverMediaBlob'
 
 type CacheEntry = {
   url: string
@@ -28,13 +29,20 @@ function release(map: Map<string, CacheEntry>, key: string): void {
   }
 }
 
-export async function resolveMediaObjectUrl(mediaId: string): Promise<string | null> {
+export async function resolveMediaObjectUrl(
+  mediaId: string,
+  itemId?: string,
+): Promise<string | null> {
   const cached = mediaUrls.get(mediaId)
   if (cached) {
     cached.refCount += 1
     return cached.url
   }
-  const blob = await getMediaBlob(mediaId)
+  let blob = await getMediaBlob(mediaId)
+  if (!blob) {
+    const recovered = await tryRecoverMediaBlob(mediaId, itemId)
+    if (recovered) blob = await getMediaBlob(mediaId)
+  }
   if (!blob) return null
   const url = URL.createObjectURL(blob)
   return acquire(mediaUrls, mediaId, url)

@@ -1,13 +1,25 @@
 import { useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowDownToLine, ArrowUpToLine, Trash2 } from 'lucide-react'
+import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Frame,
+  Proportions,
+  Trash2,
+} from 'lucide-react'
 import { MenuRow } from '../components/MenuRow'
 import { SubmenuSoundScope } from '../components/SubmenuSoundScope'
+import { mediaItemHasImportDimensions } from '../media/mediaImportDimensions'
 import { CHROME_GLASS_CLASS, glass, menuDividerStyle } from '../styles/tokens'
-import { useCanvasItemZMenuLayout } from './canvasItemZMenuLayout'
+import {
+  getSoleSelectedItemId,
+  useCanvasItemZMenuLayout,
+} from './canvasItemZMenuLayout'
 import { useCanvasItemDragStore } from './canvasItemDragStore'
 import { useCanvasItemsStore } from './canvasItemsStore'
+import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import TextAlignmentMenuSection from './TextAlignmentMenuSection'
+import { resolveItemTextAlignment } from './textAlignment'
 
 export default function CanvasItemZOrderMenu() {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -15,17 +27,45 @@ export default function CanvasItemZOrderMenu() {
   const activeDragItemId = useCanvasItemDragStore((s) => s.activeItemId)
   const bringToFront = useCanvasItemsStore((s) => s.bringToFront)
   const sendToBack = useCanvasItemsStore((s) => s.sendToBack)
+  const restoreImportSizing = useCanvasItemsStore((s) => s.restoreImportSizing)
+  const restoreSizingAnimatingId = useCanvasItemsStore(
+    (s) => s.restoreSizingAnimatingId,
+  )
   const deleteItem = useCanvasItemsStore((s) => s.deleteItem)
+  const previewAdjustSpaceId = useCanvasItemsStore((s) => s.previewAdjustSpaceId)
+  const setPreviewAdjustSpace = useCanvasItemsStore((s) => s.setPreviewAdjustSpace)
 
-  const itemId = selectedIds.length === 1 ? selectedIds[0] : null
+  const itemId = getSoleSelectedItemId(selectedIds)
   const showMenu = itemId != null && activeDragItemId !== itemId
 
   const menuItem = useCanvasItemsStore((s) =>
     itemId ? s.items.find((item) => item.id === itemId) : undefined,
   )
-  const isSpace = menuItem?.type === 'space'
+  const isMediaItem = menuItem?.type === 'image' || menuItem?.type === 'video'
+  const showRestoreImportSizing =
+    isMediaItem &&
+    menuItem != null &&
+    mediaItemHasImportDimensions(menuItem)
+  const restoreImportSizingDisabled =
+    !showRestoreImportSizing ||
+    restoreSizingAnimatingId === itemId ||
+    (menuItem != null &&
+      menuItem.width === menuItem.importWidth &&
+      menuItem.height === menuItem.importHeight)
   const showTextAlign =
-    menuItem?.type === 'sticky' || menuItem?.type === 'text'
+    menuItem?.type === 'sticky' ||
+    menuItem?.type === 'text' ||
+    menuItem?.type === 'space'
+
+  const spaceMeta = useCanvasWorkspaceStore((s) =>
+    menuItem?.type === 'space' && itemId ? s.spaces[itemId] : undefined,
+  )
+  const spaceHasPreviewContent =
+    !!spaceMeta &&
+    (spaceMeta.items.length > 0 ||
+      spaceMeta.strokes.length > 0 ||
+      spaceMeta.annotationStrokes.length > 0)
+  const isPreviewAdjusting = previewAdjustSpaceId === itemId
 
   const menuLayout = useCanvasItemZMenuLayout(menuRef, itemId, showMenu)
 
@@ -62,24 +102,42 @@ export default function CanvasItemZOrderMenu() {
             {showTextAlign && menuItem && (
               <TextAlignmentMenuSection
                 itemId={menuItem.id}
-                alignment={menuItem.textAlign}
+                alignment={resolveItemTextAlignment(menuItem)}
+                showVertical={menuItem.type !== 'space'}
               />
             )}
-            {!isSpace && (
-              <>
-                <MenuRow
-                  icon={ArrowUpToLine}
-                  label="Bring to front"
-                  onClick={() => bringToFront(itemId)}
-                />
-                <MenuRow
-                  icon={ArrowDownToLine}
-                  label="Send to back"
-                  onClick={() => sendToBack(itemId)}
-                />
-                <div style={menuDividerStyle} />
-              </>
+            {menuItem?.type === 'space' && (
+              <MenuRow
+                icon={Frame}
+                label="Adjust preview"
+                active={isPreviewAdjusting}
+                disabled={!spaceHasPreviewContent}
+                onClick={() =>
+                  setPreviewAdjustSpace(isPreviewAdjusting ? null : itemId)
+                }
+              />
             )}
+            {showRestoreImportSizing && (
+              <MenuRow
+                icon={Proportions}
+                label="Restore original sizing"
+                disabled={restoreImportSizingDisabled}
+                onClick={() => restoreImportSizing(itemId)}
+              />
+            )}
+            <MenuRow
+              icon={ArrowUpToLine}
+              label="Bring to front"
+              submenuClickSound={false}
+              onClick={() => bringToFront(itemId)}
+            />
+            <MenuRow
+              icon={ArrowDownToLine}
+              label="Send to back"
+              submenuClickSound={false}
+              onClick={() => sendToBack(itemId)}
+            />
+            <div style={menuDividerStyle} />
             <MenuRow
               icon={Trash2}
               label="Delete"

@@ -8,12 +8,15 @@ import {
   chromeLabel,
   font,
 } from '../styles/tokens'
+import { isSwapChromeMenuTarget } from './chromeMenuDismiss'
+import { partitionNewOld, PanelNewOldDivider } from './PanelNewOldDivider'
 import type { NewsPost, NewsTab } from '../types'
 
 interface NewsPanelProps {
   isOpen: boolean
   onClose: () => void
   posts: NewsPost[]
+  panelSeenNewsIds: Set<string>
   activeTab: NewsTab
   onTabChange: (tab: NewsTab) => void
   onPostClick: (id: string) => void
@@ -112,19 +115,6 @@ function NewsRow({ post, onClick }: { post: NewsPost; onClick: () => void }) {
         >
           {chromeLabel(categoryLabel[post.category])}
         </span>
-        {post.isNew && (
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: '0.03em',
-              color: font.colorMuted,
-              textTransform: 'lowercase',
-            }}
-          >
-            {chromeLabel('new')}
-          </span>
-        )}
         {post.date && (
           <span
             style={{
@@ -214,6 +204,7 @@ export default function NewsPanel({
   isOpen,
   onClose,
   posts,
+  panelSeenNewsIds,
   activeTab,
   onTabChange,
   onPostClick,
@@ -226,7 +217,8 @@ export default function NewsPanel({
       if (
         panelRef.current &&
         !panelRef.current.contains(e.target as Node) &&
-        !(e.target as Element).closest('[data-panel-trigger="news"]')
+        !(e.target as Element).closest('[data-panel-trigger]') &&
+        !isSwapChromeMenuTarget(e.target as Node)
       ) {
         onClose()
       }
@@ -240,6 +232,9 @@ export default function NewsPanel({
     if (activeTab === 'updates') return post.category === 'update'
     return true
   })
+  const isNewPost = (post: NewsPost) =>
+    !!post.isNew && !panelSeenNewsIds.has(post.id)
+  const { newItems, oldItems } = partitionNewOld(filtered, isNewPost)
 
   return (
     <motion.div
@@ -311,9 +306,25 @@ export default function NewsPanel({
         {filtered.length === 0 ? (
           <EmptyState />
         ) : (
-          filtered.map((post) => (
-            <NewsRow key={post.id} post={post} onClick={() => onPostClick(post.id)} />
-          ))
+          <>
+            {newItems.map((post) => (
+              <NewsRow
+                key={post.id}
+                post={post}
+                onClick={() => onPostClick(post.id)}
+              />
+            ))}
+            {newItems.length > 0 && oldItems.length > 0 && (
+              <PanelNewOldDivider label="Older posts" />
+            )}
+            {oldItems.map((post) => (
+              <NewsRow
+                key={post.id}
+                post={post}
+                onClick={() => onPostClick(post.id)}
+              />
+            ))}
+          </>
         )}
       </div>
     </motion.div>

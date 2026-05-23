@@ -21,7 +21,7 @@ export default function VideoItem({
   liftZIndex?: number
 }) {
   const [hovered, setHovered] = useState(false)
-  const { url, status } = useMediaBlobUrl(item.mediaId)
+  const { url, status } = useMediaBlobUrl(item.mediaId, item.id)
 
   return (
     <CanvasItemShell
@@ -47,7 +47,6 @@ export default function VideoItem({
               height: '100%',
               objectFit: 'fill',
               display: 'block',
-              borderRadius: 8,
               filter: `saturate(${MEDIA_SATURATE})`,
               opacity: mediaLoadOpacity(status),
               ...mediaLoadTransitionStyle(),

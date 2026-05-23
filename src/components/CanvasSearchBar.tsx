@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Layers, Search, StickyNote, Type } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { focusItemOnCanvas } from '../canvas/canvasCamera'
+import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import {
   buildCanvasSearchEntries,
   filterCanvasSearchEntries,
@@ -21,6 +22,7 @@ import { SHORTCUTS_BY_ID } from '../shortcuts/shortcutDefs'
 import { modKeyLabel } from '../shortcuts/modKey'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
+import { prefersCoarsePointer } from '../platform/textFocus'
 import { resolveStickyColor } from '../theme/paletteGenerator'
 import { useThemeStore } from '../theme/themeStore'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
@@ -82,9 +84,11 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
   const [value, setValue] = useState('')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(0)
+  const [searchInputReady, setSearchInputReady] = useState(!prefersCoarsePointer())
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const dropdownOpenRef = useRef(dropdownOpen)
+  const lastResultActivateRef = useRef(0)
   dropdownOpenRef.current = dropdownOpen
 
   const entries = useMemo(() => buildCanvasSearchEntries(items), [items])
@@ -96,8 +100,13 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
   const showDropdown = dropdownOpen && value.trim().length > 0
 
   function selectEntry(entry: CanvasSearchEntry) {
+    const now = Date.now()
+    if (now - lastResultActivateRef.current < 400) return
+    lastResultActivateRef.current = now
+
     playSubmenuTap()
-    selectItem(entry.id)
+    useCanvasNavigationStore.getState().suppressBackgroundSelectionClear(600)
+    selectItem(entry.id, false, { allowFrozen: true })
     focusItemOnCanvas(transformRef.current, entry.item)
     setDropdownOpen(false)
     setValue('')
@@ -107,9 +116,12 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
   useEffect(() => {
     useShortcutUiStore.getState().registerCanvasSearch({
       focus: () => {
+        setSearchInputReady(true)
         playSubmenuTap()
-        inputRef.current?.focus()
-        setDropdownOpen(true)
+        requestAnimationFrame(() => {
+          inputRef.current?.focus()
+          setDropdownOpen(true)
+        })
       },
       closeDropdown: () => setDropdownOpen(false),
       isDropdownOpen: () => dropdownOpenRef.current,
@@ -148,7 +160,12 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
   return (
     <div
       ref={containerRef}
-      style={{ position: 'relative', width: '100%', maxWidth: 480 }}
+      style={{
+        position: 'relative',
+        width: 480,
+        maxWidth: '100%',
+        pointerEvents: 'auto',
+      }}
     >
       <div
         className={`theme-surface ${CHROME_GLASS_CLASS}`}
@@ -160,7 +177,11 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
           width: '100%',
           cursor: 'text',
         }}
-        onClick={() => inputRef.current?.focus()}
+        onClick={() => {
+          setSearchInputReady(true)
+          inputRef.current?.focus()
+        }}
+        onPointerDown={() => setSearchInputReady(true)}
       >
         <Search
           size={15}
@@ -175,6 +196,7 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
           aria-label="Search canvas"
           autoComplete="off"
           spellCheck={false}
+          readOnly={!searchInputReady}
           data-canvas-search-input
           value={value}
           onChange={(e) => {

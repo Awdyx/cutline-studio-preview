@@ -2,7 +2,11 @@ import type { CanvasLayer } from '../canvasLock/layer'
 import { generateStrokeId } from '../drawing/strokeId'
 import { strokeToSvgPath } from '../drawing/strokePath'
 import type { DrawTool, Stroke } from '../drawing/types'
-import { normalizeTextAlignment } from './textAlignment'
+import {
+  DEFAULT_SPACE_PREVIEW_PAN,
+  resolveSpacePreviewPan,
+} from '../spaces/spacePreviewPan'
+import { DEFAULT_SPACE_NAME_ALIGNMENT, normalizeTextAlignment } from './textAlignment'
 import type { CanvasItem } from './types'
 
 export const CANVAS_ITEMS_STORAGE_KEY = 'cutline-canvas-items-v1'
@@ -117,6 +121,8 @@ function normalizeItem(raw: unknown): CanvasItem | null {
           ? o.id
           : null
     if (!mediaId) return null
+    const importWidth = (o as { importWidth?: number }).importWidth
+    const importHeight = (o as { importHeight?: number }).importHeight
     return {
       id: o.id,
       type: o.type,
@@ -126,6 +132,8 @@ function normalizeItem(raw: unknown): CanvasItem | null {
       width: o.width,
       height: o.height,
       mediaId,
+      ...(typeof importWidth === 'number' ? { importWidth } : {}),
+      ...(typeof importHeight === 'number' ? { importHeight } : {}),
       ...(layer ? { layer } : {}),
       ...(legacySrc ? { src: legacySrc } : {}),
     } as CanvasItem
@@ -144,6 +152,21 @@ function normalizeItem(raw: unknown): CanvasItem | null {
         : typeof snapshotRaw === 'string' && snapshotRaw.length > 0
           ? o.id
           : null
+    const previewPanRaw = (o as {
+      previewPan?: { x?: unknown; y?: unknown; scale?: unknown }
+    }).previewPan
+    const previewPan = previewPanRaw
+      ? resolveSpacePreviewPan({
+          x:
+            typeof previewPanRaw.x === 'number' ? previewPanRaw.x : undefined,
+          y:
+            typeof previewPanRaw.y === 'number' ? previewPanRaw.y : undefined,
+          scale:
+            typeof previewPanRaw.scale === 'number'
+              ? previewPanRaw.scale
+              : undefined,
+        })
+      : DEFAULT_SPACE_PREVIEW_PAN
     return {
       id: o.id,
       type: 'space',
@@ -154,6 +177,11 @@ function normalizeItem(raw: unknown): CanvasItem | null {
       height: o.height,
       name,
       snapshotId,
+      previewPan,
+      textAlign:
+        (o as { textAlign?: unknown }).textAlign != null
+          ? normalizeTextAlignment((o as { textAlign?: unknown }).textAlign)
+          : DEFAULT_SPACE_NAME_ALIGNMENT,
       ...(layer ? { layer } : {}),
       ...(typeof snapshotRaw === 'string' && snapshotRaw.length > 0
         ? { snapshot: snapshotRaw }

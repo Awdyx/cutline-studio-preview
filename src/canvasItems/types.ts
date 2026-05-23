@@ -1,10 +1,11 @@
 import type { CanvasLayer } from '../canvasLock/layer'
 import type { Stroke } from '../drawing/types'
 import type { ItemTextAlignment } from './textAlignment'
-import { DEFAULT_TEXT_ALIGNMENT } from './textAlignment'
+import type { SpacePreviewPan } from '../spaces/spacePreviewPan'
+import { DEFAULT_SPACE_NAME_ALIGNMENT, DEFAULT_TEXT_ALIGNMENT } from './textAlignment'
 
 export type { ItemTextAlignment, TextAlignH, TextAlignV } from './textAlignment'
-export { DEFAULT_TEXT_ALIGNMENT }
+export { DEFAULT_TEXT_ALIGNMENT, DEFAULT_SPACE_NAME_ALIGNMENT }
 export type { CanvasLayer } from '../canvasLock/layer'
 
 export type CanvasItemType = 'sticky' | 'text' | 'image' | 'video' | 'space'
@@ -40,18 +41,26 @@ export type ImageCanvasItem = CanvasItemBase & {
   type: 'image'
   /** IndexedDB blob id — same as item id for new imports. */
   mediaId: string
+  /** Display size at import — used to restore aspect ratio after resize. */
+  importWidth?: number
+  importHeight?: number
 }
 
 export type VideoCanvasItem = CanvasItemBase & {
   type: 'video'
   mediaId: string
+  importWidth?: number
+  importHeight?: number
 }
 
 export type SpaceCanvasItem = CanvasItemBase & {
   type: 'space'
   name: string
+  textAlign: ItemTextAlignment
   /** IndexedDB snapshot blob id — typically the space id. */
   snapshotId: string | null
+  /** Pan offset for the card preview viewport. */
+  previewPan?: SpacePreviewPan
 }
 
 export type CanvasItem =
@@ -66,6 +75,7 @@ export const STICKY_HEIGHT = 200
 
 export const SPACE_WIDTH = 240
 export const SPACE_HEIGHT = 240
+export const MAX_SPACE_WIDGETS = 3
 export const TEXT_WIDTH = 320
 export const TEXT_HEIGHT = 72
 export const TEXT_MIN_WIDTH = 120

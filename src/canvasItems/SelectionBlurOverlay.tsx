@@ -1,14 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { SELECTION_DEPTH_CLASS } from '../styles/tokens'
-import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { Z_SELECTION_DIM } from './canvasZOrder'
 import { useCanvasItemsStore } from './canvasItemsStore'
 
-/** Blurs the canvas behind selected items (main canvas only). */
+/** Blurs the canvas behind selected items. */
 export default function SelectionBlurOverlay() {
-  const onMainCanvas = useCanvasWorkspaceStore((s) => s.activeCanvasId === 'main')
-  const hasSelection = useCanvasItemsStore((s) => s.selectedIds.length > 0)
-  const show = onMainCanvas && hasSelection
+  const show = useCanvasItemsStore((s) => s.selectedIds.length > 0)
 
   return (
     <AnimatePresence>

@@ -3,16 +3,19 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 import {
   loadLegacyAvatarFromStorage,
   loadProfileMetaFromStorage,
-  metaToProfile,
+  mergePersistedMeta,
   saveProfileMetaToStorage,
-  stripAvatar,
+  stripProfileMedia,
   DEFAULT_PROFILE,
   PROFILE_STORAGE_KEY,
+  metaToProfile,
   type PersistedProfileMeta,
 } from './profilePersistence'
 import {
   loadProfileAvatar,
+  loadProfileBanner,
   saveProfileAvatar,
+  saveProfileBanner,
 } from './profileAvatarPersistence'
 import { sanitizeProfileDraft } from './profileUtils'
 import type { UserProfile } from './types'
@@ -22,18 +25,33 @@ type ProfileState = {
   saveProfile: (next: UserProfile) => void
 }
 
-async function mergeAvatarIntoProfile(meta: PersistedProfileMeta): Promise<UserProfile> {
-  const fromIdb = await loadProfileAvatar()
-  if (fromIdb) return metaToProfile(meta, fromIdb)
+async function mergeMediaIntoProfile(meta: PersistedProfileMeta): Promise<UserProfile> {
+  const [fromIdbAvatar, fromIdbBanner] = await Promise.all([
+    loadProfileAvatar(),
+    loadProfileBanner(),
+  ])
+
+  if (fromIdbAvatar) {
+    return metaToProfile(meta, {
+      avatarImageUrl: fromIdbAvatar,
+      bannerImageUrl: fromIdbBanner,
+    })
+  }
 
   const legacy = loadLegacyAvatarFromStorage()
   if (legacy) {
     await saveProfileAvatar(legacy)
     saveProfileMetaToStorage(meta)
-    return metaToProfile(meta, legacy)
+    return metaToProfile(meta, {
+      avatarImageUrl: legacy,
+      bannerImageUrl: fromIdbBanner,
+    })
   }
 
-  return metaToProfile(meta, null)
+  return metaToProfile(meta, {
+    avatarImageUrl: null,
+    bannerImageUrl: fromIdbBanner,
+  })
 }
 
 /** Accept legacy flat JSON blobs written before zustand persist. */
@@ -47,7 +65,7 @@ const profileStorage: StateStorage = {
       const meta = loadProfileMetaFromStorage()
       return JSON.stringify({
         state: { profile: meta },
-        version: 1,
+        version: 2,
       })
     } catch {
       return null
@@ -70,37 +88,31 @@ export const useProfileStore = create<ProfileState>()(
         const profile = sanitizeProfileDraft(next)
         set({ profile })
         void saveProfileAvatar(profile.avatarImageUrl)
+        void saveProfileBanner(profile.bannerImageUrl)
       },
     }),
     {
       name: PROFILE_STORAGE_KEY,
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => profileStorage),
       partialize: (state) => ({
-        profile: stripAvatar(state.profile),
+        profile: stripProfileMedia(state.profile),
       }),
       merge: (persisted, current) => {
         const saved = persisted as Partial<ProfileState> | undefined
         if (!saved?.profile) return current
-        const meta = saved.profile
+        const meta = mergePersistedMeta(saved.profile)
         return {
           ...current,
-          profile: metaToProfile(
-            {
-              displayName: meta.displayName ?? DEFAULT_PROFILE.displayName,
-              handle: meta.handle ?? DEFAULT_PROFILE.handle,
-              email: meta.email ?? DEFAULT_PROFILE.email,
-              bio: meta.bio ?? DEFAULT_PROFILE.bio,
-              studentCohort: meta.studentCohort ?? DEFAULT_PROFILE.studentCohort,
-              avatarColor: meta.avatarColor ?? DEFAULT_PROFILE.avatarColor,
-            },
-            null,
-          ),
+          profile: metaToProfile(meta, {
+            avatarImageUrl: null,
+            bannerImageUrl: null,
+          }),
         }
       },
       onRehydrateStorage: () => (state, error) => {
         if (error || !state) return
-        void mergeAvatarIntoProfile(stripAvatar(state.profile)).then((profile) => {
+        void mergeMediaIntoProfile(stripProfileMedia(state.profile)).then((profile) => {
           useProfileStore.setState({ profile })
         })
       },

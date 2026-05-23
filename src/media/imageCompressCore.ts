@@ -68,7 +68,10 @@ export async function compressImageBitmap(
   )
 
   const canvas = createCanvas(width, height)
-  const ctx = canvas.getContext('2d', { alpha: true })
+  const ctx = canvas.getContext('2d', { alpha: true }) as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D
+    | null
   if (!ctx) return null
 
   ctx.drawImage(bitmap, 0, 0, width, height)

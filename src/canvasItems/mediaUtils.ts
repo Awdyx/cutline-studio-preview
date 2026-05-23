@@ -5,18 +5,25 @@ import {
 export const MAX_MEDIA_BYTES = 5 * 1024 * 1024
 export const MAX_MEDIA_DIMENSION = 400
 
+export type PreparedMedia = {
+  kind: 'image' | 'video'
+  blob: Blob
+  width: number
+  height: number
+}
+
+export type PrepareMediaFailure = 'too_large' | 'unsupported' | 'processing_failed'
+
+export type PrepareMediaResult =
+  | { ok: true; media: PreparedMedia }
+  | { ok: false; reason: PrepareMediaFailure; fileSize?: number }
+
 export function isAcceptedMediaFile(file: File): boolean {
   return file.type.startsWith('image/') || file.type.startsWith('video/')
 }
 
-function rejectOversize(file: File): boolean {
-  if (file.size > MAX_MEDIA_BYTES) {
-    console.warn(
-      `[canvas] rejected ${file.name}: ${(file.size / 1024 / 1024).toFixed(2)}MB exceeds 5MB`,
-    )
-    return true
-  }
-  return false
+export function isMediaFileTooLarge(file: File): boolean {
+  return file.size > MAX_MEDIA_BYTES
 }
 
 function fitDimensions(
@@ -32,6 +39,13 @@ function fitDimensions(
     width: Math.round(naturalWidth * scale),
     height: Math.round(naturalHeight * scale),
   }
+}
+
+export function fitMediaDisplayDimensions(
+  naturalWidth: number,
+  naturalHeight: number,
+): { width: number; height: number } {
+  return fitDimensions(naturalWidth, naturalHeight)
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -53,11 +67,10 @@ function loadVideoMeta(src: string): Promise<HTMLVideoElement> {
   })
 }
 
-export async function prepareImageFromFile(
+async function prepareImageFromFile(
   file: File,
 ): Promise<{ blob: Blob; width: number; height: number } | null> {
   if (!file.type.startsWith('image/')) return null
-  if (rejectOversize(file)) return null
 
   const compressed = await compressImageForImport(file)
   const { width, height } = fitDimensions(
@@ -67,11 +80,10 @@ export async function prepareImageFromFile(
   return { blob: compressed.blob, width, height }
 }
 
-export async function prepareVideoFromFile(
+async function prepareVideoFromFile(
   file: File,
 ): Promise<{ blob: Blob; width: number; height: number } | null> {
   if (!file.type.startsWith('video/')) return null
-  if (rejectOversize(file)) return null
 
   const dataUrl = await readFileAsDataUrl(file)
   const video = await loadVideoMeta(dataUrl)
@@ -85,12 +97,27 @@ export async function prepareVideoFromFile(
 
 export async function prepareMediaFromFile(
   file: File,
-): Promise<{ kind: 'image' | 'video'; blob: Blob; width: number; height: number } | null> {
-  if (!isAcceptedMediaFile(file)) return null
-  if (file.type.startsWith('video/')) {
-    const video = await prepareVideoFromFile(file)
-    return video ? { kind: 'video', ...video } : null
+): Promise<PrepareMediaResult> {
+  if (!isAcceptedMediaFile(file)) {
+    return { ok: false, reason: 'unsupported' }
   }
-  const image = await prepareImageFromFile(file)
-  return image ? { kind: 'image', ...image } : null
+
+  if (isMediaFileTooLarge(file)) {
+    return { ok: false, reason: 'too_large', fileSize: file.size }
+  }
+
+  try {
+    if (file.type.startsWith('video/')) {
+      const video = await prepareVideoFromFile(file)
+      if (!video) return { ok: false, reason: 'processing_failed' }
+      return { ok: true, media: { kind: 'video', ...video } }
+    }
+
+    const image = await prepareImageFromFile(file)
+    if (!image) return { ok: false, reason: 'processing_failed' }
+    return { ok: true, media: { kind: 'image', ...image } }
+  } catch (err) {
+    console.warn('[canvas] failed to prepare media import', err)
+    return { ok: false, reason: 'processing_failed' }
+  }
 }

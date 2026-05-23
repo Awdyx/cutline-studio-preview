@@ -16,7 +16,7 @@ export function PreviewMediaImage({
   height: number
   opacity?: number
 }) {
-  const { url, status } = useMediaBlobUrl(mediaId)
+  const { url, status } = useMediaBlobUrl(mediaId, mediaId)
   if (!url) return null
   return (
     <image

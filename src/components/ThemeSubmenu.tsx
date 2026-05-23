@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Sun, Moon, Monitor, Check } from 'lucide-react'
 import { CHROME_CARD_CLASS, card, chromeLabel, font } from '../styles/tokens'
-import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
+import { playSubmenuHover } from '../sound/submenuSound'
 import type { ThemeMode } from '../theme/themeStore'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import { useSubmenuPosition } from './useSubmenuPosition'
@@ -18,14 +18,12 @@ interface ThemeSubmenuProps {
   anchorRef: RefObject<HTMLElement | null>
   currentMode: ThemeMode
   onSelect: (mode: ThemeMode) => void
-  onClose: () => void
 }
 
 export default function ThemeSubmenu({
   anchorRef,
   currentMode,
   onSelect,
-  onClose,
 }: ThemeSubmenuProps) {
   const [mounted, setMounted] = useState(false)
   const pos = useSubmenuPosition(anchorRef)
@@ -66,9 +64,7 @@ export default function ThemeSubmenu({
           key={mode}
           type="button"
           onClick={() => {
-            playSubmenuTap()
             onSelect(mode)
-            onClose()
           }}
           style={{
             display: 'flex',

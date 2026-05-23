@@ -11,6 +11,9 @@ export type GeneratedPalette = {
   meshColors: string[]
   vignetteColor: string
   vignetteRgba: string
+  vignetteRgbaMid: string
+  vignetteRgbaSoft: string
+  vignetteGlowRgba: string
   uiText: string
   uiTextMuted: string
   uiTextFaint: string
@@ -18,6 +21,7 @@ export type GeneratedPalette = {
   uiGlassBg: string
   uiGlassBorder: string
   uiCardBg: string
+  uiSolidBg: string
   uiAccent: string
 }
 
@@ -33,6 +37,9 @@ const BLOB_REVEAL_ORDER = [2, 1, 3, 0, 4] as const
 const BLOB_REVEAL_BAND = 1 / BLOB_LIGHTNESS_STOPS.length
 
 const NEUTRAL_HUE = 250
+
+/** Dark-mode edge vignette is scaled down so the light rim wash stays subtle. */
+const DARK_VIGNETTE_ALPHA_SCALE = 0.55
 
 function uiChroma(c: number): number {
   return c * UI_SATURATION_BOOST
@@ -88,8 +95,30 @@ export function generatePalette(
     neutral(meshBaseL + stop * spread),
   )
 
-  const vignetteColor = neutral(mode === 'light' ? 0.22 : 0.12, uiChroma(0.004))
-  const vignetteRgba = hexToRgba(vignetteColor, mode === 'light' ? 0.18 : 0.28)
+  const vignetteColor =
+    mode === 'light'
+      ? neutral(0.22, uiChroma(0.004))
+      : neutral(0.94, uiChroma(0.006))
+  const vignetteRgba = hexToRgba(
+    vignetteColor,
+    mode === 'light' ? 0.28 : 0.12 * DARK_VIGNETTE_ALPHA_SCALE,
+  )
+  const vignetteRgbaMid = hexToRgba(
+    vignetteColor,
+    mode === 'light' ? 0.15 : 0.07 * DARK_VIGNETTE_ALPHA_SCALE,
+  )
+  const vignetteRgbaSoft = hexToRgba(
+    vignetteColor,
+    mode === 'light' ? 0.06 : 0.03 * DARK_VIGNETTE_ALPHA_SCALE,
+  )
+  const vignetteGlowColor =
+    mode === 'light'
+      ? neutral(0.16, uiChroma(0.008))
+      : neutral(0.97, uiChroma(0.01))
+  const vignetteGlowRgba = hexToRgba(
+    vignetteGlowColor,
+    mode === 'light' ? 0.34 : 0.16 * DARK_VIGNETTE_ALPHA_SCALE,
+  )
 
   const uiText = neutral(mode === 'light' ? 0.22 : 0.93, uiChroma(0.006))
   const uiTextMuted = neutral(mode === 'light' ? 0.48 : 0.68, uiChroma(0.008))
@@ -102,6 +131,8 @@ export function generatePalette(
     mode === 'light' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.08)'
   const uiCardBg =
     mode === 'light' ? 'rgba(255, 255, 255, 0.72)' : 'rgba(44, 46, 50, 0.72)'
+  const uiSolidBg =
+    mode === 'light' ? '#ffffff' : neutral(0.24, uiChroma(0.004))
 
   const uiAccent = neutral(mode === 'light' ? 0.42 : 0.72, uiChroma(0.01))
 
@@ -109,6 +140,9 @@ export function generatePalette(
     meshColors,
     vignetteColor,
     vignetteRgba,
+    vignetteRgbaMid,
+    vignetteRgbaSoft,
+    vignetteGlowRgba,
     uiText,
     uiTextMuted,
     uiTextFaint,
@@ -116,6 +150,7 @@ export function generatePalette(
     uiGlassBg,
     uiGlassBorder,
     uiCardBg,
+    uiSolidBg,
     uiAccent,
   }
 }

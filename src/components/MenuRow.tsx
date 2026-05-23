@@ -13,6 +13,9 @@ export function MenuRow({
   submenuClickSound = true,
   dotColor,
   destructive = false,
+  disabled = false,
+  active = false,
+  inset = false,
 }: {
   icon?: React.ElementType
   label: string
@@ -24,19 +27,29 @@ export function MenuRow({
   submenuClickSound?: boolean
   dotColor?: string
   destructive?: boolean
+  disabled?: boolean
+  active?: boolean
+  /** Inset pill row — used in fixed chrome menus. */
+  inset?: boolean
 }) {
   const [hovered, setHovered] = useState(false)
   const inSubmenuScope = useSubmenuSoundScope()
   const sounds = submenuSounds ?? inSubmenuScope
+  const canInteract = !disabled
+  const showInsetFill = inset && hovered && canInteract
 
   return (
     <button
       type="button"
+      disabled={disabled}
+      aria-current={active ? 'page' : undefined}
       onClick={() => {
+        if (!canInteract) return
         if (sounds && submenuClickSound) playSubmenuTap()
         onClick()
       }}
       onMouseEnter={() => {
+        if (!canInteract) return
         setHovered(true)
         if (sounds) playSubmenuHover()
         onMouseEnter?.()
@@ -46,13 +59,19 @@ export function MenuRow({
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        width: '100%',
-        padding: '10px 16px',
-        background: hovered ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
+        width: inset ? 'calc(100% - 16px)' : '100%',
+        margin: inset ? '0 8px' : undefined,
+        padding: inset ? '10px 12px' : '10px 16px',
+        borderRadius: inset ? 10 : undefined,
+        background: showInsetFill ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
         border: 'none',
-        cursor: 'pointer',
+        cursor: canInteract ? 'pointer' : 'default',
         fontFamily: font.family,
-        color: destructive ? '#c44e4e' : font.colorPrimary,
+        color: disabled
+          ? font.colorFaint
+          : destructive
+            ? '#c44e4e'
+            : font.colorPrimary,
         transition: 'background 150ms ease',
         textAlign: 'left',
       }}
@@ -76,7 +95,13 @@ export function MenuRow({
         <Icon
           size={16}
           strokeWidth={1.8}
-          color={destructive ? '#c44e4e' : font.colorMuted}
+          color={
+            disabled
+              ? font.colorFaint
+              : destructive
+                ? '#c44e4e'
+                : font.colorMuted
+          }
           style={{ flexShrink: 0 }}
         />
       ) : null}

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Sun, Moon, Monitor, ChevronRight, Lock, LockOpen, Volume2 } from 'lucide-react'
 import { CHROME_CARD_CLASS, card, chromeLabel, font, menuDividerStyle } from '../styles/tokens'
 import type { ThemeMode } from '../theme/themeStore'
@@ -161,20 +161,15 @@ export default function SettingsSubmenu({
         </SubmenuSoundScope>
       </motion.div>
 
-      <AnimatePresence>
-        {soundSubmenuOpen && <SoundSubmenu anchorRef={soundAnchorRef} />}
-        {themeSubmenuOpen && (
-          <ThemeSubmenu
-            anchorRef={themeAnchorRef}
-            currentMode={mode}
-            onSelect={onModeChange}
-            onClose={() => {
-              setThemeSubmenuOpen(false)
-              onCloseMenu()
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {soundSubmenuOpen && <SoundSubmenu anchorRef={soundAnchorRef} />}
+      {themeSubmenuOpen && (
+        <ThemeSubmenu
+          key="theme-submenu"
+          anchorRef={themeAnchorRef}
+          currentMode={mode}
+          onSelect={onModeChange}
+        />
+      )}
     </>,
     document.body,
   )

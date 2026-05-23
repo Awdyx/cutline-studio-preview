@@ -91,7 +91,6 @@ export default function DragHandle({
           touchAction: 'none',
           pointerEvents: 'auto',
           opacity: 'var(--canvas-handle-opacity)',
-          transition: 'opacity 150ms ease, color 150ms ease',
         }}
         className="canvas-item-drag-handle"
       >

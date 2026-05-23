@@ -1,9 +1,11 @@
-import { useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Eraser, Highlighter, Pen } from 'lucide-react'
 import type { PenToolMenuState } from '../drawing/usePenToolMenu'
 import { pillScreenRect } from '../drawing/penToolMenuLayout'
 import type { ToolMode } from '../drawing/toolStore'
+import { CHROME_MENU_TRANSITION } from '../styles/tokens'
 
 const ICON_SIZE = 20
 const ICON_STROKE = 2
@@ -16,54 +18,12 @@ const tools: { mode: ToolMode; Icon: typeof Pen; label: string }[] = [
   { mode: 'erase', Icon: Eraser, label: 'Eraser' },
 ]
 
-const hostVariants = {
-  initial: {
-    x: 14,
-    scale: 0.94,
-    clipPath: 'inset(0 0 0 100% round 999px)',
-  },
-  animate: {
-    x: 0,
-    scale: 1,
-    clipPath: 'inset(0 0 0 0% round 999px)',
-    transition: {
-      x: { type: 'spring' as const, stiffness: 620, damping: 36, mass: 0.65 },
-      scale: { type: 'spring' as const, stiffness: 620, damping: 36, mass: 0.65 },
-      clipPath: { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const },
-    },
-  },
-  exit: {
-    x: 12,
-    scale: 0.96,
-    clipPath: 'inset(0 0 0 100% round 999px)',
-    transition: {
-      duration: 0.12,
-      ease: [0.4, 0, 1, 1] as const,
-    },
-  },
-}
-
-const motionBlurVariants = {
-  initial: { opacity: 0.9, scaleX: 0.68, filter: 'blur(36px)' },
-  animate: {
-    opacity: 0,
-    scaleX: 1.12,
-    filter: 'blur(0px)',
-    transition: {
-      opacity: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
-      scaleX: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
-      filter: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const },
-    },
-  },
-  exit: {
-    opacity: 0.8,
-    scaleX: 0.78,
-    filter: 'blur(34px)',
-    transition: {
-      duration: 0.12,
-      ease: [0.4, 0, 1, 1] as const,
-    },
-  },
+/** Same open/close as Cutline flyout submenus — slides in from the pencil anchor. */
+const PEN_TOOL_PILL_MOTION = {
+  initial: { opacity: 0, scale: 0.96, x: 4 },
+  animate: { opacity: 1, scale: 1, x: 0 },
+  exit: { opacity: 0, scale: 0.96, x: 4 },
+  transition: CHROME_MENU_TRANSITION,
 }
 
 function PillToolIcon({ Icon }: { Icon: typeof Pen }) {
@@ -90,6 +50,7 @@ type Props = {
 }
 
 export default function PenToolPillMenu({ state }: Props) {
+  const [mounted, setMounted] = useState(false)
   const layoutRef = useRef(pillScreenRect(0, 0))
 
   if (state.phase === 'open') {
@@ -98,26 +59,31 @@ export default function PenToolPillMenu({ state }: Props) {
 
   const { left, top, width, height } = layoutRef.current
 
-  return (
+  useLayoutEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) return null
+
+  return createPortal(
     <AnimatePresence initial={false}>
       {state.phase === 'open' && (
         <motion.div
-          key={`pill-${Math.round(state.anchorX)}-${Math.round(state.anchorY)}`}
-          className="pen-tool-pill-host"
+          key="pen-tool-pill"
           role="toolbar"
           aria-label="Drawing tools"
-          style={{ left, top, width, height }}
-          variants={hostVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
+          style={{
+            position: 'fixed',
+            left,
+            top,
+            width,
+            height,
+            zIndex: 25,
+            pointerEvents: 'none',
+            transformOrigin: '100% 50%',
+          }}
+          {...PEN_TOOL_PILL_MOTION}
         >
-          <motion.span
-            className="pen-tool-pill__motion-blur"
-            aria-hidden
-            variants={motionBlurVariants}
-          />
-
           <div className="pen-tool-pill">
             {tools.map(({ mode, Icon, label }) => {
               const hovered = state.hoveredTool === mode
@@ -141,6 +107,7 @@ export default function PenToolPillMenu({ state }: Props) {
           </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }

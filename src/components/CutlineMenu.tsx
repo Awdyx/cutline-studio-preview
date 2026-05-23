@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Keyboard, Settings, ChevronRight } from 'lucide-react'
-import { CHROME_CARD_CLASS, card, font } from '../styles/tokens'
+import { CHROME_CARD_CLASS, card, font, menuDividerStyle } from '../styles/tokens'
 import type { ThemeMode } from '../theme/themeStore'
+import CutlineAppNavSection from './CutlineAppNavSection'
 import ShortcutsSubmenu from './ShortcutsSubmenu'
 import SettingsSubmenu from './SettingsSubmenu'
 import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
+import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
+import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 
 interface CutlineMenuProps {
   isOpen: boolean
@@ -34,27 +37,47 @@ export default function CutlineMenu({
   const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false)
   const [shortcutsSubmenuOpen, setShortcutsSubmenuOpen] = useState(false)
 
+  const closeAllSubmenus = useCallback(() => {
+    setSettingsSubmenuOpen(false)
+    setShortcutsSubmenuOpen(false)
+  }, [])
+
   useEffect(() => {
     if (!isOpen) {
-      setSettingsSubmenuOpen(false)
-      setShortcutsSubmenuOpen(false)
-      return
+      closeAllSubmenus()
     }
+  }, [isOpen, closeAllSubmenus])
 
-    function handleMouseDown(e: MouseEvent) {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(e.target as Node) &&
-        !(e.target as Element).closest('[data-panel-trigger="cutline"]') &&
-        !(e.target as Element).closest('[data-cutline-submenu]')
-      ) {
-        onClose()
+  useEffect(() => {
+    useShortcutUiStore.getState().registerCutlineMenu({ closeSubmenus: closeAllSubmenus })
+    return () => useShortcutUiStore.getState().registerCutlineMenu(null)
+  }, [closeAllSubmenus])
+
+  const hasFlyoutSubmenu = settingsSubmenuOpen || shortcutsSubmenuOpen
+
+  const dismissFromOutside = useCallback(
+    (target: Element) => {
+      // Shortcuts/settings rows swap flyouts via onClick — don't dismiss on pointerdown.
+      if (target.closest('[data-cutline-submenu-anchor]')) return
+
+      if (panelRef.current?.contains(target)) {
+        closeAllSubmenus()
+        return
       }
-    }
 
-    document.addEventListener('mousedown', handleMouseDown)
-    return () => document.removeEventListener('mousedown', handleMouseDown)
-  }, [isOpen, onClose])
+      closeAllSubmenus()
+      onClose()
+    },
+    [closeAllSubmenus, onClose],
+  )
+
+  useMenuOutsideDismiss({
+    active: isOpen,
+    panelRef,
+    onDismiss: dismissFromOutside,
+    isInside: (target) => !!target.closest('[data-cutline-submenu]'),
+    dismissInsidePanel: hasFlyoutSubmenu,
+  })
 
   return (
     <>
@@ -77,14 +100,18 @@ export default function CutlineMenu({
           color: font.colorPrimary,
           zIndex: 30,
           overflow: 'hidden',
+          paddingBottom: 12,
         }}
         className={`theme-surface ${CHROME_CARD_CLASS}`}
       >
         <SubmenuSoundScope>
-        <div ref={shortcutsAnchorRef}>
+        <CutlineAppNavSection onNavigate={onClose} />
+        <div style={menuDividerStyle} />
+        <div ref={shortcutsAnchorRef} data-cutline-submenu-anchor="shortcuts">
           <MenuRow
             icon={Keyboard}
             label="Shortcuts"
+            inset
             right={<ChevronRight size={14} strokeWidth={2} color={font.colorMuted} />}
             onClick={() => {
               setSettingsSubmenuOpen(false)
@@ -92,10 +119,11 @@ export default function CutlineMenu({
             }}
           />
         </div>
-        <div ref={settingsAnchorRef}>
+        <div ref={settingsAnchorRef} data-cutline-submenu-anchor="settings">
           <MenuRow
             icon={Settings}
             label="Settings"
+            inset
             right={<ChevronRight size={14} strokeWidth={2} color={font.colorMuted} />}
             onClick={() => {
               setShortcutsSubmenuOpen(false)
@@ -106,9 +134,10 @@ export default function CutlineMenu({
         </SubmenuSoundScope>
       </motion.div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="sync">
         {settingsSubmenuOpen && (
           <SettingsSubmenu
+            key="settings-submenu"
             anchorRef={settingsAnchorRef}
             mode={mode}
             onModeChange={onModeChange}
@@ -118,7 +147,9 @@ export default function CutlineMenu({
             showCanvasLock={showCanvasLock}
           />
         )}
-        {shortcutsSubmenuOpen && <ShortcutsSubmenu anchorRef={shortcutsAnchorRef} />}
+        {shortcutsSubmenuOpen && (
+          <ShortcutsSubmenu key="shortcuts-submenu" anchorRef={shortcutsAnchorRef} />
+        )}
       </AnimatePresence>
     </>
   )

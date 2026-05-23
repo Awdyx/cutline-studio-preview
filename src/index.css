@@ -29,6 +29,73 @@ button {
   touch-action: none;
 }
 
+html[data-pause-mesh] [data-mesh-blob] {
+  animation-play-state: paused !important;
+}
+
+.cutline-canvas-viewport.cutline-desktop-draw,
+html[data-space-draw] .cutline-canvas-viewport {
+  cursor: crosshair;
+}
+
+.pen-fab-menu {
+  opacity: 0;
+  transform: translateX(4px) scale(0.96);
+  transition:
+    opacity 0.18s ease-out,
+    transform 0.18s ease-out;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  pointer-events: auto;
+}
+
+.pen-fab-menu--visible {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+.chrome-fab-trigger {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  outline: none;
+  pointer-events: auto;
+  box-shadow: var(--glass-shadow);
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+
+.chrome-fab-trigger--hover {
+  transform: scale(1.05);
+  box-shadow: var(--card-shadow);
+}
+
+.chrome-fab-trigger--open {
+  transform: rotate(45deg);
+}
+
+.chrome-fab-trigger--open.chrome-fab-trigger--hover {
+  transform: rotate(45deg) scale(1.05);
+}
+
+.chrome-fab-trigger--pen-open {
+  transform: rotate(-20deg);
+}
+
+.chrome-fab-trigger--pen-open.chrome-fab-trigger--hover {
+  transform: rotate(-20deg) scale(1.05);
+}
+
+.pen-fab-tool-settings {
+  overflow: hidden;
+}
+
 :root {
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
   --glass-bg: rgba(255, 255, 255, 0.55);
@@ -42,12 +109,16 @@ button {
   --ui-divider: rgba(20, 30, 50, 0.06);
   --ui-divider-vertical: rgba(20, 30, 50, 0.08);
   --vignette: #1a2230;
-  --vignette-rgba: rgba(26, 34, 48, 0.22);
+  --vignette-rgba: rgba(26, 34, 48, 0.28);
+  --vignette-rgba-mid: rgba(26, 34, 48, 0.15);
+  --vignette-rgba-soft: rgba(26, 34, 48, 0.06);
+  --vignette-glow-rgba: rgba(18, 24, 36, 0.42);
   --glass-shadow: 0 4px 24px rgba(20, 30, 50, 0.08);
   --card-shadow: 0 8px 40px rgba(20, 30, 50, 0.14);
   --pill-backdrop: blur(40px) saturate(180%);
   --ui-saturate: 1;
   --pill-surface: rgba(255, 255, 255, 0.45);
+  --chrome-solid-bg: #ffffff;
   --pill-icon-halo: #ffffff;
   --canvas-handle-color: rgba(30, 35, 45, 0.32);
   --canvas-handle-color-hover: rgba(30, 35, 45, 0.48);
@@ -59,6 +130,10 @@ button {
   --canvas-handle-opacity-active: 0.72;
   --canvas-text-item-outline: rgba(30, 35, 45, 0.22);
   --canvas-text-handle-opacity: 0.42;
+  --tool-settings-track-bg: rgba(20, 30, 50, 0.1);
+  --tool-settings-swatch-track-bg: rgba(20, 30, 50, 0.06);
+  --tool-settings-size-fill: rgba(30, 35, 45, 0.55);
+  --tool-settings-preview-ring: rgba(0, 0, 0, 0.08);
   --profile-cohort-bg: #1a2230;
   --profile-cohort-border: rgba(15, 20, 30, 0.5);
   --profile-cohort-text: rgba(255, 255, 255, 0.92);
@@ -140,6 +215,10 @@ button {
 }
 
 [data-theme='dark'] {
+  --vignette-rgba: rgba(236, 240, 248, 0.066);
+  --vignette-rgba-mid: rgba(236, 240, 248, 0.039);
+  --vignette-rgba-soft: rgba(236, 240, 248, 0.017);
+  --vignette-glow-rgba: rgba(248, 250, 255, 0.088);
   --profile-cohort-bg: #121820;
   --profile-cohort-border: rgba(0, 0, 0, 0.45);
   --profile-cohort-text: rgba(240, 244, 252, 0.94);
@@ -153,6 +232,10 @@ button {
   --canvas-handle-opacity-active: 0.86;
   --canvas-text-item-outline: rgba(228, 232, 242, 0.3);
   --canvas-text-handle-opacity: 0.56;
+  --tool-settings-track-bg: rgba(255, 255, 255, 0.16);
+  --tool-settings-swatch-track-bg: rgba(255, 255, 255, 0.1);
+  --tool-settings-size-fill: rgba(235, 238, 242, 0.62);
+  --tool-settings-preview-ring: rgba(255, 255, 255, 0.14);
 }
 
 html,
@@ -161,7 +244,8 @@ body,
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
   overflow: hidden;
   background: var(--ui-bg);
   color: var(--ui-text);
@@ -174,6 +258,30 @@ input::placeholder {
 
 .cutline-canvas-bg {
   background-color: var(--canvas-bg);
+}
+
+/* Pan/zoom layer: fixed full-screen host; wrapper must not shrink-wrap the 2000×1500 canvas. */
+.cutline-canvas-viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.cutline-canvas-viewport .react-transform-wrapper {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  overflow: hidden !important;
+  touch-action: none !important;
+}
+
+.cutline-canvas-viewport .react-transform-component {
+  width: 2000px !important;
+  height: 1500px !important;
+  max-width: none !important;
+  max-height: none !important;
 }
 
 .media-load-placeholder {
@@ -290,6 +398,14 @@ html[data-theme-pulse='dark'] .cutline-canvas-bg {
   text-transform: lowercase;
 }
 
+.ui-chrome-solid {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  filter: none;
+  background: var(--chrome-solid-bg);
+  text-transform: lowercase;
+}
+
 .ui-chrome-glass input,
 .ui-chrome-glass textarea,
 .ui-chrome-card input,
@@ -387,23 +503,47 @@ html[data-theme='dark'] .plus-fab-menu-glass {
   transition: filter 220ms ease-out;
 }
 
-/* --- Pencil-hold tool pill (viewport-fixed; solid fill test — no frost) --- */
-
-.pen-tool-pill-host {
-  position: fixed;
-  z-index: 25;
-  pointer-events: none;
-  transform-origin: 100% 50%;
+@keyframes canvas-item-z-pulse-front {
+  0% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+  42% {
+    filter: brightness(1.07);
+    transform: scale(1.018);
+  }
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
 }
 
-.pen-tool-pill__motion-blur {
-  position: absolute;
-  inset: -8px -14px -8px -6px;
-  border-radius: 999px;
-  pointer-events: none;
-  background: rgba(255, 255, 255, 0.65);
-  will-change: filter, opacity, transform;
+@keyframes canvas-item-z-pulse-back {
+  0% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+  42% {
+    filter: brightness(0.93);
+    transform: scale(0.982);
+  }
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
 }
+
+.canvas-item-z-pulse-front {
+  animation: canvas-item-z-pulse-front 340ms ease-out;
+  transform-origin: center center;
+}
+
+.canvas-item-z-pulse-back {
+  animation: canvas-item-z-pulse-back 340ms ease-out;
+  transform-origin: center center;
+}
+
+/* --- Pencil-hold tool pill (portaled; solid — no backdrop-filter on motion layer) --- */
 
 .pen-tool-pill {
   position: relative;
@@ -418,22 +558,10 @@ html[data-theme='dark'] .plus-fab-menu-glass {
   text-transform: lowercase;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-}
-
-[data-theme='light'] .pen-tool-pill {
-  background: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  box-shadow:
-    0 4px 24px rgba(20, 30, 50, 0.14),
-    0 2px 8px rgba(20, 30, 50, 0.08);
-}
-
-[data-theme='dark'] .pen-tool-pill {
-  background: #2c3444;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.45),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+  filter: none;
+  background: var(--chrome-solid-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--card-shadow);
 }
 
 .pen-tool-pill__segment {
@@ -448,12 +576,8 @@ html[data-theme='dark'] .plus-fab-menu-glass {
   transition: background-color 0.12s ease;
 }
 
-[data-theme='light'] .pen-tool-pill__segment--hovered {
-  background: rgba(20, 30, 50, 0.06);
-}
-
-[data-theme='dark'] .pen-tool-pill__segment--hovered {
-  background: rgba(255, 255, 255, 0.1);
+.pen-tool-pill__segment--hovered {
+  background: var(--ui-divider-vertical);
 }
 
 .pen-tool-pill__icon {
@@ -469,11 +593,43 @@ html[data-theme='dark'] .plus-fab-menu-glass {
 
 .pen-tool-pill__icon-ring {
   opacity: 0.88;
-  filter: blur(0.6px);
 }
 
 .pen-tool-pill__icon-glyph {
   position: relative;
+}
+
+[data-pen-fab-menu] button:focus,
+[data-pen-fab-menu] button:focus-visible,
+[data-pen-fab-trigger]:focus,
+[data-pen-fab-trigger]:focus-visible,
+[data-fab-trigger]:focus,
+[data-fab-trigger]:focus-visible,
+.chrome-fab-trigger:focus,
+.chrome-fab-trigger:focus-visible {
+  outline: none;
+}
+
+[data-tool-settings] .tool-settings-size-bar:focus-visible {
+  box-shadow: 0 0 0 2px rgba(90, 122, 176, 0.35);
+  border-radius: 999px;
+}
+
+.tool-settings-switch-host {
+  width: 100%;
+  min-height: 76px;
+}
+
+.tool-settings-switch {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-settings-switch {
+    filter: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 html.canvas-item-drag-active {
@@ -484,6 +640,11 @@ html.canvas-item-drag-active {
 html.canvas-item-drag-active .canvas-item-drag-handle {
   cursor: grabbing;
   opacity: var(--canvas-handle-opacity-active);
+}
+
+html[data-multi-touch] .canvas-item-drag-handle,
+html[data-multi-touch] .canvas-item-resize-handle {
+  pointer-events: none;
 }
 
 .canvas-item-drag-handle:hover,
@@ -498,6 +659,11 @@ html.canvas-item-drag-active .canvas-item-drag-handle {
   color: var(--canvas-resize-handle-color-hover);
 }
 
+html[data-theme-pulse] .canvas-item-drag-handle,
+html[data-theme-pulse] .canvas-item-resize-handle {
+  transition: none !important;
+}
+
 .canvas-item-z-menu-row:hover {
   background: rgba(20, 30, 50, 0.06);
 }
@@ -506,31 +672,9 @@ html.canvas-item-drag-active .canvas-item-drag-handle {
   background: rgba(196, 78, 78, 0.08);
 }
 
-.sticky-note-editor--show-placeholder:empty::before {
-  content: attr(data-placeholder);
-  color: rgba(61, 53, 32, 0.45);
-  pointer-events: none;
-}
-
-[data-theme='dark'] .sticky-note-editor--show-placeholder:empty::before {
-  color: rgba(228, 226, 218, 0.42);
-}
-
-/* Plain canvas text — bounds/handles only on hover or while moving/resizing */
+/* Plain canvas text — drag/resize handles on hover or while selected */
 [data-canvas-item='text'] {
-  outline: 1px dashed transparent;
-  outline-offset: 3px;
-  transition: outline-color 120ms ease;
-}
-
-[data-canvas-item='text']:hover,
-[data-canvas-item='text']:focus-within,
-[data-canvas-item='text'][data-active] {
-  outline-color: var(--canvas-text-item-outline);
-}
-
-[data-canvas-item='text'][data-selected] {
-  outline-color: transparent;
+  outline: none;
 }
 
 [data-canvas-item='text'][data-selected] .canvas-item-drag-handle,
@@ -545,11 +689,9 @@ html.canvas-item-drag-active .canvas-item-drag-handle {
 }
 
 [data-canvas-item='text']:hover .canvas-item-drag-handle,
-[data-canvas-item='text']:focus-within .canvas-item-drag-handle,
-[data-canvas-item='text'][data-active] .canvas-item-drag-handle,
+[data-canvas-item='text'][data-selected] .canvas-item-drag-handle,
 [data-canvas-item='text']:hover .canvas-item-resize-handle,
-[data-canvas-item='text']:focus-within .canvas-item-resize-handle,
-[data-canvas-item='text'][data-active] .canvas-item-resize-handle {
+[data-canvas-item='text'][data-selected] .canvas-item-resize-handle {
   opacity: var(--canvas-text-handle-opacity);
 }
 
@@ -577,4 +719,38 @@ html.canvas-item-drag-active .canvas-item-drag-handle {
 
 .canvas-text-editor u {
   text-decoration: underline;
+}
+
+@keyframes chrome-icon-attention {
+  0%,
+  90%,
+  100% {
+    transform: rotate(0deg);
+  }
+  91% {
+    transform: rotate(-7deg);
+  }
+  92.5% {
+    transform: rotate(7deg);
+  }
+  94% {
+    transform: rotate(-5deg);
+  }
+  95.5% {
+    transform: rotate(5deg);
+  }
+  97% {
+    transform: rotate(0deg);
+  }
+}
+
+.chrome-icon-attention {
+  display: inline-flex;
+  animation: chrome-icon-attention 7.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-icon-attention {
+    animation: none;
+  }
 }

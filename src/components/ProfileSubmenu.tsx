@@ -5,25 +5,28 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type FocusEvent,
   type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Camera, Trash2 } from 'lucide-react'
+import { ArrowLeft, Camera, Image, Plus, Trash2 } from 'lucide-react'
 import { CHROME_CARD_CLASS, card, chromeLabel, font, menuDividerStyle } from '../styles/tokens'
 import { useProfileStore } from '../profile/profileStore'
 import {
   BIO_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
+  deriveInitial,
   HANDLE_MAX_LENGTH,
+  SOCIAL_LABEL_MAX_LENGTH,
+  SOCIAL_MAX,
+  SOCIAL_VALUE_MAX_LENGTH,
   profilesEqual,
   sanitizeProfileDraft,
   validateProfileDraft,
   type ProfileValidation,
 } from '../profile/profileUtils'
-import type { UserProfile } from '../profile/types'
-import UserAvatar from './UserAvatar'
-import ProfileIdentityTags from './ProfileIdentityTags'
+import type { ProfileSocialLink, UserProfile } from '../profile/types'
 import { usePanelAlignedSubmenuLayout } from './usePanelAlignedSubmenuLayout'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
@@ -31,7 +34,13 @@ import { SubmenuSoundScope } from './SubmenuSoundScope'
 const SUBMENU_WIDTH = 320
 const SUBMENU_GAP = 10
 const SAVE_BUBBLE_GAP = 10
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024
+const MEDIA_BUTTON_HEIGHT = 120
+
+const defaultBannerGradient =
+  'linear-gradient(135deg, rgba(148, 132, 184, 0.22), rgba(106, 155, 200, 0.18))'
+
+const emptySocialLink = (): ProfileSocialLink => ({ label: '', value: '' })
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
@@ -99,7 +108,10 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
   const [draft, setDraft] = useState<UserProfile>(savedProfile)
   const [errors, setErrors] = useState<ProfileValidation>({})
   const [avatarError, setAvatarError] = useState<string | null>(null)
+  const [bannerError, setBannerError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const bannerInputRef = useRef<HTMLInputElement>(null)
+  const formScrollRef = useRef<HTMLDivElement>(null)
   const layout = usePanelAlignedSubmenuLayout(panelRef, SUBMENU_WIDTH, SUBMENU_GAP)
 
   const dirty = !profilesEqual(draft, savedProfile)
@@ -112,18 +124,21 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
     setDraft(savedProfile)
     setErrors({})
     setAvatarError(null)
+    setBannerError(null)
   }, [savedProfile])
 
   const patchDraft = useCallback((patch: Partial<UserProfile>) => {
     setDraft((prev) => ({ ...prev, ...patch }))
     setErrors({})
     setAvatarError(null)
+    setBannerError(null)
   }, [])
 
   const resetDraft = useCallback(() => {
     setDraft(savedProfile)
     setErrors({})
     setAvatarError(null)
+    setBannerError(null)
   }, [savedProfile])
 
   const handleClose = useCallback(() => {
@@ -136,39 +151,108 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
   }, [resetDraft])
 
   const handleSave = useCallback(() => {
-    const next = sanitizeProfileDraft(draft)
-    const validation = validateProfileDraft(next)
+    const validation = validateProfileDraft(draft)
     if (Object.keys(validation).length > 0) {
       setErrors(validation)
-      setDraft(next)
       return
     }
+    const next = sanitizeProfileDraft(draft)
     saveProfile(next)
     setErrors({})
     onClose()
   }, [draft, onClose, saveProfile])
 
-  const handleAvatarFile = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setAvatarError('Choose an image file')
-      return
-    }
-    if (file.size > MAX_AVATAR_BYTES) {
-      setAvatarError('Image must be 2 MB or smaller')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        patchDraft({ avatarImageUrl: reader.result })
+  const readImageFile = useCallback(
+    (file: File, onLoad: (dataUrl: string) => void, onError: (message: string) => void) => {
+      if (!file.type.startsWith('image/')) {
+        onError('Choose an image file')
+        return
       }
-    }
-    reader.onerror = () => setAvatarError('Could not read that image')
-    reader.readAsDataURL(file)
-  }, [patchDraft])
+      if (file.size > MAX_IMAGE_BYTES) {
+        onError('Image must be 2 MB or smaller')
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (typeof reader.result === 'string') onLoad(reader.result)
+      }
+      reader.onerror = () => onError('Could not read that image')
+      reader.readAsDataURL(file)
+    },
+    [],
+  )
+
+  const handleAvatarFile = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      e.target.value = ''
+      if (!file) return
+      readImageFile(
+        file,
+        (dataUrl) => patchDraft({ avatarImageUrl: dataUrl }),
+        setAvatarError,
+      )
+    },
+    [patchDraft, readImageFile],
+  )
+
+  const handleBannerFile = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      e.target.value = ''
+      if (!file) return
+      readImageFile(
+        file,
+        (dataUrl) => patchDraft({ bannerImageUrl: dataUrl }),
+        setBannerError,
+      )
+    },
+    [patchDraft, readImageFile],
+  )
+
+  const updateSocial = useCallback(
+    (index: number, patch: Partial<ProfileSocialLink>) => {
+      setDraft((prev) => ({
+        ...prev,
+        socials: prev.socials.map((link, i) =>
+          i === index ? { ...link, ...patch } : link,
+        ),
+      }))
+      setErrors({})
+    },
+    [],
+  )
+
+  const removeSocial = useCallback((index: number) => {
+    setDraft((prev) => ({
+      ...prev,
+      socials: prev.socials.filter((_, i) => i !== index),
+    }))
+    setErrors({})
+  }, [])
+
+  const addSocial = useCallback(() => {
+    setDraft((prev) => {
+      if (prev.socials.length >= SOCIAL_MAX) return prev
+      return { ...prev, socials: [...prev.socials, emptySocialLink()] }
+    })
+    setErrors({})
+  }, [])
+
+  const handleFieldFocus = useCallback((e: FocusEvent<HTMLElement>) => {
+    const container = formScrollRef.current
+    const field = e.currentTarget
+    if (!container) return
+    requestAnimationFrame(() => {
+      const containerRect = container.getBoundingClientRect()
+      const fieldRect = field.getBoundingClientRect()
+      if (fieldRect.bottom > containerRect.bottom - 12) {
+        container.scrollTop += fieldRect.bottom - containerRect.bottom + 12
+      } else if (fieldRect.top < containerRect.top + 12) {
+        container.scrollTop -= containerRect.top + 12 - fieldRect.top
+      }
+    })
+  }, [])
 
   if (!mounted) return null
 
@@ -243,62 +327,99 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
       </div>
 
       <div
+        ref={formScrollRef}
         style={{
           flex: 1,
           overflowY: 'auto',
           padding: '0 16px 12px',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 10,
-            marginBottom: 12,
-          }}
-        >
-          <UserAvatar
-            displayName={draft.displayName}
-            avatarColor={draft.avatarColor}
-            avatarImageUrl={draft.avatarImageUrl}
-            size={56}
-            fontSize={22}
-          />
-          <ProfileIdentityTags
-            displayName={draft.displayName}
-            handle={draft.handle}
-            studentCohort={draft.studentCohort}
-          />
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button
-              type="button"
-              onClick={() => {
-                playSubmenuTap()
-                fileInputRef.current?.click()
-              }}
-              onMouseEnter={() => playSubmenuHover()}
-              style={secondaryButtonStyle}
+        <div style={{ marginBottom: 2 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <MediaChangeButton
+              icon={Image}
+              label="Change banner"
+              onClick={() => bannerInputRef.current?.click()}
             >
-              <Camera size={14} strokeWidth={2} />
-              {chromeLabel('Change avatar')}
-            </button>
-            {draft.avatarImageUrl && (
-              <button
-                type="button"
-                onClick={() => {
-                  playSubmenuTap()
-                  patchDraft({ avatarImageUrl: null })
-                }}
-                onMouseEnter={() => playSubmenuHover()}
-                style={secondaryButtonStyle}
-              >
-                <Trash2 size={14} strokeWidth={2} />
-                {chromeLabel('Remove photo')}
-              </button>
-            )}
+              {draft.bannerImageUrl ? (
+                <img
+                  src={draft.bannerImageUrl}
+                  alt=""
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    objectPosition: 'center 18%',
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    background: defaultBannerGradient,
+                  }}
+                />
+              )}
+            </MediaChangeButton>
+            <MediaChangeButton
+              icon={Camera}
+              label="Change avatar"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {draft.avatarImageUrl ? (
+                <img
+                  src={draft.avatarImageUrl}
+                  alt=""
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '100%',
+                    height: '100%',
+                    background: draft.avatarColor,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 40,
+                      fontWeight: 700,
+                      color: '#fff',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {deriveInitial(draft.displayName)}
+                  </span>
+                </div>
+              )}
+            </MediaChangeButton>
           </div>
-          {avatarError && <p style={{ ...fieldErrorStyle, margin: 0 }}>{avatarError}</p>}
+          {bannerError && (
+            <p style={{ ...fieldErrorStyle, margin: '8px 0 0', textAlign: 'center' }}>
+              {bannerError}
+            </p>
+          )}
+          {avatarError && (
+            <p style={{ ...fieldErrorStyle, margin: '4px 0 0', textAlign: 'center' }}>
+              {avatarError}
+            </p>
+          )}
+          <input
+            ref={bannerInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleBannerFile}
+          />
           <input
             ref={fileInputRef}
             type="file"
@@ -308,7 +429,7 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
           />
         </div>
 
-        <div style={menuDividerStyle} />
+        <div style={{ ...menuDividerStyle, margin: '10px 0 18px' }} />
 
         <Field id="profile-display-name" label="Display name" error={errors.displayName}>
           <input
@@ -317,6 +438,7 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
             value={draft.displayName}
             maxLength={DISPLAY_NAME_MAX_LENGTH}
             onChange={(e) => patchDraft({ displayName: e.target.value })}
+            onFocus={handleFieldFocus}
             style={inputStyle}
             autoComplete="name"
           />
@@ -350,6 +472,7 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
               value={draft.handle}
               maxLength={HANDLE_MAX_LENGTH}
               onChange={(e) => patchDraft({ handle: e.target.value })}
+              onFocus={handleFieldFocus}
               style={{ ...inputStyle, borderRadius: '0 10px 10px 0' }}
               autoComplete="username"
             />
@@ -368,9 +491,73 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
             maxLength={BIO_MAX_LENGTH}
             rows={3}
             onChange={(e) => patchDraft({ bio: e.target.value })}
+            onFocus={handleFieldFocus}
             style={{ ...inputStyle, resize: 'vertical', minHeight: 72 }}
             placeholder="a line about you"
           />
+        </Field>
+
+        <Field
+          id="profile-socials"
+          label="Social connections"
+          hint="Platform name and handle or URL"
+          error={errors.socials}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {draft.socials.map((link, index) => (
+              <div key={`social-${index}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={link.label}
+                  maxLength={SOCIAL_LABEL_MAX_LENGTH}
+                  placeholder="instagram"
+                  onChange={(e) => updateSocial(index, { label: e.target.value })}
+                  onFocus={handleFieldFocus}
+                  style={{ ...inputStyle, flex: '0 0 96px' }}
+                  aria-label={`Platform ${index + 1}`}
+                />
+                <input
+                  type="text"
+                  value={link.value}
+                  maxLength={SOCIAL_VALUE_MAX_LENGTH}
+                  placeholder="username or URL"
+                  onChange={(e) => updateSocial(index, { value: e.target.value })}
+                  onFocus={handleFieldFocus}
+                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                  aria-label={`Handle or URL ${index + 1}`}
+                />
+                <button
+                  type="button"
+                  aria-label="Remove link"
+                  onClick={() => {
+                    playSubmenuTap()
+                    removeSocial(index)
+                  }}
+                  onMouseEnter={() => playSubmenuHover()}
+                  style={iconButtonStyle}
+                >
+                  <Trash2 size={14} strokeWidth={2} />
+                </button>
+              </div>
+            ))}
+            {draft.socials.length < SOCIAL_MAX && (
+              <button
+                type="button"
+                onClick={() => {
+                  playSubmenuTap()
+                  addSocial()
+                }}
+                onMouseEnter={() => playSubmenuHover()}
+                style={{
+                  ...secondaryButtonStyle,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Plus size={14} strokeWidth={2} />
+                {chromeLabel('Add link')}
+              </button>
+            )}
+          </div>
         </Field>
       </div>
       </SubmenuSoundScope>
@@ -431,6 +618,82 @@ export default function ProfileSubmenu({ panelRef, onClose }: ProfileSubmenuProp
   )
 }
 
+function MediaChangeButton({
+  icon: Icon,
+  label,
+  onClick,
+  children,
+}: {
+  icon: React.ElementType
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={() => {
+        playSubmenuTap()
+        onClick()
+      }}
+      onMouseEnter={() => {
+        setHovered(true)
+        playSubmenuHover()
+      }}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        flex: 1,
+        minWidth: 0,
+        height: MEDIA_BUTTON_HEIGHT,
+        padding: 0,
+        border: '1px solid var(--glass-border)',
+        borderRadius: 12,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        background: 'var(--card-bg)',
+        fontFamily: font.family,
+      }}
+    >
+      {children}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: hovered ? 'rgba(20, 30, 50, 0.14)' : 'transparent',
+          transition: 'background 0.15s ease',
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 4,
+          padding: '8px 6px',
+          background: 'linear-gradient(transparent, rgba(20, 30, 50, 0.58))',
+          color: '#fff',
+          fontSize: 11,
+          fontWeight: 600,
+          pointerEvents: 'none',
+        }}
+      >
+        <Icon size={12} strokeWidth={2.2} />
+        {chromeLabel(label)}
+      </div>
+    </button>
+  )
+}
+
 const secondaryButtonStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -443,6 +706,20 @@ const secondaryButtonStyle: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
   fontFamily: font.family,
+  cursor: 'pointer',
+}
+
+const iconButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 36,
+  height: 36,
+  flexShrink: 0,
+  borderRadius: 10,
+  border: '1px solid var(--glass-border)',
+  background: 'transparent',
+  color: font.colorMuted,
   cursor: 'pointer',
 }
 

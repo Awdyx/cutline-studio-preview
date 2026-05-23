@@ -11,6 +11,7 @@ import { useEffectiveMode } from '../theme/useEffectiveMode'
 import type { CanvasItem } from '../canvasItems/types'
 import { PreviewMediaImage } from '../canvasItems/PreviewMediaImage'
 import { useCanvasWorkspaceStore } from './canvasWorkspaceStore'
+import { resolveSpacePreviewPan, previewTransform, type SpacePreviewPan } from './spacePreviewPan'
 
 function StrokePaths({
   strokes,
@@ -94,11 +95,18 @@ function PreviewItem({
   return null
 }
 
-export default function SpaceCardPreview({ spaceId }: { spaceId: string }) {
+export default function SpaceCardPreview({
+  spaceId,
+  previewPan,
+}: {
+  spaceId: string
+  previewPan?: SpacePreviewPan
+}) {
   const space = useCanvasWorkspaceStore((s) => s.spaces[spaceId])
   const palette = useThemeStore((s) => s.palette)
   const themeMode = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeMode)
+  const view = resolveSpacePreviewPan(previewPan)
 
   const sortedItems = useMemo(
     () => [...(space?.items ?? [])].sort((a, b) => a.zIndex - b.zIndex),
@@ -127,19 +135,21 @@ export default function SpaceCardPreview({ spaceId }: { spaceId: string }) {
         aria-hidden
         style={{ display: 'block' }}
       >
-        <StrokePaths
-          strokes={space.strokes}
-          effectiveMode={effectiveMode}
-          keyPrefix="c"
-        />
-        <StrokePaths
-          strokes={space.annotationStrokes}
-          effectiveMode={effectiveMode}
-          keyPrefix="ann"
-        />
-        {sortedItems.map((item) => (
-          <PreviewItem key={item.id} item={item} effectiveMode={effectiveMode} />
-        ))}
+        <g transform={previewTransform(view)}>
+          <StrokePaths
+            strokes={space.strokes}
+            effectiveMode={effectiveMode}
+            keyPrefix="c"
+          />
+          <StrokePaths
+            strokes={space.annotationStrokes}
+            effectiveMode={effectiveMode}
+            keyPrefix="ann"
+          />
+          {sortedItems.map((item) => (
+            <PreviewItem key={item.id} item={item} effectiveMode={effectiveMode} />
+          ))}
+        </g>
       </svg>
     </div>
   )

@@ -30,6 +30,26 @@ function syncHistoryUi() {
   useHistoryUiStore.setState({ canUndo: canUndo(), canRedo: canRedo() })
 }
 
+function mediaIdsFromItems(items: CanvasItem[]): Set<string> {
+  const ids = new Set<string>()
+  for (const item of items) {
+    if (item.type === 'image' || item.type === 'video') ids.add(item.mediaId)
+  }
+  return ids
+}
+
+/** Media still reachable via undo, redo, or the live canvas. */
+export function collectHistoryMediaIds(): Set<string> {
+  const ids = mediaIdsFromItems(useCanvasItemsStore.getState().items)
+  for (const snap of past) {
+    for (const id of mediaIdsFromItems(snap.items)) ids.add(id)
+  }
+  for (const snap of future) {
+    for (const id of mediaIdsFromItems(snap.items)) ids.add(id)
+  }
+  return ids
+}
+
 function cloneStrokes(strokes: Stroke[]): Stroke[] {
   return JSON.parse(JSON.stringify(strokes)) as Stroke[]
 }
@@ -115,4 +135,24 @@ export function clearHistory(): void {
   past = []
   future = []
   syncHistoryUi()
+}
+
+/** Inline data URLs still present on items in undo/redo stacks. */
+export function findHistoryMediaSrc(
+  mediaId: string,
+  itemId?: string,
+): string | null {
+  const candidates = [
+    ...useCanvasItemsStore.getState().items,
+    ...past.flatMap((snap) => snap.items),
+    ...future.flatMap((snap) => snap.items),
+  ]
+
+  for (const item of candidates) {
+    if (item.type !== 'image' && item.type !== 'video') continue
+    if (item.mediaId !== mediaId && item.id !== itemId) continue
+    const src = (item as { src?: string }).src
+    if (typeof src === 'string' && src.startsWith('data:')) return src
+  }
+  return null
 }

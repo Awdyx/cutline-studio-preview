@@ -1,4 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import { clientToCanvasFromElement } from '../drawing/canvasCoords'
 import { playSound } from '../sound/playSound'
 import {
@@ -23,6 +24,7 @@ type DragSession = {
   grabOffsetY: number
   startClientX: number
   startClientY: number
+  onReleaseWithoutDrag?: () => void
 }
 
 let session: DragSession | null = null
@@ -73,7 +75,10 @@ function finishSession() {
 
   if (!ended) return
 
-  if (ended.phase === 'pending') return
+  if (ended.phase === 'pending') {
+    ended.onReleaseWithoutDrag?.()
+    return
+  }
 
   stopItemDragSound()
   playSound('itemDrop')
@@ -100,10 +105,17 @@ function applyDragPosition(clientX: number, clientY: number) {
  */
 export function attachCanvasItemDragPointerDown(
   itemId: string,
-  event: ReactPointerEvent<HTMLButtonElement>,
+  event: ReactPointerEvent<HTMLElement>,
+  options?: { onReleaseWithoutDrag?: () => void },
 ) {
   if (event.pointerType === 'pen') return
   if (event.pointerType === 'mouse' && event.button !== 0) return
+  if (
+    event.pointerType === 'touch' &&
+    useCanvasNavigationStore.getState().shouldSuppressHandleGesture()
+  ) {
+    return
+  }
 
   const canvasEl = resolveCanvasEl(event.currentTarget)
   if (!canvasEl) return
@@ -135,10 +147,16 @@ export function attachCanvasItemDragPointerDown(
     grabOffsetY: pointerCanvas.y - item.y,
     startClientX: event.clientX,
     startClientY: event.clientY,
+    onReleaseWithoutDrag: options?.onReleaseWithoutDrag,
   }
 
   const onPointerMove = (e: PointerEvent) => {
     if (!session || e.pointerId !== pointerId) return
+
+    if (useCanvasNavigationStore.getState().shouldSuppressHandleGesture()) {
+      finishSession()
+      return
+    }
 
     if (session.phase === 'pending') {
       if (

@@ -47,8 +47,8 @@ function handleEscape(openPanel: string | null, closePanel: () => void): boolean
 
   const itemsStore = useCanvasItemsStore.getState()
 
-  if (ui.toolPalette?.isOpen()) {
-    ui.toolPalette.close()
+  if (ui.toolPalette?.isColorPopoverOpen()) {
+    ui.toolPalette.closeColorPopover()
     return true
   }
 
@@ -63,6 +63,11 @@ function handleEscape(openPanel: string | null, closePanel: () => void): boolean
   }
 
   if (blurActiveEditable()) return true
+
+  if (itemsStore.previewAdjustSpaceId) {
+    itemsStore.setPreviewAdjustSpace(null)
+    return true
+  }
 
   if (itemsStore.selectedIds.length > 0) {
     itemsStore.clearSelection()

@@ -4,6 +4,7 @@ import { stripLegacyMediaFromItems } from '../media/stripLegacyMediaFields'
 import { loadStrokesFromStorage } from '../drawing/strokesPersistence'
 import type { Stroke } from '../drawing/types'
 import { isUninitializedMainCamera } from '../canvas/canvasCamera'
+import { CANVAS_MAX_SCALE } from '../drawing/canvasDimensions'
 import {
   DEFAULT_SPACE_CAMERA,
   DEFAULT_SPACE_NAME,
@@ -63,6 +64,13 @@ function normalizeMainCamera(raw: unknown): SpaceCamera | null {
     positionX: o.positionX,
     positionY: o.positionY,
     scale: o.scale,
+  }
+  if (
+    !Number.isFinite(camera.scale) ||
+    camera.scale <= 0 ||
+    camera.scale > CANVAS_MAX_SCALE + 0.001
+  ) {
+    return null
   }
   return isUninitializedMainCamera(camera) ? null : camera
 }
@@ -135,9 +143,6 @@ function serializeWorkspace(data: LoadedWorkspace): string | null {
         : undefined,
     spaces,
     activeCanvasId: data.activeCanvasId,
-    ...(data.mainCamera && !isUninitializedMainCamera(data.mainCamera)
-      ? { mainCamera: data.mainCamera }
-      : {}),
   }
 
   const serialized = JSON.stringify(payload)

@@ -17,9 +17,21 @@ import {
   migrateWorkspaceMediaToIdb,
   workspaceNeedsMediaMigration,
 } from '../media/workspaceMediaMigration'
+import { backfillCanvasItemsImportDimensions } from '../media/mediaImportDimensions'
+import { recoverMissingWorkspaceMedia } from '../media/workspaceMediaRecovery'
+import {
+  resetLegacyMediaSrcIndex,
+  rehydrateMissingBlobsForItems,
+} from '../media/tryRecoverMediaBlob'
 import { putSnapshotFromDataUrl } from '../media/mediaBlobStore'
 import { normalizeLoadedWorkspace } from './normalizeWorkspace'
-import { applyCameraToRef, readCameraFromRef } from '../canvas/canvasCamera'
+import {
+  applyCameraToRef,
+  isCameraPlausible,
+  isUninitializedMainCamera,
+  readCameraFromRef,
+  resetToCoverFit,
+} from '../canvas/canvasCamera'
 import { captureCanvasSnapshot } from './spaceSnapshot'
 import { spaceCardClientRect } from './spaceCardRect'
 import type { SpaceCanvasItem } from '../canvasItems/types'
@@ -68,6 +80,7 @@ type CanvasWorkspaceState = {
 }
 
 let persistEnabled = false
+let workspaceHydrated = false
 let mainItemsCache: CanvasItem[] = []
 let mainStrokesCache: Stroke[] = []
 let mainAnnotationStrokesCache: Stroke[] = []
@@ -105,12 +118,18 @@ function snapshotForPersist(): LoadedWorkspace {
   return workspaceSnapshot(useCanvasWorkspaceStore.getState())
 }
 
+export function isWorkspaceHydrated(): boolean {
+  return workspaceHydrated
+}
+
 export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) => ({
   activeCanvasId: 'main',
   spaces: {},
   transition: { phase: 'idle', spaceId: null, cardRect: null },
 
   hydrate: async () => {
+    workspaceHydrated = false
+    resetLegacyMediaSrcIndex()
     let loaded = loadWorkspaceFromStorage()
     if (
       workspaceNeedsMediaMigration(loaded, loaded.storageVersion) ||
@@ -127,20 +146,60 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
       }
     }
 
+    const recovered = await recoverMissingWorkspaceMedia(loaded)
+    loaded = recovered.workspace
+    if (recovered.recoveredCount > 0) {
+      saveWorkspaceToStorage(loaded)
+    }
+
     const normalized = normalizeLoadedWorkspace(loaded)
 
-    mainItemsCache = normalized.mainItems
+    const mainItems = await backfillCanvasItemsImportDimensions(normalized.mainItems)
+    const spaces: typeof normalized.spaces = {}
+    for (const [spaceId, space] of Object.entries(normalized.spaces)) {
+      spaces[spaceId] = {
+        ...space,
+        items: await backfillCanvasItemsImportDimensions(space.items),
+      }
+    }
+
+    const importDimsChanged =
+      JSON.stringify(mainItems) !== JSON.stringify(normalized.mainItems) ||
+      JSON.stringify(spaces) !== JSON.stringify(normalized.spaces)
+
+    mainItemsCache = mainItems
     mainStrokesCache = normalized.mainStrokes
     mainAnnotationStrokesCache = normalized.mainAnnotationStrokes
     mainCameraCache = normalized.mainCamera
 
     set({
-      spaces: normalized.spaces,
+      spaces,
       activeCanvasId: normalized.activeCanvasId,
     })
 
     get().loadActiveFromSlot(normalized.activeCanvasId)
     persistEnabled = true
+    workspaceHydrated = true
+
+    const allCanvasItems = [
+      ...mainItems,
+      ...Object.values(spaces).flatMap((space) => space.items),
+    ]
+    const runtimeRecovered = await rehydrateMissingBlobsForItems(allCanvasItems)
+    if (runtimeRecovered > 0) {
+      console.info(
+        `[media] recovered ${runtimeRecovered} blob(s) on post-hydrate media pass`,
+      )
+    }
+
+    if (importDimsChanged) {
+      saveWorkspaceToStorage(
+        workspaceSnapshot({
+          activeCanvasId: normalized.activeCanvasId,
+          spaces,
+        }),
+      )
+    }
   },
 
   isInsideSpace: () => get().activeCanvasId !== 'main',
@@ -340,9 +399,15 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     if (!transformRef) return
 
     if (activeCanvasId === 'main') {
-      applyCameraToRef(transformRef, mainCameraCache ?? DEFAULT_SPACE_CAMERA, {
-        centerIfUninitialized: true,
-      })
+      const cached = mainCameraCache ?? DEFAULT_SPACE_CAMERA
+      if (
+        isUninitializedMainCamera(cached) ||
+        !isCameraPlausible(cached, transformRef)
+      ) {
+        resetToCoverFit(transformRef)
+      } else {
+        applyCameraToRef(transformRef, cached)
+      }
       const synced = readCameraFromRef(transformRef)
       if (synced) mainCameraCache = synced
       return
@@ -361,13 +426,17 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
         space.annotationStrokes.length === 0)
 
     if (isDefaultCamera && isEmpty) {
-      transformRef.centerView(1, 0)
+      resetToCoverFit(transformRef)
       requestAnimationFrame(() => {
         const synced = readCameraFromRef(transformRef)
         if (synced) get().saveCameraForActive(synced)
       })
     } else {
-      applyCameraToRef(transformRef, camera)
+      applyCameraToRef(
+        transformRef,
+        isCameraPlausible(camera, transformRef) ? camera : DEFAULT_SPACE_CAMERA,
+        { centerIfUninitialized: true },
+      )
     }
   },
 
@@ -435,9 +504,15 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     get().loadActiveFromSlot('main')
     clearHistory()
 
-    applyCameraToRef(transformRef, mainCameraCache ?? DEFAULT_SPACE_CAMERA, {
-      centerIfUninitialized: true,
-    })
+    const cached = mainCameraCache ?? DEFAULT_SPACE_CAMERA
+    if (
+      isUninitializedMainCamera(cached) ||
+      !isCameraPlausible(cached, transformRef)
+    ) {
+      resetToCoverFit(transformRef)
+    } else {
+      applyCameraToRef(transformRef, cached)
+    }
     const synced = readCameraFromRef(transformRef)
     if (synced) mainCameraCache = synced
 
@@ -453,6 +528,24 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     })
   },
 }))
+
+function mediaIdsFromWorkspaceItems(items: CanvasItem[], into: Set<string>): void {
+  for (const item of items) {
+    if (item.type === 'image' || item.type === 'video') into.add(item.mediaId)
+  }
+}
+
+/** Every canvas slot in the workspace — not just the active one. */
+export function collectWorkspaceMediaIds(): Set<string> {
+  const state = useCanvasWorkspaceStore.getState()
+  state.flushActiveToSlot()
+  const ids = new Set<string>()
+  mediaIdsFromWorkspaceItems(mainItemsCache, ids)
+  for (const space of Object.values(state.spaces)) {
+    mediaIdsFromWorkspaceItems(space.items, ids)
+  }
+  return ids
+}
 
 /** Called by items/strokes stores whenever active canvas data changes. */
 export function notifyWorkspacePersist() {

@@ -103,6 +103,7 @@ export const useCanvasLockStore = create<CanvasLockState>((set, get) => {
     })
     scheduleSaveCanvasItems(nextItems)
     scheduleSaveStrokes(committedStrokes, [])
+    playSound('clearAnnotations')
   },
   }
 })

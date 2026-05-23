@@ -32,7 +32,6 @@ export function MediaLoadPlaceholder({
       style={{
         position: 'absolute',
         inset: 0,
-        borderRadius: 8,
         opacity: mediaPlaceholderOpacity(status),
         pointerEvents: 'none',
         ...mediaLoadTransitionStyle(),
@@ -58,7 +57,6 @@ export function MediaBlobFrame({
         width: '100%',
         height: '100%',
         overflow: 'hidden',
-        borderRadius: 8,
         ...style,
       }}
     >

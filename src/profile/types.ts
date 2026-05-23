@@ -1,3 +1,8 @@
+export type ProfileSocialLink = {
+  label: string
+  value: string
+}
+
 export type UserProfile = {
   displayName: string
   handle: string
@@ -7,6 +12,8 @@ export type UserProfile = {
   studentCohort: string
   avatarColor: string
   avatarImageUrl: string | null
+  bannerImageUrl: string | null
+  socials: ProfileSocialLink[]
 }
 
 export type TopBarUser = {

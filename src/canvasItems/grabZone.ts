@@ -147,14 +147,17 @@ export function grabHandlePlacementKey(placement: GrabHandlePlacement): string {
   return `${placement.side}-${placement.vertical}`
 }
 
-/** Resize bracket: slight gap outside bottom-right corner. */
+/** Gap outside bottom-right corner. */
 export const RESIZE_CORNER_OUTSET = 0
+
+/** Extra offset for space cards (stacked shadow sits flush on the corner). */
+export const SPACE_RESIZE_CORNER_OUTSET = 6
 
 /** Gap between a selected item edge and its arrangement menu. */
 export const Z_MENU_GAP = 10
 
-/** Extra breathing room so the menu clears the grab handle on either side. */
-export const Z_MENU_HANDLE_CLEARANCE = 12
+/** Matches CanvasItemZOrderMenu minWidth — used to center spawn clusters. */
+export const Z_MENU_MIN_WIDTH = 168
 
 export const MIN_ITEM_WIDTH = 48
 export const MIN_ITEM_HEIGHT = 48

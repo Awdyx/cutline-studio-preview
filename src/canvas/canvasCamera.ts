@@ -1,5 +1,10 @@
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
+import {
+  CANVAS_HEIGHT,
+  CANVAS_MAX_SCALE,
+  CANVAS_WIDTH,
+  getCanvasMinScale,
+} from '../drawing/canvasDimensions'
 import type { SpaceCamera } from '../spaces/types'
 
 /** Persisted when the user has never panned/zoomed the main canvas. */
@@ -20,57 +25,58 @@ export function isUninitializedMainCamera(
   )
 }
 
+function wrapperSize(ref: ReactZoomPanPinchContentRef): {
+  width: number
+  height: number
+} | null {
+  const wrapper = ref.instance.wrapperComponent
+  if (!wrapper) return null
+  const width = wrapper.offsetWidth
+  const height = wrapper.offsetHeight
+  if (width <= 0 || height <= 0) return null
+  return { width, height }
+}
+
+/** Recalculate pan bounds from the library using the live wrapper DOM size. */
+function syncLibraryBounds(ref: ReactZoomPanPinchContentRef): void {
+  ref.instance.update(ref.instance.props)
+}
+
 type PanBounds = {
   minPositionX: number
   maxPositionX: number
   minPositionY: number
   maxPositionY: number
-  scaleWidthFactor: number
-  scaleHeightFactor: number
 }
 
-/** Mirrors react-zoom-pan-pinch bounds with disablePadding + centerZoomedOut=false. */
-export function boundsForCanvas(
+/** Pan limits for the cover-fit canvas (matches TransformWrapper config). */
+function canvasPanBoundsForScale(
   wrapperWidth: number,
   wrapperHeight: number,
   scale: number,
 ): PanBounds {
-  const newContentWidth = CANVAS_WIDTH * scale
-  const newContentHeight = CANVAS_HEIGHT * scale
-  const newDiffWidth = wrapperWidth - newContentWidth
-  const newDiffHeight = wrapperHeight - newContentHeight
+  const contentWidth = CANVAS_WIDTH * scale
+  const contentHeight = CANVAS_HEIGHT * scale
 
-  const scaleWidthFactor =
-    wrapperWidth > newContentWidth ? newDiffWidth : 0
-  const scaleHeightFactor =
-    wrapperHeight > newContentHeight ? newDiffHeight : 0
-
-  let minPositionX = wrapperWidth - newContentWidth - scaleWidthFactor
-  let maxPositionX = scaleWidthFactor
-  let minPositionY = wrapperHeight - newContentHeight - scaleHeightFactor
-  let maxPositionY = scaleHeightFactor
-
-  const contentFitsCompletely =
-    wrapperWidth >= newContentWidth && wrapperHeight >= newContentHeight
-
-  if (contentFitsCompletely) {
-    minPositionX = 0
-    maxPositionX = 0
-    minPositionY = 0
-    maxPositionY = 0
+  // disablePadding + content fully visible inside wrapper
+  if (wrapperWidth >= contentWidth && wrapperHeight >= contentHeight) {
+    return {
+      minPositionX: 0,
+      maxPositionX: 0,
+      minPositionY: 0,
+      maxPositionY: 0,
+    }
   }
 
   return {
-    minPositionX,
-    maxPositionX,
-    minPositionY,
-    maxPositionY,
-    scaleWidthFactor,
-    scaleHeightFactor,
+    minPositionX: wrapperWidth - contentWidth,
+    maxPositionX: 0,
+    minPositionY: wrapperHeight - contentHeight,
+    maxPositionY: 0,
   }
 }
 
-function clampToBounds(
+function clampPanPosition(
   positionX: number,
   positionY: number,
   bounds: PanBounds,
@@ -87,65 +93,151 @@ function clampToBounds(
   }
 }
 
-/** Read the camera from laid-out DOM (matches what the user sees). */
+function clampToLibraryBounds(
+  ref: ReactZoomPanPinchContentRef,
+): SpaceCamera | null {
+  const bounds = ref.instance.bounds
+  const { positionX, positionY, scale } = ref.state
+  if (!bounds) return readCameraFromRef(ref)
+
+  const x = Math.max(
+    bounds.minPositionX,
+    Math.min(bounds.maxPositionX, positionX),
+  )
+  const y = Math.max(
+    bounds.minPositionY,
+    Math.min(bounds.maxPositionY, positionY),
+  )
+
+  if (x !== positionX || y !== positionY) {
+    ref.setTransform(x, y, scale, 0)
+    syncLibraryBounds(ref)
+  }
+
+  return readCameraFromRef(ref)
+}
+
+/**
+ * Ensure scale covers the wrapper (no letterboxing) and reclamp pan.
+ * Keeps the canvas point at the viewport center stable when scale increases.
+ */
+function enforceCoverFit(
+  ref: ReactZoomPanPinchContentRef,
+): SpaceCamera | null {
+  const size = wrapperSize(ref)
+  if (!size) return null
+
+  const minScale = getCanvasMinScale(size.width, size.height)
+  const { positionX, positionY, scale } = ref.state
+  const nextScale = Math.max(scale, minScale)
+
+  let nextX = positionX
+  let nextY = positionY
+
+  if (nextScale !== scale) {
+    const centerCanvasX = (size.width / 2 - positionX) / scale
+    const centerCanvasY = (size.height / 2 - positionY) / scale
+    nextX = size.width / 2 - centerCanvasX * nextScale
+    nextY = size.height / 2 - centerCanvasY * nextScale
+  }
+
+  if (nextScale !== scale || nextX !== positionX || nextY !== positionY) {
+    ref.setTransform(nextX, nextY, nextScale, 0)
+  }
+
+  syncLibraryBounds(ref)
+  return clampToLibraryBounds(ref)
+}
+
+/** Read the camera from transform state. */
 export function readCameraFromRef(
   ref: ReactZoomPanPinchContentRef | null,
 ): SpaceCamera | null {
   if (!ref) return null
-  const wrapper = ref.instance.wrapperComponent
-  const content = ref.instance.contentComponent
-  if (!wrapper || !content) {
-    const { positionX, positionY, scale } = ref.state
-    return { positionX, positionY, scale }
+  const { positionX, positionY, scale } = ref.state
+  if (
+    !Number.isFinite(scale) ||
+    !Number.isFinite(positionX) ||
+    !Number.isFinite(positionY) ||
+    scale <= 0
+  ) {
+    return null
   }
-
-  const wrapRect = wrapper.getBoundingClientRect()
-  const contentRect = content.getBoundingClientRect()
-  const scale =
-    content.offsetWidth > 0
-      ? contentRect.width / content.offsetWidth
-      : ref.state.scale
-
-  return {
-    positionX: contentRect.left - wrapRect.left,
-    positionY: contentRect.top - wrapRect.top,
-    scale,
-  }
+  return { positionX, positionY, scale }
 }
 
-/**
- * Apply pan/zoom and clamp to canvas bounds. Recalculates library bounds
- * so limitToBounds stays correct (setTransform alone skips this).
- */
+/** Reject cameras saved while the wrapper was mis-sized (canvas px instead of screen). */
+export function isCameraPlausible(
+  camera: SpaceCamera,
+  ref: ReactZoomPanPinchContentRef | null,
+): boolean {
+  const size = ref ? wrapperSize(ref) : null
+  const width = size?.width ?? window.innerWidth
+  const height = size?.height ?? window.innerHeight
+  const minScale = getCanvasMinScale(width, height)
+
+  if (camera.scale < minScale * 0.85 || camera.scale > CANVAS_MAX_SCALE * 1.05) {
+    return false
+  }
+
+  // Rough sanity: position magnitude shouldn't exceed scaled canvas size.
+  const maxPan = Math.max(CANVAS_MAX_SCALE * 2000, width * 4)
+  if (
+    Math.abs(camera.positionX) > maxPan ||
+    Math.abs(camera.positionY) > maxPan
+  ) {
+    return false
+  }
+
+  return true
+}
+
+/** Center at min cover scale using the library (reads wrapper/content DOM). */
+export function resetToCoverFit(
+  ref: ReactZoomPanPinchContentRef | null,
+): SpaceCamera | null {
+  if (!ref) return null
+  const size = wrapperSize(ref)
+  if (!size) return null
+
+  const minScale = getCanvasMinScale(size.width, size.height)
+  ref.centerView(minScale, 0)
+  syncLibraryBounds(ref)
+  return readCameraFromRef(ref)
+}
+
+/** Apply pan/zoom; always sync bounds through the library, never manual bounds. */
 export function applyCameraToRef(
   ref: ReactZoomPanPinchContentRef | null,
   camera: SpaceCamera,
   options?: { centerIfUninitialized?: boolean },
 ): void {
   if (!ref) return
-  const wrapper = ref.instance.wrapperComponent
-  if (!wrapper) return
+  const size = wrapperSize(ref)
+  if (!size) return
 
-  if (options?.centerIfUninitialized && isUninitializedMainCamera(camera)) {
-    ref.centerView(1, 0)
-    const bounds = boundsForCanvas(
-      wrapper.offsetWidth,
-      wrapper.offsetHeight,
-      ref.state.scale,
-    )
-    ref.instance.bounds = bounds
+  if (
+    options?.centerIfUninitialized &&
+    isUninitializedMainCamera(camera)
+  ) {
+    resetToCoverFit(ref)
     return
   }
 
-  const bounds = boundsForCanvas(
-    wrapper.offsetWidth,
-    wrapper.offsetHeight,
-    camera.scale,
-  )
-  const clamped = clampToBounds(camera.positionX, camera.positionY, bounds)
+  if (!isCameraPlausible(camera, ref)) {
+    resetToCoverFit(ref)
+    return
+  }
 
-  ref.setTransform(clamped.positionX, clamped.positionY, camera.scale, 0)
-  ref.instance.bounds = bounds
+  const minScale = getCanvasMinScale(size.width, size.height)
+  const scale = Math.min(
+    CANVAS_MAX_SCALE,
+    Math.max(minScale, camera.scale),
+  )
+
+  ref.setTransform(camera.positionX, camera.positionY, scale, 0)
+  syncLibraryBounds(ref)
+  clampToLibraryBounds(ref)
 }
 
 /** Pan the viewport so the item's center sits in the wrapper center. */
@@ -155,21 +247,41 @@ export function focusItemOnCanvas(
   options?: { animationMs?: number; scale?: number },
 ): void {
   if (!ref) return
-  const wrapper = ref.instance.wrapperComponent
-  if (!wrapper) return
+  const size = wrapperSize(ref)
+  if (!size) return
 
   const scale = options?.scale ?? ref.state.scale
   const cx = item.x + item.width / 2
   const cy = item.y + item.height / 2
-  const ww = wrapper.offsetWidth
-  const wh = wrapper.offsetHeight
-  const positionX = ww / 2 - cx * scale
-  const positionY = wh / 2 - cy * scale
-
-  const bounds = boundsForCanvas(ww, wh, scale)
-  const clamped = clampToBounds(positionX, positionY, bounds)
   const animationMs = options?.animationMs ?? 420
 
-  ref.setTransform(clamped.positionX, clamped.positionY, scale, animationMs)
-  ref.instance.bounds = bounds
+  const bounds = canvasPanBoundsForScale(size.width, size.height, scale)
+  const { positionX, positionY } = clampPanPosition(
+    size.width / 2 - cx * scale,
+    size.height / 2 - cy * scale,
+    bounds,
+  )
+
+  ref.setTransform(positionX, positionY, scale, animationMs)
+  syncLibraryBounds(ref)
+
+  if (animationMs > 0) {
+    window.setTimeout(() => {
+      clampToLibraryBounds(ref)
+    }, animationMs + 32)
+  } else {
+    clampToLibraryBounds(ref)
+  }
+}
+
+/** After wrapper resize: refresh min scale and reclamp current camera. */
+export function refitCameraAfterResize(
+  ref: ReactZoomPanPinchContentRef | null,
+): number | null {
+  if (!ref) return null
+  const size = wrapperSize(ref)
+  if (!size) return null
+
+  enforceCoverFit(ref)
+  return getCanvasMinScale(size.width, size.height)
 }

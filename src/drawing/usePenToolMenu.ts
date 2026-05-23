@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { playSound } from '../sound/playSound'
 import { clientToCanvas } from './canvasCoords'
-import { isPenInput } from './penInput'
+import { isPenInput, isPenMenuPointer, noteStylusInput } from './penInput'
 import { hitTestPenToolPill } from './penToolMenuLayout'
 import { useStrokesStore } from './strokesStore'
 import { useToolStore, type ToolMode } from './toolStore'
@@ -30,12 +30,18 @@ const idleUi: PenToolMenuState = {
 }
 
 type InternalPhase = 'idle' | 'pending' | 'open'
+type HoldSource = 'none' | 'pointer' | 'space'
 
 export type PenToolMenuBridge = {
   isActive: () => boolean
+  isMenuOpen: () => boolean
   onPointerDown: (e: PointerEvent) => boolean
   onPointerMove: (e: PointerEvent) => boolean
   onPointerUp: (e: PointerEvent) => boolean
+  beginSpaceHold: (clientX: number, clientY: number) => void
+  moveSpaceHold: (clientX: number, clientY: number) => boolean
+  endSpaceHold: (clientX: number, clientY: number) => boolean
+  cancelSpaceHold: () => void
 }
 
 function dist(x1: number, y1: number, x2: number, y2: number): number {
@@ -51,6 +57,7 @@ export function usePenToolMenu(
   const [state, setState] = useState<PenToolMenuState>(idleUi)
 
   const phaseRef = useRef<InternalPhase>('idle')
+  const holdSourceRef = useRef<HoldSource>('none')
   const pointerIdRef = useRef<number | null>(null)
   const anchorRef = useRef({ x: 0, y: 0 })
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -68,6 +75,7 @@ export function usePenToolMenu(
     const wasOpen = phaseRef.current === 'open'
     clearHoldTimer()
     pointerIdRef.current = null
+    holdSourceRef.current = 'none'
     phaseRef.current = 'idle'
     setState(idleUi)
     if (wasOpen) playSound('menuClose')
@@ -104,6 +112,10 @@ export function usePenToolMenu(
     if (phaseRef.current !== 'pending') return
     clearHoldTimer()
     phaseRef.current = 'idle'
+    if (holdSourceRef.current === 'pointer') {
+      pointerIdRef.current = null
+    }
+    holdSourceRef.current = 'none'
   }
 
   const cancelHold = () => {
@@ -117,65 +129,150 @@ export function usePenToolMenu(
     if (phaseRef.current === 'pending') cancelPending()
   }
 
+  const updateHover = (clientX: number, clientY: number) => {
+    const { x, y } = anchorRef.current
+    const hovered = hitTestPenToolPill(clientX, clientY, x, y)
+    setState((prev) =>
+      prev.hoveredTool === hovered ? prev : { ...prev, hoveredTool: hovered },
+    )
+  }
+
+  const finishOpenHold = (clientX: number, clientY: number) => {
+    const { x, y } = anchorRef.current
+    const hovered = hitTestPenToolPill(clientX, clientY, x, y)
+    if (hovered) {
+      useToolStore.getState().setMode(hovered)
+    }
+    resetToIdle()
+    return true
+  }
+
+  const moveHold = (clientX: number, clientY: number) => {
+    if (phaseRef.current === 'open') {
+      updateHover(clientX, clientY)
+      return true
+    }
+    if (phaseRef.current === 'pending') {
+      checkDrift(clientX, clientY)
+    }
+    return false
+  }
+
   bridgeRef.current = {
     isActive: () => phaseRef.current === 'pending' || phaseRef.current === 'open',
 
+    isMenuOpen: () => phaseRef.current === 'open',
+
     onPointerDown(e) {
-      if (!isPenInput(e)) return false
+      if (!isPenMenuPointer(e)) return false
+      if (isPenInput(e)) noteStylusInput()
       if (phaseRef.current === 'open') return true
-      if (pointerIdRef.current !== null) return false
+
+      if (holdSourceRef.current === 'space') {
+        cancelHold()
+      }
+
+      if (
+        pointerIdRef.current !== null &&
+        pointerIdRef.current !== e.pointerId
+      ) {
+        return false
+      }
 
       const canvas = clientToCanvas(e.clientX, e.clientY, transformRef)
       if (!canvas) return false
 
+      holdSourceRef.current = 'pointer'
       pointerIdRef.current = e.pointerId
       startPending(e.clientX, e.clientY)
       return false
     },
 
     onPointerMove(e) {
-      if (!isPenInput(e)) return false
-      if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) {
+      if (!isPenMenuPointer(e)) return false
+      if (holdSourceRef.current === 'space') return false
+      if (
+        pointerIdRef.current !== null &&
+        e.pointerId !== pointerIdRef.current
+      ) {
+        return false
+      }
+      if (phaseRef.current === 'idle' && holdSourceRef.current !== 'pointer') {
         return false
       }
 
-      if (phaseRef.current === 'open') {
-        const { x, y } = anchorRef.current
-        const hovered = hitTestPenToolPill(e.clientX, e.clientY, x, y)
-        setState((prev) =>
-          prev.hoveredTool === hovered ? prev : { ...prev, hoveredTool: hovered },
-        )
-        return true
-      }
-
-      if (phaseRef.current === 'pending') {
-        checkDrift(e.clientX, e.clientY)
-      }
-
-      return false
+      return moveHold(e.clientX, e.clientY)
     },
 
     onPointerUp(e) {
-      if (!isPenInput(e)) return false
-      if (pointerIdRef.current !== null && e.pointerId !== pointerIdRef.current) {
+      if (!isPenMenuPointer(e)) return false
+      if (
+        pointerIdRef.current !== null &&
+        e.pointerId !== pointerIdRef.current
+      ) {
+        return false
+      }
+      if (holdSourceRef.current === 'space') return false
+
+      if (holdSourceRef.current !== 'pointer' && phaseRef.current === 'idle') {
+        if (pointerIdRef.current === e.pointerId) {
+          pointerIdRef.current = null
+        }
         return false
       }
 
       clearHoldTimer()
 
       if (phaseRef.current === 'open') {
-        const { x, y } = anchorRef.current
-        const hovered = hitTestPenToolPill(e.clientX, e.clientY, x, y)
-        if (hovered) {
-          useToolStore.getState().setMode(hovered)
-        }
-        resetToIdle()
+        finishOpenHold(e.clientX, e.clientY)
         return true
       }
 
       cancelHold()
       pointerIdRef.current = null
+      holdSourceRef.current = 'none'
       return false
+    },
+
+    beginSpaceHold(clientX, clientY) {
+      if (phaseRef.current === 'open') return
+      if (holdSourceRef.current === 'pointer') return
+
+      const canvas = clientToCanvas(clientX, clientY, transformRef)
+      if (!canvas) return
+
+      holdSourceRef.current = 'space'
+      pointerIdRef.current = null
+      startPending(clientX, clientY)
+    },
+
+    moveSpaceHold(clientX, clientY) {
+      if (holdSourceRef.current !== 'space') return false
+      return moveHold(clientX, clientY)
+    },
+
+    endSpaceHold(clientX, clientY) {
+      if (holdSourceRef.current !== 'space') return false
+
+      clearHoldTimer()
+
+      if (phaseRef.current === 'open') {
+        finishOpenHold(clientX, clientY)
+        return true
+      }
+
+      cancelHold()
+      return false
+    },
+
+    cancelSpaceHold() {
+      if (holdSourceRef.current !== 'space') return
+      clearHoldTimer()
+      if (phaseRef.current === 'open') {
+        resetToIdle()
+        return
+      }
+      cancelHold()
     },
   }
 

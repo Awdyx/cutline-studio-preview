@@ -3,6 +3,8 @@ export type NotificationTab = 'all' | 'unread' | 'mentions'
 export type Notification = {
   id: string
   avatar: { initial: string; color: string }
+  /** Handle or name shown in italics at the start of the message. */
+  actor?: string
   message: string
   timestamp: string
   isUnread: boolean

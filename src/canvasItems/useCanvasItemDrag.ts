@@ -8,8 +8,11 @@ export function useCanvasItemDrag(itemId: string) {
   const isDragging = activeItemId === itemId
 
   const onGrabPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLButtonElement>) => {
-      attachCanvasItemDragPointerDown(itemId, event)
+    (
+      event: ReactPointerEvent<HTMLElement>,
+      options?: { onReleaseWithoutDrag?: () => void },
+    ) => {
+      attachCanvasItemDragPointerDown(itemId, event, options)
     },
     [itemId],
   )

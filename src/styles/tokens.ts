@@ -24,6 +24,8 @@ export const menuDividerVerticalStyle: CSSProperties = {
 
 export const CHROME_GLASS_CLASS = 'ui-chrome-glass'
 export const CHROME_CARD_CLASS = 'ui-chrome-card'
+/** Opaque chrome surfaces (tool pills — no backdrop blur). */
+export const CHROME_SOLID_CLASS = 'ui-chrome-solid'
 /** Opt out of chrome lowercase for user-authored text inside chrome panels. */
 export const CHROME_PRESERVE_CASE_CLASS = 'ui-chrome-preserve-case'
 
@@ -51,9 +53,46 @@ export const card = {
   transitionDuration: '180ms',
 }
 
+/** Shared chrome menu open/close — Cutline panel + flyout dismiss. */
+export const CHROME_MENU_TRANSITION = {
+  duration: 0.18,
+  ease: 'easeOut',
+} as const
+
+export function chromeMenuMotionY(offset: number) {
+  return {
+    initial: { opacity: 0, scale: 0.96, y: offset },
+    animate: { opacity: 1, scale: 1, y: 0 },
+    exit: { opacity: 0, scale: 0.96, y: offset },
+    transition: CHROME_MENU_TRANSITION,
+  }
+}
+
+export function chromeMenuMotionX(offset: number) {
+  return {
+    initial: { opacity: 0, scale: 0.96, x: offset },
+    animate: { opacity: 1, scale: 1, x: 0 },
+    exit: { opacity: 0, scale: 0.96, x: offset },
+    transition: CHROME_MENU_TRANSITION,
+  }
+}
+
+export const solid = {
+  bg: 'var(--chrome-solid-bg)',
+  border: '1px solid var(--glass-border)',
+  shadow: 'var(--card-shadow)',
+}
+
 export const font = {
   family: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif',
   colorPrimary: 'var(--ui-text)',
   colorMuted: 'var(--ui-text-muted)',
   colorFaint: 'var(--ui-text-faint)',
+}
+
+/** Fixed bottom-right chrome — safe-area aware, sits flush in the visual viewport corner. */
+export const chromeBottomRightFixed: CSSProperties = {
+  position: 'fixed',
+  bottom: 'max(16px, env(safe-area-inset-bottom, 0px))',
+  zIndex: 20,
 }

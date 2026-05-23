@@ -1,15 +1,7 @@
 import { playSound } from './playSound'
 
-let lastHoverAt = 0
-const HOVER_GAP_MS = 95
-
-/** Soft hover breath — layered so airy tails are not cut off while scanning rows. */
-export function playSubmenuHover(): void {
-  const now = performance.now()
-  if (now - lastHoverAt < HOVER_GAP_MS) return
-  lastHoverAt = now
-  playSound('submenuHover', { layer: true })
-}
+/** Row hover is silent — only taps/clicks play submenu SFX. */
+export function playSubmenuHover(): void {}
 
 export function playSubmenuTap(): void {
   playSound('submenuTap')

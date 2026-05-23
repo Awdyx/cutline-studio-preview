@@ -7,8 +7,10 @@ import ResizeCornerBracket from './ResizeCornerBracket'
 
 export default function ResizeHandle({
   onPointerDown,
+  cornerOutset = RESIZE_CORNER_OUTSET,
 }: {
   onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => void
+  cornerOutset?: number
 }) {
   const hitOutset = (HANDLE_HIT_SIZE - HANDLE_VISUAL_SIZE) / 2
 
@@ -23,8 +25,8 @@ export default function ResizeHandle({
         position: 'absolute',
         left: '100%',
         top: '100%',
-        marginLeft: RESIZE_CORNER_OUTSET,
-        marginTop: RESIZE_CORNER_OUTSET,
+        marginLeft: cornerOutset,
+        marginTop: cornerOutset,
         width: HANDLE_HIT_SIZE,
         height: HANDLE_HIT_SIZE,
         display: 'flex',
@@ -42,7 +44,6 @@ export default function ResizeHandle({
         touchAction: 'none',
         pointerEvents: 'auto',
         opacity: 'var(--canvas-resize-handle-opacity)',
-        transition: 'opacity 150ms ease, color 150ms ease',
         zIndex: 3,
       }}
       className="canvas-item-resize-handle"

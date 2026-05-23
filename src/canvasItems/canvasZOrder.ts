@@ -13,6 +13,9 @@ export const Z_ITEMS_ABOVE_MIN = 1001
 /** Temporary canvas ink (drawn while locked) — above committed items, below annotation items. */
 export const Z_ANNOTATION_STROKES = 1500
 
+/** In-progress canvas ink — above all committed content while the stroke is being drawn. */
+export const Z_ACTIVE_STROKE = 4000
+
 /** Temporary canvas items (added while locked) — always above committed + annotation strokes. */
 export const Z_ANNOTATION_MIN = 2000
 

@@ -1,13 +1,18 @@
 import { create } from 'zustand'
-
-const MAX_VELOCITY = 25
+import {
+  EMPTY_EDGE_STRENGTHS,
+  MAX_VELOCITY,
+  type EdgeStrengths,
+} from './canvasPanVignette'
 
 interface PanMotionState {
   vx: number
   vy: number
   intensity: number
   active: boolean
-  setPanVelocity: (dx: number, dy: number) => void
+  edges: EdgeStrengths
+  setPanFrame: (vx: number, vy: number, edges: EdgeStrengths) => void
+  setEdges: (edges: EdgeStrengths) => void
   setPanStopped: () => void
 }
 
@@ -16,21 +21,27 @@ export const usePanMotionStore = create<PanMotionState>((set) => ({
   vy: 0,
   intensity: 0,
   active: false,
+  edges: EMPTY_EDGE_STRENGTHS,
 
-  setPanVelocity: (dx, dy) => {
-    const magnitude = Math.sqrt(dx * dx + dy * dy)
+  setPanFrame: (vx, vy, edges) => {
+    const magnitude = Math.sqrt(vx * vx + vy * vy)
     const intensity = Math.min(magnitude / MAX_VELOCITY, 1)
     set({
-      vx: dx,
-      vy: dy,
+      vx,
+      vy,
+      edges,
       intensity,
       active: magnitude > 0,
     })
   },
 
+  setEdges: (edges) => {
+    set({ edges })
+  },
+
   setPanStopped: () => {
-    set({ active: false, intensity: 0 })
+    set({ active: false, intensity: 0, vx: 0, vy: 0 })
   },
 }))
 
-export { MAX_VELOCITY }
+export { MAX_VELOCITY } from './canvasPanVignette'

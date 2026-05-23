@@ -1,7 +1,14 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
-import { Z_MENU_GAP, Z_MENU_HANDLE_CLEARANCE } from './grabZone'
+import { readLayoutViewport } from '../platform/viewportSize'
+import { Z_MENU_GAP } from './grabZone'
 
 const VIEWPORT_PADDING = 8
+
+export function getSoleSelectedItemId(
+  selectedIds: readonly string[],
+): string | null {
+  return selectedIds.length === 1 ? selectedIds[0] : null
+}
 
 export type ZMenuSide = 'left' | 'right'
 
@@ -23,10 +30,11 @@ export interface ZMenuLayout {
 function horizontalOverflow(
   leftEdge: number,
   rightEdge: number,
-  viewportWidth: number,
+  viewportLeft: number,
+  viewportRight: number,
 ): number {
-  const leftClip = Math.max(0, VIEWPORT_PADDING - leftEdge)
-  const rightClip = Math.max(0, rightEdge - (viewportWidth - VIEWPORT_PADDING))
+  const leftClip = Math.max(0, viewportLeft + VIEWPORT_PADDING - leftEdge)
+  const rightClip = Math.max(0, rightEdge - (viewportRight - VIEWPORT_PADDING))
   return leftClip + rightClip
 }
 
@@ -35,12 +43,14 @@ export function computeZMenuLayoutFromBounds(
   menuWidth: number,
   menuHeight: number,
 ): ZMenuLayout {
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
+  const viewport = readLayoutViewport()
+  const viewportLeft = viewport.left
+  const viewportRight = viewport.left + viewport.width
+  const viewportTop = viewport.top
+  const viewportBottom = viewport.top + viewport.height
 
-  const menuInset = Z_MENU_GAP + Z_MENU_HANDLE_CLEARANCE
-  const leftAnchor = bounds.left - menuInset
-  const rightAnchor = bounds.right + menuInset
+  const leftAnchor = bounds.left - Z_MENU_GAP
+  const rightAnchor = bounds.right + Z_MENU_GAP
 
   const leftPlacement = {
     leftEdge: leftAnchor - menuWidth,
@@ -63,12 +73,14 @@ export function computeZMenuLayoutFromBounds(
   const leftOverflow = horizontalOverflow(
     leftPlacement.leftEdge,
     leftPlacement.rightEdge,
-    viewportWidth,
+    viewportLeft,
+    viewportRight,
   )
   const rightOverflow = horizontalOverflow(
     rightPlacement.leftEdge,
     rightPlacement.rightEdge,
-    viewportWidth,
+    viewportLeft,
+    viewportRight,
   )
 
   const placement =
@@ -81,10 +93,13 @@ export function computeZMenuLayoutFromBounds(
           : rightPlacement
 
   let top = bounds.top
-  if (top < VIEWPORT_PADDING) {
-    top = VIEWPORT_PADDING
-  } else if (top + menuHeight > viewportHeight - VIEWPORT_PADDING) {
-    top = Math.max(VIEWPORT_PADDING, viewportHeight - VIEWPORT_PADDING - menuHeight)
+  if (top < viewportTop + VIEWPORT_PADDING) {
+    top = viewportTop + VIEWPORT_PADDING
+  } else if (top + menuHeight > viewportBottom - VIEWPORT_PADDING) {
+    top = Math.max(
+      viewportTop + VIEWPORT_PADDING,
+      viewportBottom - VIEWPORT_PADDING - menuHeight,
+    )
   }
 
   return {
@@ -97,9 +112,8 @@ export function computeZMenuLayoutFromBounds(
 }
 
 function defaultLayoutFromBounds(bounds: ElementBounds): ZMenuLayout {
-  const menuInset = Z_MENU_GAP + Z_MENU_HANDLE_CLEARANCE
   return {
-    left: bounds.left - menuInset,
+    left: bounds.left - Z_MENU_GAP,
     top: bounds.top,
     translateX: '-100%',
     side: 'left',
@@ -178,10 +192,15 @@ export function useCanvasItemZMenuLayout(
 
     frame = requestAnimationFrame(update)
     window.addEventListener('resize', update)
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', update)
+    vv?.addEventListener('scroll', update)
 
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('resize', update)
+      vv?.removeEventListener('resize', update)
+      vv?.removeEventListener('scroll', update)
     }
   }, [menuRef, itemId, enabled])
 

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { ArrowDownToLine, ArrowUpToLine } from 'lucide-react'
 import { pushUndoSnapshot } from '../canvasHistory/canvasHistory'
 import { playSound } from '../sound/playSound'
 import {
@@ -13,8 +14,9 @@ import { generateStrokeId } from '../drawing/strokeId'
 import { strokeToSvgPath } from '../drawing/strokePath'
 import type { DrawTool, Stroke, StrokePoint } from '../drawing/types'
 import { notifyWorkspacePersist, useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { duplicateMediaForItem } from '../media/workspaceMediaMigration'
-import { deleteMediaBlob } from '../media/mediaBlobStore'
+import { scheduleMediaBlobGc } from '../media/mediaBlobGc'
 import { generateItemId } from './itemId'
 import {
   nextZIndexForLayer,
@@ -25,6 +27,7 @@ import {
 import {
   SPACE_HEIGHT,
   SPACE_WIDTH,
+  MAX_SPACE_WIDGETS,
   STICKY_HEIGHT,
   STICKY_WIDTH,
   TEXT_HEIGHT,
@@ -38,9 +41,12 @@ import {
 } from './types'
 import { DEFAULT_SPACE_NAME } from '../spaces/types'
 import {
+  DEFAULT_SPACE_NAME_ALIGNMENT,
   DEFAULT_TEXT_ALIGNMENT,
   type ItemTextAlignment,
+  resolveItemTextAlignment,
 } from './textAlignment'
+import { isStoredTextEmpty } from './textEditorContent'
 
 type StrokeConfig = {
   color: string
@@ -48,13 +54,56 @@ type StrokeConfig = {
   tool: DrawTool
 }
 
+const RESTORE_SIZING_MS = 320
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3
+}
+
+let restoreSizingFrameId: number | null = null
+let restoreSizingItemId: string | null = null
+
+type ZOrderPulse = {
+  id: string
+  dir: 'front' | 'back'
+  nonce: number
+}
+
+function emitZOrderFeedback(
+  get: () => CanvasItemsState,
+  set: (partial: Partial<CanvasItemsState>) => void,
+  id: string,
+  dir: 'front' | 'back',
+): void {
+  playSound(dir === 'front' ? 'zOrderFront' : 'zOrderBack')
+  useShortcutUiStore.getState().showActionToast({
+    shortcutId: dir === 'front' ? 'z-order-front' : 'z-order-back',
+    label: dir === 'front' ? 'Brought to front' : 'Sent to back',
+    keys: [],
+    icon: dir === 'front' ? ArrowUpToLine : ArrowDownToLine,
+  })
+  set({
+    zOrderPulse: {
+      id,
+      dir,
+      nonce: (get().zOrderPulse?.nonce ?? 0) + 1,
+    },
+  })
+}
+
 type CanvasItemsState = {
   items: CanvasItem[]
   selectedIds: string[]
+  previewAdjustSpaceId: string | null
+  restoreSizingAnimatingId: string | null
+  zOrderPulse: ZOrderPulse | null
+  /** Set when user spawns text; consumed on mount to focus editor once. */
+  pendingEditorFocusId: string | null
   activeStickyStroke: { stickyId: string; stroke: Stroke } | null
   hydrate: () => void
+  takePendingEditorFocus: (id: string) => boolean
   setSelectedIds: (ids: string[]) => void
-  selectItem: (id: string, additive?: boolean) => void
+  selectItem: (id: string, additive?: boolean, options?: { allowFrozen?: boolean }) => void
   clearSelection: (opts?: { silent?: boolean }) => void
   selectAll: () => void
   deleteSelected: () => void
@@ -68,6 +117,7 @@ type CanvasItemsState = {
   beginItemResize: (id: string) => void
   updateItemPosition: (id: string, x: number, y: number) => void
   updateItemSize: (id: string, width: number, height: number) => void
+  restoreImportSizing: (id: string) => void
   bringToFront: (id: string) => void
   sendToBack: (id: string) => void
   raiseInPlane: (id: string) => void
@@ -77,6 +127,8 @@ type CanvasItemsState = {
   commitTextItemEdit: (id: string, text: string) => void
   updateTextItemText: (id: string, text: string) => void
   setItemTextAlignment: (id: string, alignment: ItemTextAlignment) => void
+  setPreviewAdjustSpace: (id: string | null) => void
+  updateSpacePreviewPan: (id: string, pan: SpacePreviewPan) => void
   getStickyById: (id: string) => StickyCanvasItem | undefined
   startStickyStroke: (stickyId: string, point: StrokePoint, config: StrokeConfig) => void
   addStickyStrokePoint: (point: StrokePoint) => void
@@ -106,22 +158,69 @@ function persistItems(opts?: { immediate?: boolean }) {
   notifyWorkspacePersist()
 }
 
-async function deleteMediaForItems(items: CanvasItem[]): Promise<void> {
-  const ids = items
-    .filter((item): item is ImageCanvasItem | VideoCanvasItem =>
-      item.type === 'image' || item.type === 'video',
-    )
-    .map((item) => item.mediaId)
-  await Promise.all(ids.map((id) => deleteMediaBlob(id)))
-}
-
 function findItem(items: CanvasItem[], id: string): CanvasItem | undefined {
   return items.find((item) => item.id === id)
+}
+
+export function countSpaceWidgets(items: CanvasItem[]): number {
+  return items.filter((item) => item.type === 'space').length
+}
+
+export function canAddSpaceWidget(items: CanvasItem[]): boolean {
+  return countSpaceWidgets(items) < MAX_SPACE_WIDGETS
 }
 
 function itemIsMutable(item: CanvasItem | undefined): item is CanvasItem {
   if (!item) return false
   return !isItemFrozen(item, useCanvasLockStore.getState().isLocked)
+}
+
+function flushActiveTextEditor() {
+  const el = document.activeElement
+  if (el instanceof HTMLElement && el.isContentEditable) {
+    el.blur()
+  }
+}
+
+function dismissEmptyTextItemsOnDeselect(
+  get: () => CanvasItemsState,
+  set: (partial: Partial<CanvasItemsState> | ((state: CanvasItemsState) => Partial<CanvasItemsState>)) => void,
+  deselectedIds: readonly string[],
+) {
+  if (deselectedIds.length === 0) return
+
+  const state = get()
+  const remove = new Set(
+    deselectedIds.filter((id) => {
+      const item = findItem(state.items, id)
+      return item?.type === 'text' && isStoredTextEmpty(item.text)
+    }),
+  )
+  if (remove.size === 0) return
+
+  set((current) => ({
+    items: current.items.filter((item) => !remove.has(item.id)),
+    selectedIds: current.selectedIds.filter((id) => !remove.has(id)),
+    pendingEditorFocusId:
+      current.pendingEditorFocusId && remove.has(current.pendingEditorFocusId)
+        ? null
+        : current.pendingEditorFocusId,
+  }))
+  persistItems({ immediate: true })
+}
+
+function applySelectionChange(
+  get: () => CanvasItemsState,
+  set: (partial: Partial<CanvasItemsState> | ((state: CanvasItemsState) => Partial<CanvasItemsState>)) => void,
+  nextSelected: string[],
+) {
+  const prevSelected = get().selectedIds
+  set({ selectedIds: nextSelected })
+  dismissEmptyTextItemsOnDeselect(
+    get,
+    set,
+    prevSelected.filter((id) => !nextSelected.includes(id)),
+  )
 }
 
 function cloneItem(item: CanvasItem, offset: number, forcedId?: string): CanvasItem {
@@ -145,18 +244,32 @@ function cloneItem(item: CanvasItem, offset: number, forcedId?: string): CanvasI
 export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   items: [],
   selectedIds: [],
+  previewAdjustSpaceId: null,
+  restoreSizingAnimatingId: null,
+  zOrderPulse: null,
+  pendingEditorFocusId: null,
   activeStickyStroke: null,
 
   hydrate: () => {
     persistEnabled = true
   },
 
+  takePendingEditorFocus: (id) => {
+    if (get().pendingEditorFocusId !== id) return false
+    set({ pendingEditorFocusId: null })
+    return true
+  },
+
   setSelectedIds: (ids) => set({ selectedIds: ids }),
 
-  selectItem: (id, additive = false) => {
+  selectItem: (id, additive = false, options) => {
     const item = findItem(get().items, id)
-    if (!itemIsMutable(item)) return
+    if (!item) return
+    if (!options?.allowFrozen && !itemIsMutable(item)) return
 
+    useShortcutUiStore.getState().dismissChromeForCanvasInteraction()
+
+    const prevSelected = get().selectedIds
     let shouldPlay = false
     set((state) => {
       if (additive) {
@@ -174,12 +287,35 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       return { selectedIds: [id] }
     })
 
+    const nextSelected = get().selectedIds
+    flushActiveTextEditor()
+    dismissEmptyTextItemsOnDeselect(
+      get,
+      set,
+      prevSelected.filter((entry) => !nextSelected.includes(entry)),
+    )
+
+    const adjustId = get().previewAdjustSpaceId
+    const soleSelected = nextSelected.length === 1 ? nextSelected[0] : null
+    if (adjustId && soleSelected !== adjustId) {
+      set({ previewAdjustSpaceId: null })
+    }
+
     if (shouldPlay) playSound('itemSelect')
   },
 
   clearSelection: (opts?: { silent?: boolean }) => {
-    if (get().selectedIds.length === 0) return
-    set({ selectedIds: [] })
+    const prevSelected = get().selectedIds
+    if (prevSelected.length === 0) return
+    if (!opts?.silent) {
+      useShortcutUiStore.getState().dismissChromeForCanvasInteraction()
+    }
+    set({
+      selectedIds: [],
+      previewAdjustSpaceId: null,
+    })
+    flushActiveTextEditor()
+    dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
     if (!opts?.silent) playSound('itemDeselect')
   },
 
@@ -187,7 +323,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const ids = get()
       .items.filter((item) => itemIsMutable(item))
       .map((item) => item.id)
-    set({ selectedIds: ids })
+    applySelectionChange(get, set, ids)
   },
 
   deleteSelected: () => {
@@ -198,13 +334,14 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     )
     if (toDelete.length === 0) return
     pushUndoSnapshot()
-    playSound('delete')
+    const prevSelected = selectedIds
     set((state) => {
       const remove = new Set(toDelete)
       const nextItems = state.items.filter((item) => !remove.has(item.id))
       return {
         items: nextItems,
         selectedIds: [],
+        previewAdjustSpaceId: null,
         activeStickyStroke:
           state.activeStickyStroke &&
           remove.has(state.activeStickyStroke.stickyId)
@@ -212,8 +349,8 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
             : state.activeStickyStroke,
       }
     })
-    const removedItems = items.filter((item) => toDelete.includes(item.id))
-    void deleteMediaForItems(removedItems)
+    dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
+    scheduleMediaBlobGc()
     persistItems({ immediate: true })
   },
 
@@ -228,7 +365,12 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const offset = 24
     void (async () => {
       const clones: CanvasItem[] = []
+      let spaceCount = countSpaceWidgets(items)
       for (const source of sources) {
+        if (source.type === 'space') {
+          if (spaceCount >= MAX_SPACE_WIDGETS) continue
+          spaceCount++
+        }
         const id = generateItemId()
         if (source.type === 'image' || source.type === 'video') {
           const copied = await duplicateMediaForItem(source.mediaId, id)
@@ -238,10 +380,16 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       }
       if (clones.length === 0) return
       const newIds = clones.map((c) => c.id)
+      const prevSelected = get().selectedIds
       set((state) => ({
         items: [...state.items, ...clones],
         selectedIds: newIds,
       }))
+      dismissEmptyTextItemsOnDeselect(
+        get,
+        set,
+        prevSelected.filter((id) => !newIds.includes(id)),
+      )
       persistItems({ immediate: true })
     })()
   },
@@ -250,6 +398,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     pushUndoSnapshot()
     const id = generateItemId()
     const items = get().items
+    const prevSelected = get().selectedIds
     const layer = newItemLayer(useCanvasLockStore.getState().isLocked)
     const sticky: StickyCanvasItem = {
       id,
@@ -265,13 +414,15 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       ...(layer === 'annotation' ? { layer } : {}),
     }
     const next = [...items, sticky]
-    set({ items: next })
+    set({ items: next, selectedIds: [id] })
+    dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
     persistItems({ immediate: true })
     playSound('spawn')
     return id
   },
 
   addText: (x, y) => {
+    const prevSelected = get().selectedIds
     pushUndoSnapshot()
     const id = generateItemId()
     const items = get().items
@@ -289,7 +440,12 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       ...(layer === 'annotation' ? { layer } : {}),
     }
     const next = [...items, textItem]
-    set({ items: next })
+    set({
+      items: next,
+      pendingEditorFocusId: id,
+      selectedIds: [id],
+    })
+    dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
     persistItems({ immediate: true })
     playSound('spawn')
     return id
@@ -307,6 +463,8 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       zIndex: nextZIndexForLayer(items, layer),
       width,
       height,
+      importWidth: width,
+      importHeight: height,
       mediaId,
       ...(layer === 'annotation' ? { layer } : {}),
     }
@@ -329,6 +487,8 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       zIndex: nextZIndexForLayer(items, layer),
       width,
       height,
+      importWidth: width,
+      importHeight: height,
       mediaId,
       ...(layer === 'annotation' ? { layer } : {}),
     }
@@ -341,9 +501,10 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
 
   addSpace: (x, y) => {
     if (!useCanvasWorkspaceStore.getState().isOnMainCanvas()) return ''
+    const items = get().items
+    if (!canAddSpaceWidget(items)) return ''
     pushUndoSnapshot()
     const id = generateItemId()
-    const items = get().items
     const layer = newItemLayer(useCanvasLockStore.getState().isLocked)
     const space: SpaceCanvasItem = {
       id,
@@ -355,6 +516,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       height: SPACE_HEIGHT,
       name: DEFAULT_SPACE_NAME,
       snapshotId: null,
+      textAlign: DEFAULT_SPACE_NAME_ALIGNMENT,
       ...(layer === 'annotation' ? { layer } : {}),
     }
     const next = [...items, space]
@@ -397,31 +559,107 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     persistItems()
   },
 
-  bringToFront: (id) => {
-    if (!itemIsMutable(findItem(get().items, id))) return
+  restoreImportSizing: (id) => {
+    const item = findItem(get().items, id)
+    if (!item || (item.type !== 'image' && item.type !== 'video')) return
+    if (!itemIsMutable(item)) return
+    if (item.importWidth == null || item.importHeight == null) return
+    if (
+      item.width === item.importWidth &&
+      item.height === item.importHeight
+    ) {
+      return
+    }
+
+    if (restoreSizingFrameId != null) {
+      cancelAnimationFrame(restoreSizingFrameId)
+      restoreSizingFrameId = null
+    }
+
     pushUndoSnapshot()
-    set((state) => {
-      const zIndex = zIndexForBringToFront(state.items, id)
-      return {
-        items: state.items.map((item) =>
-          item.id === id ? { ...item, zIndex } : item,
+
+    const from = {
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+    }
+    const centerX = from.x + from.width / 2
+    const centerY = from.y + from.height / 2
+    const to = {
+      x: centerX - item.importWidth / 2,
+      y: centerY - item.importHeight / 2,
+      width: item.importWidth,
+      height: item.importHeight,
+    }
+
+    restoreSizingItemId = id
+    set({ restoreSizingAnimatingId: id })
+
+    const started = performance.now()
+
+    const tick = (now: number) => {
+      if (restoreSizingItemId !== id) return
+
+      const t = Math.min(1, (now - started) / RESTORE_SIZING_MS)
+      const eased = easeOutCubic(t)
+      const x = from.x + (to.x - from.x) * eased
+      const y = from.y + (to.y - from.y) * eased
+      const width = from.width + (to.width - from.width) * eased
+      const height = from.height + (to.height - from.height) * eased
+
+      set((state) => ({
+        restoreSizingAnimatingId: t < 1 ? id : null,
+        items: state.items.map((entry) =>
+          entry.id === id ? { ...entry, x, y, width, height } : entry,
         ),
+      }))
+
+      if (t < 1) {
+        restoreSizingFrameId = requestAnimationFrame(tick)
+      } else {
+        restoreSizingFrameId = null
+        restoreSizingItemId = null
+        persistItems({ immediate: true })
       }
-    })
+    }
+
+    restoreSizingFrameId = requestAnimationFrame(tick)
+  },
+
+  bringToFront: (id) => {
+    const item = findItem(get().items, id)
+    if (!itemIsMutable(item)) return
+    const zIndex = zIndexForBringToFront(get().items, id)
+    if (item.zIndex === zIndex) {
+      emitZOrderFeedback(get, set, id, 'front')
+      return
+    }
+    pushUndoSnapshot()
+    set((state) => ({
+      items: state.items.map((entry) =>
+        entry.id === id ? { ...entry, zIndex } : entry,
+      ),
+    }))
+    emitZOrderFeedback(get, set, id, 'front')
     persistItems({ immediate: true })
   },
 
   sendToBack: (id) => {
-    if (!itemIsMutable(findItem(get().items, id))) return
+    const item = findItem(get().items, id)
+    if (!itemIsMutable(item)) return
+    const zIndex = zIndexForSendToBack(get().items, id)
+    if (item.zIndex === zIndex) {
+      emitZOrderFeedback(get, set, id, 'back')
+      return
+    }
     pushUndoSnapshot()
-    set((state) => {
-      const zIndex = zIndexForSendToBack(state.items, id)
-      return {
-        items: state.items.map((item) =>
-          item.id === id ? { ...item, zIndex } : item,
-        ),
-      }
-    })
+    set((state) => ({
+      items: state.items.map((entry) =>
+        entry.id === id ? { ...entry, zIndex } : entry,
+      ),
+    }))
+    emitZOrderFeedback(get, set, id, 'back')
     persistItems({ immediate: true })
   },
 
@@ -447,11 +685,13 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       activeStickyStroke:
         state.activeStickyStroke?.stickyId === id ? null : state.activeStickyStroke,
       selectedIds: state.selectedIds.filter((sid) => sid !== id),
+      previewAdjustSpaceId:
+        state.previewAdjustSpaceId === id ? null : state.previewAdjustSpaceId,
     }))
-    if (target && (target.type === 'image' || target.type === 'video')) {
-      void deleteMediaBlob(target.mediaId)
-    }
     persistItems({ immediate: true })
+    if (target && (target.type === 'image' || target.type === 'video')) {
+      scheduleMediaBlobGc()
+    }
   },
 
   commitStickyTextEdit: (id, text) => {
@@ -491,22 +731,47 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   setItemTextAlignment: (id, alignment) => {
     const item = get().items.find((i) => i.id === id)
     if (!itemIsMutable(item)) return
-    if (item?.type !== 'sticky' && item?.type !== 'text') return
+    if (item?.type !== 'sticky' && item?.type !== 'text' && item?.type !== 'space') return
+    const current = resolveItemTextAlignment(item)
     if (
-      item.textAlign.horizontal === alignment.horizontal &&
-      item.textAlign.vertical === alignment.vertical
+      current.horizontal === alignment.horizontal &&
+      current.vertical === alignment.vertical
     ) {
       return
     }
     pushUndoSnapshot()
     set((state) => ({
       items: state.items.map((entry) =>
-        entry.id === id && (entry.type === 'sticky' || entry.type === 'text')
+        entry.id === id &&
+        (entry.type === 'sticky' || entry.type === 'text' || entry.type === 'space')
           ? { ...entry, textAlign: alignment }
           : entry,
       ),
     }))
     persistItems({ immediate: true })
+  },
+
+  setPreviewAdjustSpace: (id) => {
+    const current = get().previewAdjustSpaceId
+    if (current === id) return
+    if (id != null) {
+      const item = findItem(get().items, id)
+      if (!itemIsMutable(item) || item?.type !== 'space') return
+    }
+    set({ previewAdjustSpaceId: id })
+  },
+
+  updateSpacePreviewPan: (id, pan) => {
+    const item = findItem(get().items, id)
+    if (!itemIsMutable(item) || item?.type !== 'space') return
+    set((state) => ({
+      items: state.items.map((entry) =>
+        entry.id === id && entry.type === 'space'
+          ? { ...entry, previewPan: pan }
+          : entry,
+      ),
+    }))
+    persistItems()
   },
 
   getStickyById: (id) => {

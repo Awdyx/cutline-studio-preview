@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react'
+import { useState, type ReactNode, type RefObject } from 'react'
 import { Bell, Newspaper } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, glass, font } from '../styles/tokens'
@@ -78,6 +78,25 @@ export function BrandPill({ isOpen = false, onClick }: BrandPillProps) {
 
 // ─── User Cluster ─────────────────────────────────────────────────────────────
 
+function AttentionIcon({
+  active,
+  origin,
+  children,
+}: {
+  active: boolean
+  origin: string
+  children: ReactNode
+}) {
+  return (
+    <span
+      className={active ? 'chrome-icon-attention' : undefined}
+      style={{ display: 'inline-flex', transformOrigin: origin }}
+    >
+      {children}
+    </span>
+  )
+}
+
 interface UserClusterProps {
   user: {
     name: string
@@ -105,65 +124,39 @@ export function UserCluster({
       <button
         type="button"
         onClick={onNewsClick}
-        aria-label="News"
+        aria-label={newsCount > 0 ? `News, ${newsCount} new` : 'News'}
         data-panel-trigger="news"
         className={`theme-surface ${CHROME_GLASS_CLASS}`}
         style={{
           ...islandBase,
           background: glass.bg,
-          position: 'relative',
           padding: 10,
           cursor: 'pointer',
         }}
       >
-        <Newspaper size={16} color="var(--ui-text)" strokeWidth={1.8} />
-        {newsCount > 0 && (
-          <span
-            aria-label={`${newsCount} new posts`}
-            style={{
-              position: 'absolute',
-              top: 6,
-              right: 6,
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              backgroundColor: '#f05050',
-              boxShadow: '0 0 0 1.5px rgba(255,255,255,0.8)',
-            }}
-          />
-        )}
+        <AttentionIcon active={newsCount > 0} origin="center center">
+          <Newspaper size={16} color="var(--ui-text)" strokeWidth={1.8} />
+        </AttentionIcon>
       </button>
 
       <button
         type="button"
         onClick={onNotificationClick}
-        aria-label="Notifications"
+        aria-label={
+          unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'
+        }
         data-panel-trigger="notifications"
         className={`theme-surface ${CHROME_GLASS_CLASS}`}
         style={{
           ...islandBase,
           background: glass.bg,
-          position: 'relative',
           padding: 10,
           cursor: 'pointer',
         }}
       >
-        <Bell size={16} color="var(--ui-text)" strokeWidth={1.8} />
-        {unreadCount > 0 && (
-          <span
-            aria-label={`${unreadCount} unread`}
-            style={{
-              position: 'absolute',
-              top: 6,
-              right: 6,
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              backgroundColor: '#f05050',
-              boxShadow: '0 0 0 1.5px rgba(255,255,255,0.8)',
-            }}
-          />
-        )}
+        <AttentionIcon active={unreadCount > 0} origin="top center">
+          <Bell size={16} color="var(--ui-text)" strokeWidth={1.8} />
+        </AttentionIcon>
       </button>
 
       <button
@@ -242,7 +235,7 @@ export default function TopBar({
       </div>
       <div
         style={{
-          pointerEvents: 'auto',
+          pointerEvents: 'none',
           flex: 1,
           display: 'flex',
           justifyContent: 'center',

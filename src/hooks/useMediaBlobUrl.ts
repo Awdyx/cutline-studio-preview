@@ -8,7 +8,10 @@ import {
 
 export type MediaBlobStatus = 'idle' | 'loading' | 'ready' | 'error'
 
-export function useMediaBlobUrl(mediaId: string | null | undefined): {
+export function useMediaBlobUrl(
+  mediaId: string | null | undefined,
+  itemId?: string,
+): {
   url: string | undefined
   status: MediaBlobStatus
 } {
@@ -26,7 +29,7 @@ export function useMediaBlobUrl(mediaId: string | null | undefined): {
     setStatus('loading')
     setUrl(undefined)
 
-    void resolveMediaObjectUrl(mediaId)
+    void resolveMediaObjectUrl(mediaId, itemId)
       .then((objectUrl) => {
         if (cancelled) {
           if (objectUrl) releaseMediaObjectUrl(mediaId)
@@ -48,7 +51,7 @@ export function useMediaBlobUrl(mediaId: string | null | undefined): {
       cancelled = true
       releaseMediaObjectUrl(mediaId)
     }
-  }, [mediaId])
+  }, [mediaId, itemId])
 
   return { url, status }
 }

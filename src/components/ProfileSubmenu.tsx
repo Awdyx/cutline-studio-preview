@@ -36,6 +36,8 @@ import { defaultProfileMediaFrame } from '../profile/profileMediaFrame'
 import type { ProfileMediaFrame } from '../profile/types'
 import ProfileMediaFrameEditor from './ProfileMediaFrameEditor'
 import { usePanelAlignedSubmenuLayout } from './usePanelAlignedSubmenuLayout'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
+import { phoneSubmenuSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import ChromeScrollFade from './ChromeScrollFade'
@@ -124,6 +126,7 @@ export default function ProfileSubmenu({ panelRef, onClose, onDraftChange }: Pro
   const formScrollRef = useRef<HTMLDivElement>(null)
   const submenuRef = useRef<HTMLDivElement>(null)
   const userEditedRef = useRef(false)
+  const isPhone = useIsPhoneLayout()
   const layout = usePanelAlignedSubmenuLayout(panelRef, SUBMENU_WIDTH, SUBMENU_GAP)
 
   const dirty = !profilesEqual(draft, savedProfile)
@@ -314,16 +317,22 @@ export default function ProfileSubmenu({ panelRef, onClose, onDraftChange }: Pro
       <motion.div
         ref={submenuRef}
         data-profile-submenu
-        initial={{ opacity: 0, scale: 0.96, x: 8 }}
-        animate={{ opacity: 1, scale: 1, x: 0 }}
-        exit={{ opacity: 0, scale: 0.96, x: 8 }}
-        transition={{ duration: 0.18, ease: 'easeOut' }}
+        {...(isPhone ? phoneSubmenuSlideMotion : {
+          initial: { opacity: 0, scale: 0.96, x: 8 },
+          animate: { opacity: 1, scale: 1, x: 0 },
+          exit: { opacity: 0, scale: 0.96, x: 8 },
+          transition: { duration: 0.18, ease: 'easeOut' },
+        })}
         style={{
-          position: 'fixed',
-          top: layout.top,
-          left: layout.left,
-          width: SUBMENU_WIDTH,
-          height: layout.height > 0 ? layout.height : undefined,
+          ...(isPhone
+            ? phoneSubmenuSheetStyle({ display: 'flex', flexDirection: 'column' })
+            : {
+                position: 'fixed',
+                top: layout.top,
+                left: layout.left,
+                width: SUBMENU_WIDTH,
+                height: layout.height > 0 ? layout.height : undefined,
+              }),
           display: 'flex',
           flexDirection: 'column',
           ...chromeFrostedMenuStyle,

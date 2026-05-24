@@ -1,20 +1,26 @@
 import { useLayoutEffect, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, chromeLabel, font } from '../styles/tokens'
+import { phoneSubmenuSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import { submenuRowHoverProps } from '../sound/submenuSound'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import { SHORTCUT_CATEGORIES, shortcutsByCategory } from '../shortcuts/shortcutDefs'
 import { ShortcutKeycaps } from './ShortcutKeycaps'
 import { useSubmenuPosition } from './useSubmenuPosition'
+import PhoneStackHeader from './PhoneStackHeader'
 
 export default function ShortcutsSubmenu({
   anchorRef,
+  onBack,
 }: {
   anchorRef: RefObject<HTMLElement | null>
+  onBack?: () => void
 }) {
+  const isPhone = useIsPhoneLayout()
   const [mounted, setMounted] = useState(false)
-  const pos = useSubmenuPosition(anchorRef)
+  const pos = useSubmenuPosition(anchorRef, { enabled: !isPhone })
   const grouped = shortcutsByCategory()
 
   useLayoutEffect(() => {
@@ -26,27 +32,35 @@ export default function ShortcutsSubmenu({
   return createPortal(
     <motion.div
       data-cutline-submenu="shortcuts"
-      initial={{ opacity: 0, scale: 0.96, x: -4 }}
-      animate={{ opacity: 1, scale: 1, x: 0 }}
-      exit={{ opacity: 0, scale: 0.96, x: -4 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
+      {...(isPhone ? phoneSubmenuSlideMotion : {
+        initial: { opacity: 0, scale: 0.96, x: -4 },
+        animate: { opacity: 1, scale: 1, x: 0 },
+        exit: { opacity: 0, scale: 0.96, x: -4 },
+        transition: { duration: 0.18, ease: 'easeOut' },
+      })}
       style={{
-        position: 'fixed',
-        top: pos.top,
-        left: pos.left,
-        width: 300,
-        maxHeight: 'min(70vh, 420px)',
+        ...(isPhone
+          ? phoneSubmenuSheetStyle({ display: 'flex', flexDirection: 'column' })
+          : {
+              position: 'fixed',
+              top: pos.top,
+              left: pos.left,
+              width: 300,
+              maxHeight: 'min(70vh, 420px)',
+            }),
         overflowY: 'auto',
         ...chromeFrostedMenuStyle,
         fontFamily: font.family,
         zIndex: 40,
-        padding: '12px 0',
+        padding: isPhone ? 0 : '12px 0',
       }}
       className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <SubmenuSoundScope>
+      {isPhone && onBack && <PhoneStackHeader title="Shortcuts" onBack={onBack} />}
+      <div style={isPhone ? { padding: '12px 0' } : undefined}>
       {SHORTCUT_CATEGORIES.map((category) => {
         const items = (grouped.get(category) ?? []).filter((s) => s.keys.length > 0)
         if (items.length === 0) return null
@@ -90,6 +104,7 @@ export default function ShortcutsSubmenu({
           </section>
         )
       })}
+      </div>
       </SubmenuSoundScope>
     </motion.div>,
     document.body,

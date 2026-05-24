@@ -53,6 +53,8 @@ export const SPACE_BACK_PILL_MOTION = {
   } as const,
 }
 
+export const SPACE_BACK_PILL_PHONE_CLASS = 'cutline-space-back-pill-host'
+
 export default function SpaceBackPill({
   onExit,
 }: {

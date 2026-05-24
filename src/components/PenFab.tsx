@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { playSound } from '../sound/playSound'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 import { Eraser, Highlighter, Pen, Redo2, Trash2, Undo2 } from 'lucide-react'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import {
   CHROME_CARD_CLASS,
   CHROME_FROSTED_MENU_CLASS,
@@ -200,6 +201,7 @@ function cancelActiveDrawing() {
 }
 
 export default function PenFab() {
+  const isPhone = useIsPhoneLayout()
   const canUndo = useHistoryUiStore((s) => s.canUndo)
   const canRedo = useHistoryUiStore((s) => s.canRedo)
   const undo = useStrokesStore((s) => s.undo)
@@ -405,7 +407,7 @@ export default function PenFab() {
           data-pen-fab-menu=""
           className={`pen-fab-menu theme-surface ${CHROME_FROSTED_MENU_CLASS} ${
             menuVisible ? 'pen-fab-menu--visible' : ''
-          }`}
+          } ${isPhone ? 'pen-fab-menu--phone' : ''}`}
           style={{
             ...chromeFrostedMenuStyle,
             fontFamily: font.family,

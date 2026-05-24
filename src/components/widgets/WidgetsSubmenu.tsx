@@ -2,10 +2,13 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { playSubmenuHover, playSubmenuTap } from '../../sound/submenuSound'
-import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, card, chromeLabel, font, glass } from '../../styles/tokens'
+import { useIsPhoneLayout } from '../../hooks/useLayoutProfile'
+import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, chromeLabel, font } from '../../styles/tokens'
+import { phoneFabSheetStyle, phoneSubmenuSlideMotion } from '../../styles/phoneChrome'
 import ChromeScrollFade from '../ChromeScrollFade'
 import { SubmenuSoundScope } from '../SubmenuSoundScope'
 import { useSubmenuPosition } from '../useSubmenuPosition'
+import PhoneStackHeader from '../PhoneStackHeader'
 import { ForumChatPreview } from './ForumChatPreview'
 import {
   ForumThreadsPreview,
@@ -139,13 +142,16 @@ interface WidgetsSubmenuProps {
   anchorRef: RefObject<HTMLElement | null>
   menuPanelRef: RefObject<HTMLElement | null>
   onSelectWidget?: (kind: WidgetKind) => void
+  onBack?: () => void
 }
 
 export default function WidgetsSubmenu({
   anchorRef,
   menuPanelRef,
   onSelectWidget,
+  onBack,
 }: WidgetsSubmenuProps) {
+  const isPhone = useIsPhoneLayout()
   const [mounted, setMounted] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const pos = useSubmenuPosition(anchorRef, {
@@ -156,7 +162,7 @@ export default function WidgetsSubmenu({
     alignCenterToRef: menuPanelRef,
     horizontalAlignToRef: menuPanelRef,
     panelRef,
-    enabled: mounted,
+    enabled: mounted && !isPhone,
   })
 
   useLayoutEffect(() => {
@@ -169,16 +175,22 @@ export default function WidgetsSubmenu({
     <motion.div
       ref={panelRef}
       data-plus-fab-submenu="widgets"
-      initial={{ opacity: 0, scale: 0.96, x: 4 }}
-      animate={{ opacity: 1, scale: 1, x: 0 }}
-      exit={{ opacity: 0, scale: 0.96, x: 4 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
+      {...(isPhone ? phoneSubmenuSlideMotion : {
+        initial: { opacity: 0, scale: 0.96, x: 4 },
+        animate: { opacity: 1, scale: 1, x: 0 },
+        exit: { opacity: 0, scale: 0.96, x: 4 },
+        transition: { duration: 0.18, ease: 'easeOut' },
+      })}
       style={{
-        position: 'fixed',
-        top: pos.top,
-        left: pos.left,
-        width: PANEL_WIDTH,
-        maxHeight: pos.maxHeight,
+        ...(isPhone
+          ? phoneFabSheetStyle({ zIndex: 42, maxHeight: 'min(70dvh, 560px)' })
+          : {
+              position: 'fixed',
+              top: pos.top,
+              left: pos.left,
+              width: PANEL_WIDTH,
+              maxHeight: pos.maxHeight,
+            }),
         display: 'flex',
         flexDirection: 'column',
         ...chromeFrostedMenuStyle,
@@ -192,6 +204,7 @@ export default function WidgetsSubmenu({
       onMouseDown={(e) => e.stopPropagation()}
     >
       <SubmenuSoundScope>
+        {isPhone && onBack && <PhoneStackHeader title="Widgets" onBack={onBack} />}
         <ChromeScrollFade
           scrollStyle={{ padding: '0 14px' }}
           contentStyle={{ display: 'flex', flexDirection: 'column', gap: 14 }}

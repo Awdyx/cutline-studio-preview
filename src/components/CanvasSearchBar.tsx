@@ -72,9 +72,10 @@ function KindIcon({ kind }: { kind: CanvasSearchEntry['kind'] }) {
 
 interface CanvasSearchBarProps {
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
+  compact?: boolean
 }
 
-export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) {
+export default function CanvasSearchBar({ transformRef, compact = false }: CanvasSearchBarProps) {
   const themeMode = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeMode)
   const stickyPreviewBg = resolveStickyColor(effectiveMode)
@@ -162,7 +163,7 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
       ref={containerRef}
       style={{
         position: 'relative',
-        width: 480,
+        width: compact ? '100%' : 480,
         maxWidth: '100%',
         pointerEvents: 'auto',
       }}
@@ -245,18 +246,20 @@ export default function CanvasSearchBar({ transformRef }: CanvasSearchBarProps) 
             minWidth: 0,
           }}
         />
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            flexShrink: 0,
-            opacity: value ? 0 : 0.42,
-            transition: 'opacity 0.15s ease',
-            pointerEvents: 'none',
-          }}
-        >
-          <ShortcutKeycaps keys={findKeys.length ? findKeys : [modKeyLabel(), 'F']} size="sm" />
-        </div>
+        {!compact && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+              opacity: value ? 0 : 0.42,
+              transition: 'opacity 0.15s ease',
+              pointerEvents: 'none',
+            }}
+          >
+            <ShortcutKeycaps keys={findKeys.length ? findKeys : [modKeyLabel(), 'F']} size="sm" />
+          </div>
+        )}
       </div>
 
       <AnimatePresence>

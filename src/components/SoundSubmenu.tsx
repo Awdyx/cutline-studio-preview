@@ -2,12 +2,15 @@ import { useLayoutEffect, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Music, Volume2 } from 'lucide-react'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, chromeLabel, font, menuDividerStyle } from '../styles/tokens'
+import { phoneSubmenuSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import { useSubmenuPosition } from './useSubmenuPosition'
 import { backgroundMusic } from '../sound/backgroundMusic'
 import { useSoundStore } from '../sound/soundStore'
 import { playSubmenuHover, runSubmenuClick } from '../sound/submenuSound'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
+import PhoneStackHeader from './PhoneStackHeader'
 
 function ToggleRow({
   label,
@@ -70,11 +73,14 @@ function ToggleRow({
 
 export default function SoundSubmenu({
   anchorRef,
+  onBack,
 }: {
   anchorRef: RefObject<HTMLElement | null>
+  onBack?: () => void
 }) {
+  const isPhone = useIsPhoneLayout()
   const [mounted, setMounted] = useState(false)
-  const pos = useSubmenuPosition(anchorRef)
+  const pos = useSubmenuPosition(anchorRef, { enabled: !isPhone })
   const muted = useSoundStore((s) => s.muted)
   const musicEnabled = useSoundStore((s) => s.musicEnabled)
   const setMuted = useSoundStore((s) => s.setMuted)
@@ -98,15 +104,21 @@ export default function SoundSubmenu({
   return createPortal(
     <motion.div
       data-cutline-submenu="sound"
-      initial={{ opacity: 0, scale: 0.96, x: -4 }}
-      animate={{ opacity: 1, scale: 1, x: 0 }}
-      exit={{ opacity: 0, scale: 0.96, x: -4 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
+      {...(isPhone ? phoneSubmenuSlideMotion : {
+        initial: { opacity: 0, scale: 0.96, x: -4 },
+        animate: { opacity: 1, scale: 1, x: 0 },
+        exit: { opacity: 0, scale: 0.96, x: -4 },
+        transition: { duration: 0.18, ease: 'easeOut' },
+      })}
       style={{
-        position: 'fixed',
-        top: pos.top,
-        left: pos.left,
-        width: 220,
+        ...(isPhone
+          ? phoneSubmenuSheetStyle({ zIndex: 50 })
+          : {
+              position: 'fixed',
+              top: pos.top,
+              left: pos.left,
+              width: 220,
+            }),
         ...chromeFrostedMenuStyle,
         fontFamily: font.family,
         overflow: 'hidden',
@@ -117,6 +129,7 @@ export default function SoundSubmenu({
       onMouseDown={(e) => e.stopPropagation()}
     >
       <SubmenuSoundScope>
+      {isPhone && onBack && <PhoneStackHeader title="Sound" onBack={onBack} />}
       <div
         style={{
           display: 'flex',

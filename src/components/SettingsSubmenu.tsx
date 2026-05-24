@@ -2,7 +2,9 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Sun, Moon, Monitor, ChevronRight, Lock, LockOpen, Volume2 } from 'lucide-react'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, chromeLabel, font, menuDividerStyle } from '../styles/tokens'
+import { phoneSubmenuSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import type { ThemeMode } from '../theme/themeStore'
 import { useSoundStore } from '../sound/soundStore'
 import { useSubmenuPosition } from './useSubmenuPosition'
@@ -10,6 +12,7 @@ import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import ThemeSubmenu from './ThemeSubmenu'
 import SoundSubmenu from './SoundSubmenu'
+import PhoneStackHeader from './PhoneStackHeader'
 
 const MODE_LABELS: Record<ThemeMode, string> = {
   light: 'Light',
@@ -25,6 +28,7 @@ interface SettingsSubmenuProps {
   isCanvasLocked: boolean
   onToggleCanvasLock: () => void
   showCanvasLock?: boolean
+  onBack?: () => void
 }
 
 export default function SettingsSubmenu({
@@ -35,9 +39,11 @@ export default function SettingsSubmenu({
   isCanvasLocked,
   onToggleCanvasLock,
   showCanvasLock = true,
+  onBack,
 }: SettingsSubmenuProps) {
+  const isPhone = useIsPhoneLayout()
   const [mounted, setMounted] = useState(false)
-  const pos = useSubmenuPosition(anchorRef)
+  const pos = useSubmenuPosition(anchorRef, { enabled: !isPhone })
   const soundAnchorRef = useRef<HTMLDivElement>(null)
   const themeAnchorRef = useRef<HTMLDivElement>(null)
   const [soundSubmenuOpen, setSoundSubmenuOpen] = useState(false)
@@ -67,15 +73,21 @@ export default function SettingsSubmenu({
     <>
       <motion.div
         data-cutline-submenu="settings"
-        initial={{ opacity: 0, scale: 0.96, x: -4 }}
-        animate={{ opacity: 1, scale: 1, x: 0 }}
-        exit={{ opacity: 0, scale: 0.96, x: -4 }}
-        transition={{ duration: 0.18, ease: 'easeOut' }}
+        {...(isPhone ? phoneSubmenuSlideMotion : {
+          initial: { opacity: 0, scale: 0.96, x: -4 },
+          animate: { opacity: 1, scale: 1, x: 0 },
+          exit: { opacity: 0, scale: 0.96, x: -4 },
+          transition: { duration: 0.18, ease: 'easeOut' },
+        })}
         style={{
-          position: 'fixed',
-          top: pos.top,
-          left: pos.left,
-          width: 260,
+          ...(isPhone
+            ? phoneSubmenuSheetStyle({ display: 'flex', flexDirection: 'column' })
+            : {
+                position: 'fixed',
+                top: pos.top,
+                left: pos.left,
+                width: 260,
+              }),
           ...chromeFrostedMenuStyle,
           fontFamily: font.family,
           overflow: 'hidden',
@@ -86,6 +98,7 @@ export default function SettingsSubmenu({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <SubmenuSoundScope>
+        {isPhone && onBack && <PhoneStackHeader title="Settings" onBack={onBack} />}
         {showCanvasLock && (
           <>
             <MenuRow
@@ -151,13 +164,16 @@ export default function SettingsSubmenu({
         </SubmenuSoundScope>
       </motion.div>
 
-      {soundSubmenuOpen && <SoundSubmenu anchorRef={soundAnchorRef} />}
+      {soundSubmenuOpen && (
+        <SoundSubmenu anchorRef={soundAnchorRef} onBack={() => setSoundSubmenuOpen(false)} />
+      )}
       {themeSubmenuOpen && (
         <ThemeSubmenu
           key="theme-submenu"
           anchorRef={themeAnchorRef}
           currentMode={mode}
           onSelect={onModeChange}
+          onBack={() => setThemeSubmenuOpen(false)}
         />
       )}
     </>,

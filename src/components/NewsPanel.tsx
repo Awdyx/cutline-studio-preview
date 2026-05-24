@@ -1,7 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Newspaper } from 'lucide-react'
-import { CHROME_FROSTED_MENU_CLASS, CHROME_PRESERVE_CASE_CLASS, card, chromeFrostedMenuStyle, chromeLabel, font } from '../styles/tokens'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
+import { CHROME_FROSTED_MENU_CLASS, CHROME_PRESERVE_CASE_CLASS, chromeFrostedMenuStyle, chromeLabel, font } from '../styles/tokens'
+import { phonePanelSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import { isSwapChromeMenuTarget } from './chromeMenuDismiss'
 import { partitionNewOld, PanelNewOldDivider } from './PanelNewOldDivider'
 import ChromeScrollFade from './ChromeScrollFade'
@@ -200,6 +202,7 @@ export default function NewsPanel({
   onTabChange,
   onPostClick,
 }: NewsPanelProps) {
+  const isPhone = useIsPhoneLayout()
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -231,11 +234,22 @@ export default function NewsPanel({
     <motion.div
       ref={panelRef}
       className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
-      style={cardBase}
-      initial={{ opacity: 0, scale: 0.96, y: -4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96, y: -4 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
+      style={{
+        ...(isPhone ? phonePanelSheetStyle() : cardBase),
+        ...chromeFrostedMenuStyle,
+        fontFamily: font.family,
+        color: font.colorPrimary,
+        zIndex: 30,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+      {...(isPhone ? phoneSubmenuSlideMotion : {
+        initial: { opacity: 0, scale: 0.96, y: -4 },
+        animate: { opacity: 1, scale: 1, y: 0 },
+        exit: { opacity: 0, scale: 0.96, y: -4 },
+        transition: { duration: 0.18, ease: 'easeOut' },
+      })}
     >
       <div
         style={{

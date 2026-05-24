@@ -100,6 +100,44 @@ html[data-space-draw] .cutline-canvas-viewport {
   overflow: hidden;
 }
 
+/* ─── Phone layout (narrow + coarse pointer; iPad unchanged) ─────────────── */
+
+html[data-layout='phone'] .pen-fab-menu--phone {
+  position: fixed;
+  right: 12px;
+  left: 12px;
+  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 52px + 12px);
+  width: auto;
+  transform-origin: bottom center;
+  flex-direction: column;
+  max-width: none;
+}
+
+html[data-layout='phone'] .pen-fab-menu--phone > div:first-of-type {
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-tool-settings {
+  border-top: 1px solid var(--ui-divider);
+}
+
+html[data-layout='phone'] .cutline-space-back-pill-host {
+  top: calc(max(12px, env(safe-area-inset-top, 0px)) + 96px + 8px) !important;
+  left: 12px !important;
+  right: 12px;
+  max-width: none;
+}
+
+html[data-layout='phone'] [data-plus-fab] {
+  z-index: 22;
+}
+
+html[data-layout='phone'] [data-pen-fab] {
+  z-index: 23;
+}
+
 :root {
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
   --glass-bg: rgba(255, 255, 255, 0.55);

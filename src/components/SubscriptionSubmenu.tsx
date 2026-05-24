@@ -24,6 +24,8 @@ import {
   useSubscriptionStore,
 } from '../subscription/subscriptionStore'
 import { usePanelAlignedSubmenuLayout } from './usePanelAlignedSubmenuLayout'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
+import { phoneSubmenuSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import ChromeScrollFade from './ChromeScrollFade'
@@ -137,6 +139,7 @@ export default function SubscriptionSubmenu({
   onManageBilling,
   onChangePlan,
 }: SubscriptionSubmenuProps) {
+  const isPhone = useIsPhoneLayout()
   const [mounted, setMounted] = useState(false)
   const subscription = useSubscriptionStore((s) => s.subscription)
   const billingEmail = useProfileStore((s) => s.profile.email)
@@ -146,7 +149,7 @@ export default function SubscriptionSubmenu({
     setMounted(true)
   }, [])
 
-  if (!mounted || layout.height <= 0) return null
+  if (!mounted || (!isPhone && layout.height <= 0)) return null
 
   const renewalLabel =
     subscription.status === 'canceled'
@@ -158,16 +161,22 @@ export default function SubscriptionSubmenu({
   return createPortal(
     <motion.div
       data-subscription-submenu
-      initial={{ opacity: 0, scale: 0.96, x: 8 }}
-      animate={{ opacity: 1, scale: 1, x: 0 }}
-      exit={{ opacity: 0, scale: 0.96, x: 8 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
+      {...(isPhone ? phoneSubmenuSlideMotion : {
+        initial: { opacity: 0, scale: 0.96, x: 8 },
+        animate: { opacity: 1, scale: 1, x: 0 },
+        exit: { opacity: 0, scale: 0.96, x: 8 },
+        transition: { duration: 0.18, ease: 'easeOut' },
+      })}
       style={{
-        position: 'fixed',
-        top: layout.top,
-        left: layout.left,
-        width: SUBMENU_WIDTH,
-        height: layout.height,
+        ...(isPhone
+          ? phoneSubmenuSheetStyle({ display: 'flex', flexDirection: 'column' })
+          : {
+              position: 'fixed',
+              top: layout.top,
+              left: layout.left,
+              width: SUBMENU_WIDTH,
+              height: layout.height,
+            }),
         display: 'flex',
         flexDirection: 'column',
         ...chromeFrostedMenuStyle,

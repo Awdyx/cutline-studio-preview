@@ -1,7 +1,9 @@
 import { useCallback, useRef, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { User, CreditCard, HelpCircle, LogOut } from 'lucide-react'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, CHROME_PRESERVE_CASE_CLASS, chromeFrostedMenuStyle, chromeLabel, font, menuDividerStyle } from '../styles/tokens'
+import { phonePanelSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import { useProfileStore } from '../profile/profileStore'
 import type { UserProfile } from '../profile/types'
 import { isProfileFilePickerOpen } from '../profile/profileFilePickerSession'
@@ -116,6 +118,7 @@ export default function ProfilePanel({
   onManageBilling,
   onChangePlan,
 }: ProfilePanelProps) {
+  const isPhone = useIsPhoneLayout()
   const panelRef = useRef<HTMLDivElement>(null)
   const [openSubmenu, setOpenSubmenu] = useState<ProfileSubmenuId | null>(null)
   const [profileDraft, setProfileDraft] = useState<UserProfile | null>(null)
@@ -196,11 +199,22 @@ export default function ProfilePanel({
       <motion.div
         ref={panelRef}
         className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
-        style={{ ...cardBase, top: PROFILE_PANEL_TOP + visualViewportOffsetTop }}
-        initial={{ opacity: 0, scale: 0.96, y: -4 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: -4 }}
-        transition={{ duration: 0.18, ease: 'easeOut' }}
+        style={{
+          ...(isPhone
+            ? phonePanelSheetStyle()
+            : { ...cardBase, top: PROFILE_PANEL_TOP + visualViewportOffsetTop }),
+          ...chromeFrostedMenuStyle,
+          fontFamily: font.family,
+          color: font.colorPrimary,
+          zIndex: 30,
+          overflow: 'hidden',
+        }}
+        {...(isPhone ? phoneSubmenuSlideMotion : {
+          initial: { opacity: 0, scale: 0.96, y: -4 },
+          animate: { opacity: 1, scale: 1, y: 0 },
+          exit: { opacity: 0, scale: 0.96, y: -4 },
+          transition: { duration: 0.18, ease: 'easeOut' },
+        })}
       >
         <div data-profile-panel-header>
           <ProfileBannerHeader

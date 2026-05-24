@@ -1,6 +1,7 @@
 import { useState, type ReactNode, type RefObject } from 'react'
 import { Bell, Newspaper } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, glass, font } from '../styles/tokens'
 import CanvasSearchBar from './CanvasSearchBar'
 import UserAvatar from './UserAvatar'
@@ -111,6 +112,7 @@ interface UserClusterProps {
   onNewsClick: () => void
   onNotificationClick: () => void
   onProfileClick: () => void
+  compact?: boolean
 }
 
 export function UserCluster({
@@ -120,9 +122,10 @@ export function UserCluster({
   onNewsClick,
   onNotificationClick,
   onProfileClick,
+  compact = false,
 }: UserClusterProps) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 6 : 8 }}>
       <button
         type="button"
         onClick={onNewsClick}
@@ -169,8 +172,8 @@ export function UserCluster({
         style={{
           ...islandBase,
           background: glass.bg,
-          gap: 8,
-          padding: '6px 12px 6px 8px',
+          gap: compact ? 0 : 8,
+          padding: compact ? 6 : '6px 12px 6px 8px',
           cursor: 'pointer',
         }}
       >
@@ -179,15 +182,17 @@ export function UserCluster({
           avatarColor={user.avatarColor}
           avatarImageUrl={user.avatarImageUrl}
           avatarFrame={user.avatarFrame}
-          size={24}
+          size={compact ? 28 : 24}
           fontSize={11}
         />
-        <span
-          className={CHROME_PRESERVE_CASE_CLASS}
-          style={{ fontSize: 14, fontWeight: 500, color: font.colorPrimary }}
-        >
-          {user.name}
-        </span>
+        {!compact && (
+          <span
+            className={CHROME_PRESERVE_CASE_CLASS}
+            style={{ fontSize: 14, fontWeight: 500, color: font.colorPrimary }}
+          >
+            {user.name}
+          </span>
+        )}
       </button>
     </div>
   )
@@ -218,8 +223,58 @@ export default function TopBar({
   onProfileClick,
   newsCount,
 }: TopBarProps) {
+  const isPhone = useIsPhoneLayout()
+
+  if (isPhone) {
+    return (
+      <div
+        className="cutline-top-bar cutline-top-bar--phone"
+        style={{
+          position: 'fixed',
+          top: 'max(12px, env(safe-area-inset-top, 0px))',
+          left: 12,
+          right: 12,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          zIndex: 20,
+          pointerEvents: 'none',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ pointerEvents: 'auto', flexShrink: 0 }}>
+            <BrandPill isOpen={cutlineMenuOpen} onClick={onCutlineClick} />
+          </div>
+          <div style={{ pointerEvents: 'auto', flexShrink: 0, minWidth: 0 }}>
+            <UserCluster
+              user={user}
+              unreadCount={unreadCount}
+              newsCount={newsCount}
+              onNewsClick={onNewsClick}
+              onNotificationClick={onNotificationClick}
+              onProfileClick={onProfileClick}
+              compact
+            />
+          </div>
+        </div>
+        <div style={{ pointerEvents: 'auto', width: '100%' }}>
+          <CanvasSearchBar transformRef={transformRef} compact />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
+      className="cutline-top-bar"
       style={{
         position: 'fixed',
         top: 16,

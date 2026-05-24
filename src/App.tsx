@@ -48,7 +48,7 @@ import { useCanvasLockFlatten } from './canvasLock/useCanvasLockFlatten'
 import { useCanvasLockFlattenStore } from './canvasLock/canvasLockFlattenStore'
 import { shouldFlattenCanvas } from './canvasLock/flattenVisibility'
 import { useCanvasWorkspaceStore } from './spaces/canvasWorkspaceStore'
-import SpaceBackPill, { SPACE_BACK_PILL_MOTION } from './components/SpaceBackPill'
+import SpaceBackPill, { SPACE_BACK_PILL_MOTION, SPACE_BACK_PILL_PHONE_CLASS } from './components/SpaceBackPill'
 import CutlineMenu from './components/CutlineMenu'
 import { NEWS_POSTS } from './content/news'
 import type { Notification, NotificationTab, NewsTab } from './types'
@@ -73,6 +73,7 @@ import { useCanvasPanBounce } from './canvas/useCanvasPanBounce'
 import { useCanvasCompositorWarmup } from './canvas/useCanvasCompositorWarmup'
 import CanvasSwapVeil from './canvas/CanvasSwapVeil'
 import { blurStrayTextFocus } from './platform/textFocus'
+import { useLayoutProfile } from './hooks/useLayoutProfile'
 import { useShortcutUiStore } from './shortcuts/shortcutUiStore'
 
 const meshBlobMotion = [
@@ -273,6 +274,7 @@ type OpenPanel =
   | null
 
 function App() {
+  useLayoutProfile()
   const { onPanning, onPanningStop } = usePanMotionHandler()
   useCanvasNavigationTracking()
   const canvasSelectionPointer = useCanvasSelectionPointer()
@@ -667,6 +669,7 @@ function App() {
 
       {showSpaceBackPill && (
         <div
+          className={SPACE_BACK_PILL_PHONE_CLASS}
           style={{
             ...SPACE_BACK_PILL_MOTION.style,
             opacity:

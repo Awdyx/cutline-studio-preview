@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Keyboard, Settings, ChevronRight } from 'lucide-react'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, font, menuDividerStyle } from '../styles/tokens'
+import { phonePanelSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import type { ThemeMode } from '../theme/themeStore'
 import CutlineAppNavSection from './CutlineAppNavSection'
 import ShortcutsSubmenu from './ShortcutsSubmenu'
@@ -31,6 +33,7 @@ export default function CutlineMenu({
   onToggleCanvasLock,
   showCanvasLock = true,
 }: CutlineMenuProps) {
+  const isPhone = useIsPhoneLayout()
   const panelRef = useRef<HTMLDivElement>(null)
   const settingsAnchorRef = useRef<HTMLDivElement>(null)
   const shortcutsAnchorRef = useRef<HTMLDivElement>(null)
@@ -83,15 +86,21 @@ export default function CutlineMenu({
     <>
       <motion.div
         ref={panelRef}
-        initial={{ opacity: 0, scale: 0.96, y: -4 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: -4 }}
-        transition={{ duration: 0.18, ease: 'easeOut' }}
+        {...(isPhone ? phoneSubmenuSlideMotion : {
+          initial: { opacity: 0, scale: 0.96, y: -4 },
+          animate: { opacity: 1, scale: 1, y: 0 },
+          exit: { opacity: 0, scale: 0.96, y: -4 },
+          transition: { duration: 0.18, ease: 'easeOut' },
+        })}
         style={{
-          position: 'fixed',
-          top: 64,
-          left: 16,
-          width: 260,
+          ...(isPhone
+            ? phonePanelSheetStyle({ display: 'flex', flexDirection: 'column' })
+            : {
+                position: 'fixed',
+                top: 64,
+                left: 16,
+                width: 260,
+              }),
           ...chromeFrostedMenuStyle,
           fontFamily: font.family,
           color: font.colorPrimary,
@@ -142,10 +151,15 @@ export default function CutlineMenu({
             isCanvasLocked={isCanvasLocked}
             onToggleCanvasLock={onToggleCanvasLock}
             showCanvasLock={showCanvasLock}
+            onBack={() => setSettingsSubmenuOpen(false)}
           />
         )}
         {shortcutsSubmenuOpen && (
-          <ShortcutsSubmenu key="shortcuts-submenu" anchorRef={shortcutsAnchorRef} />
+          <ShortcutsSubmenu
+            key="shortcuts-submenu"
+            anchorRef={shortcutsAnchorRef}
+            onBack={() => setShortcutsSubmenuOpen(false)}
+          />
         )}
       </AnimatePresence>
     </>

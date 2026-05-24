@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { playSound } from '../sound/playSound'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Plus, StickyNote, Layers, Type, Image, LayoutGrid } from 'lucide-react'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import {
   CHROME_CARD_CLASS,
   CHROME_FROSTED_MENU_CLASS,
@@ -14,6 +15,7 @@ import {
   glass,
   menuDividerStyle,
 } from '../styles/tokens'
+import { phoneFabSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
 import { useShortcutUiStore, type ChromeMenuSoundOpts } from '../shortcuts/shortcutUiStore'
 import { countSpaceWidgets, useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { MAX_SPACE_WIDGETS } from '../canvasItems/types'
@@ -156,6 +158,7 @@ export default function PlusFab({
   onStudySubjectSelect,
   showSpaceOption = true,
 }: PlusFabProps) {
+  const isPhone = useIsPhoneLayout()
   const [isOpen, setIsOpen] = useState(false)
   const [fabHoverScale, setFabHoverScale] = useState(false)
   const [widgetsSubmenuOpen, setWidgetsSubmenuOpen] = useState(false)
@@ -283,11 +286,12 @@ export default function PlusFab({
           <motion.div
             key="fab-menu"
             ref={menuPanelRef}
-            {...PLUS_FAB_MENU_MOTION}
+            {...(isPhone ? phoneSubmenuSlideMotion : PLUS_FAB_MENU_MOTION)}
             className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
             style={{
-              width: 308,
-              marginBottom: 12,
+              ...(isPhone
+                ? phoneFabSheetStyle({ pointerEvents: 'auto' })
+                : { width: 308, marginBottom: 12 }),
               ...chromeFrostedMenuStyle,
               borderRadius: card.radius,
               fontFamily: font.family,
@@ -323,6 +327,7 @@ export default function PlusFab({
             key="widgets-submenu"
             anchorRef={widgetsAnchorRef}
             menuPanelRef={menuPanelRef}
+            onBack={() => setWidgetsSubmenuOpen(false)}
           />
         )}
       </AnimatePresence>

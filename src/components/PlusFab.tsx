@@ -16,6 +16,7 @@ import {
   MessageCircleQuestion,
   Book,
   ChevronLeft,
+  LayoutGrid,
   X,
 } from 'lucide-react'
 import {
@@ -37,6 +38,7 @@ import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import { isSwapChromeMenuTarget } from './chromeMenuDismiss'
 import { useCanvasMeshPauseWhile } from '../canvas/useCanvasMeshPause'
+import WidgetPickerModal from './widgets/WidgetPickerModal'
 
 type CanvasAddType = 'space' | 'sticky' | 'text' | 'image'
 type StudyActionType = 'mcq' | 'saq' | 'mini_exam'
@@ -205,11 +207,13 @@ function SubmenuHeader({
 
 function MainMenuContent({
   onAddToCanvas,
+  onWidgetsClick,
   onStudyItemClick,
   showSpaceOption,
   spaceWidgetCount,
 }: {
   onAddToCanvas: (type: CanvasAddType) => void
+  onWidgetsClick: () => void
   onStudyItemClick: (type: StudyActionType | 'tutor') => void
   showSpaceOption: boolean
   spaceWidgetCount: number
@@ -246,6 +250,7 @@ function MainMenuContent({
           onClick={() => onAddToCanvas(type)}
         />
       ))}
+      <MenuRow icon={LayoutGrid} label="Widgets" onClick={onWidgetsClick} />
 
       <div style={menuDividerStyle} />
 
@@ -344,6 +349,7 @@ export default function PlusFab({
   const [pendingTutorAction, setPendingTutorAction] =
     useState<TutorActionType | null>(null)
   const [fabHoverScale, setFabHoverScale] = useState(false)
+  const [widgetPickerOpen, setWidgetPickerOpen] = useState(false)
   const spaceWidgetCount = useCanvasItemsStore((s) => countSpaceWidgets(s.items))
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -352,7 +358,7 @@ export default function PlusFab({
   const isOpenRef = useRef(isOpen)
   isOpenRef.current = isOpen
 
-  useCanvasMeshPauseWhile(isOpen)
+  useCanvasMeshPauseWhile(isOpen || widgetPickerOpen)
 
   function captureMenuShellHeight() {
     const h = menuStackRef.current?.offsetHeight
@@ -391,6 +397,17 @@ export default function PlusFab({
   function handleAddToCanvas(type: CanvasAddType) {
     onAddToCanvas(type)
     closeMenu({ silent: true })
+  }
+
+  function handleWidgetsClick() {
+    closeMenu({ silent: true })
+    playSound('menuOpen')
+    setWidgetPickerOpen(true)
+  }
+
+  function closeWidgetPicker() {
+    if (widgetPickerOpen) playSound('menuClose')
+    setWidgetPickerOpen(false)
   }
 
   function handleStudyItemClick(type: StudyActionType | 'tutor') {
@@ -524,6 +541,7 @@ export default function PlusFab({
                   <FabViewPanel key="main">
                     <MainMenuContent
                       onAddToCanvas={handleAddToCanvas}
+                      onWidgetsClick={handleWidgetsClick}
                       onStudyItemClick={handleStudyItemClick}
                       showSpaceOption={showSpaceOption}
                       spaceWidgetCount={spaceWidgetCount}
@@ -555,6 +573,8 @@ export default function PlusFab({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <WidgetPickerModal isOpen={widgetPickerOpen} onClose={closeWidgetPicker} />
 
       <button
         type="button"

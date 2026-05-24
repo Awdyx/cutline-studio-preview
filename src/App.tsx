@@ -347,7 +347,9 @@ function App() {
       useSoundStore.getState().hydrate()
       clearHistory()
       onHydrated()
-      setAppHydrated(true)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setAppHydrated(true))
+      })
       blurStrayTextFocus()
     })()
 
@@ -470,13 +472,8 @@ function App() {
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        width: '100vw',
-        height: '100dvh',
-        overflow: 'hidden',
-      }}
+      className="cutline-app-shell"
+      data-ready={appHydrated || undefined}
     >
       <div ref={viewportRef} className="cutline-canvas-viewport">
         <div

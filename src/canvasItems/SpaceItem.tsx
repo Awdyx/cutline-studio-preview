@@ -27,6 +27,10 @@ import {
   canvasItemDeleteExit,
   canvasItemDeleteExitTransition,
 } from './canvasItemMotion'
+import {
+  resolveItemTextAlignment,
+  textAlignmentEditorStyle,
+} from './textAlignment'
 
 const DRAG_THRESHOLD_PX = 10
 const liftSpring = { type: 'spring' as const, stiffness: 380, damping: 28, mass: 0.7 }
@@ -273,6 +277,7 @@ export default function SpaceItem({
             lineHeight: 1.2,
             flexShrink: 0,
             userSelect: 'none',
+            ...textAlignmentEditorStyle(resolveItemTextAlignment(item)),
           }}
         >
           {displayName}

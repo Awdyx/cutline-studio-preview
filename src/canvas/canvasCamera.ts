@@ -30,9 +30,11 @@ export type FocusItemOptions = {
 }
 
 const FOCUS_FIT_PADDING_X = 40
+const FOCUS_FIT_PADDING_X_PHONE = 12
 const FOCUS_FIT_PADDING_TOP_DESKTOP = 56
 const FOCUS_FIT_PADDING_BOTTOM = 48
-const FOCUS_FIT_PHONE_HEADER_CLEARANCE = 16
+const FOCUS_FIT_PADDING_BOTTOM_PHONE = 52
+const FOCUS_FIT_PHONE_HEADER_CLEARANCE = 8
 
 let activeFocusRaf: number | null = null
 
@@ -71,11 +73,11 @@ function defaultFitPadding(): {
 } {
   if (isPhoneLayout()) {
     return {
-      paddingX: FOCUS_FIT_PADDING_X,
+      paddingX: FOCUS_FIT_PADDING_X_PHONE,
       paddingTop:
         PHONE_HEADER_BLOCK_HEIGHT +
         FOCUS_FIT_PHONE_HEADER_CLEARANCE,
-      paddingBottom: FOCUS_FIT_PADDING_BOTTOM,
+      paddingBottom: FOCUS_FIT_PADDING_BOTTOM_PHONE,
     }
   }
   return {
@@ -179,6 +181,16 @@ function animateCameraTo(
   }
 
   activeFocusRaf = requestAnimationFrame(tick)
+}
+
+/** Animate pan/zoom to an explicit camera (e.g. restore after menu focus). */
+export function animateCameraToTarget(
+  ref: ReactZoomPanPinchContentRef | null,
+  target: SpaceCamera,
+  options?: { curved?: boolean; animationMs?: number },
+): void {
+  if (!ref) return
+  animateCameraTo(ref, target, options)
 }
 
 /** Trackpad pinch / modifier wheel step (matches react-zoom-pan-pinch smooth wheel). */

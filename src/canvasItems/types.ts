@@ -22,6 +22,12 @@ export type CanvasItemBase = {
   height: number
   /** Omitted or `committed` = permanent canvas content; `annotation` = added while locked. */
   layer?: CanvasLayer
+  /** Main-canvas position before transfer into a space — restored on send-back. */
+  mainCanvasOrigin?: {
+    x: number
+    y: number
+    zIndex: number
+  }
 }
 
 export type StickyCanvasItem = CanvasItemBase & {

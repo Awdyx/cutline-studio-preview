@@ -44,7 +44,7 @@ function normalizeStroke(raw: unknown): Stroke | null {
   stroke.path =
     typeof o.path === 'string' && o.path.length > 0
       ? o.path
-      : strokeToSvgPath(stroke, true)
+      : strokeToSvgPath(stroke, false)
   return stroke
 }
 

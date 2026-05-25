@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  CornerUpLeft,
   Frame,
   Proportions,
   Trash2,
@@ -36,6 +37,7 @@ export default function CanvasItemZOrderMenu() {
     (s) => s.restoreSizingAnimatingId,
   )
   const deleteItem = useCanvasItemsStore((s) => s.deleteItem)
+  const sendItemToMainCanvas = useCanvasItemsStore((s) => s.sendItemToMainCanvas)
   const previewAdjustSpaceId = useCanvasItemsStore((s) => s.previewAdjustSpaceId)
   const setPreviewAdjustSpace = useCanvasItemsStore((s) => s.setPreviewAdjustSpace)
 
@@ -76,6 +78,12 @@ export default function CanvasItemZOrderMenu() {
       spaceMeta.strokes.length > 0 ||
       spaceMeta.annotationStrokes.length > 0)
   const isPreviewAdjusting = previewAdjustSpaceId === itemId
+  const isInsideSpace = useCanvasWorkspaceStore((s) => s.activeCanvasId !== 'main')
+  const canSendBackToMain =
+    isInsideSpace &&
+    menuItem != null &&
+    menuItem.type !== 'space' &&
+    menuItem.mainCanvasOrigin != null
 
   const menuLayout = useCanvasItemZMenuLayout(menuRef, itemId, showMenu)
   const menuScale = isPhone ? PHONE_Z_ORDER_MENU_SCALE : 1
@@ -126,6 +134,13 @@ export default function CanvasItemZOrderMenu() {
                 onClick={() =>
                   setPreviewAdjustSpace(isPreviewAdjusting ? null : itemId)
                 }
+              />
+            )}
+            {canSendBackToMain && (
+              <MenuRow
+                icon={CornerUpLeft}
+                label="Send back to main canvas"
+                onClick={() => sendItemToMainCanvas(itemId)}
               />
             )}
             {showRestoreImportSizing && (

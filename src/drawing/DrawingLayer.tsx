@@ -10,7 +10,12 @@ import { strokeToSvgPath } from './strokePath'
 import { useThemeStore } from '../theme/themeStore'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
 import type { Stroke } from './types'
-import { Z_ANNOTATION_STROKES, Z_ACTIVE_STROKE, committedStrokeZIndex } from '../canvasItems/canvasZOrder'
+import {
+  Z_ANNOTATION_STROKES,
+  Z_ACTIVE_STROKE,
+  committedStrokeZIndex,
+  isStrokeAboveItems,
+} from '../canvasItems/canvasZOrder'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './canvasDimensions'
 
 const HIGHLIGHTER_GLOW_FILTER_ID = 'cutline-highlighter-glow'
@@ -24,7 +29,7 @@ const CompletedStrokePath = memo(function CompletedStrokePath({
   stroke: Stroke
   fill: string
 }) {
-  const d = stroke.path
+  const d = strokeToSvgPath(stroke, false) || stroke.path
   if (!d) return null
   return <path d={d} fill={fill} />
 })
@@ -157,7 +162,18 @@ function groupCommittedStrokesByZ(strokes: Stroke[]): [number, Stroke[]][] {
   return [...groups.entries()].sort(([a], [b]) => a - b)
 }
 
-export default function DrawingLayer() {
+export type DrawingLayerBand =
+  | 'committed-below'
+  | 'committed-above'
+  | 'annotation'
+  | 'active'
+
+function strokeMatchesBand(stroke: Stroke, band: 'committed-below' | 'committed-above'): boolean {
+  const z = committedStrokeZIndex(stroke)
+  return band === 'committed-above' ? isStrokeAboveItems(z) : !isStrokeAboveItems(z)
+}
+
+export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
   const activeCanvasId = useCanvasWorkspaceStore((s) => s.activeCanvasId)
   const strokes = useStrokesStore((s) => s.strokes)
   const annotationStrokes = useStrokesStore((s) => s.annotationStrokes)
@@ -168,27 +184,31 @@ export default function DrawingLayer() {
   const hideCommittedStrokes =
     shouldFlattenCanvas(isLocked) && flattenReady && strokes.length > 0
 
-  return (
-    <div key={activeCanvasId} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      {!hideCommittedStrokes &&
-        groupCommittedStrokesByZ(strokes).map(([zIndex, groupStrokes]) => (
-          <StrokeSvgLayer
-            key={zIndex}
-            strokes={groupStrokes}
-            activeStroke={null}
-            zIndex={zIndex}
-            glowFilterId={`${HIGHLIGHTER_GLOW_FILTER_ID}-${zIndex}`}
-            strokeLayer="committed"
-          />
-        ))}
-      <StrokeSvgLayer
-        strokes={annotationStrokes}
-        activeStroke={null}
-        zIndex={Z_ANNOTATION_STROKES}
-        glowFilterId={ANNOTATION_GLOW_FILTER_ID}
-        strokeLayer="annotation"
-      />
-      {activeStroke && (
+  if (band === 'annotation') {
+    if (annotationStrokes.length === 0) return null
+    return (
+      <div
+        key={activeCanvasId}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+      >
+        <StrokeSvgLayer
+          strokes={annotationStrokes}
+          activeStroke={null}
+          zIndex={Z_ANNOTATION_STROKES}
+          glowFilterId={ANNOTATION_GLOW_FILTER_ID}
+          strokeLayer="annotation"
+        />
+      </div>
+    )
+  }
+
+  if (band === 'active') {
+    if (!activeStroke) return null
+    return (
+      <div
+        key={activeCanvasId}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+      >
         <StrokeSvgLayer
           strokes={[]}
           activeStroke={activeStroke}
@@ -196,7 +216,26 @@ export default function DrawingLayer() {
           glowFilterId={ACTIVE_STROKE_GLOW_FILTER_ID}
           strokeLayer={lockActive ? 'annotation' : 'committed'}
         />
-      )}
+      </div>
+    )
+  }
+
+  const committedBand = band
+  const filtered = strokes.filter((stroke) => strokeMatchesBand(stroke, committedBand))
+  if (hideCommittedStrokes || filtered.length === 0) return null
+
+  return (
+    <div key={activeCanvasId} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      {groupCommittedStrokesByZ(filtered).map(([zIndex, groupStrokes]) => (
+        <StrokeSvgLayer
+          key={zIndex}
+          strokes={groupStrokes}
+          activeStroke={null}
+          zIndex={zIndex}
+          glowFilterId={`${HIGHLIGHTER_GLOW_FILTER_ID}-${committedBand}-${zIndex}`}
+          strokeLayer="committed"
+        />
+      ))}
     </div>
   )
 }

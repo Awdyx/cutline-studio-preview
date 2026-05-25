@@ -29,16 +29,9 @@ import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
 import StudySubjectMenuRow from './study/StudySubjectMenuRow'
 import { STUDY_SUBJECTS, type StudySubjectId } from './study/studyHubData'
 
-type CanvasAddType = 'space' | 'sticky' | 'text' | 'image'
+export type CanvasAddType = 'space' | 'sticky' | 'text' | 'image'
 
-interface PlusFabProps {
-  onAddToCanvas: (type: CanvasAddType) => void
-  onStudySubjectSelect?: (subjectId: StudySubjectId) => void
-  /** Spaces only exist on the main canvas — hide the option when inside a space. */
-  showSpaceOption?: boolean
-}
-
-const ADD_TO_CANVAS_ITEMS: {
+export const ADD_TO_CANVAS_ITEMS: {
   icon: React.ElementType
   label: string
   type: CanvasAddType
@@ -48,6 +41,13 @@ const ADD_TO_CANVAS_ITEMS: {
   { icon: Type, label: 'Text', type: 'text' },
   { icon: Image, label: 'Image', type: 'image' },
 ]
+
+interface PlusFabProps {
+  onAddToCanvas: (type: CanvasAddType) => void
+  onStudySubjectSelect?: (subjectId: StudySubjectId) => void
+  /** Spaces only exist on the main canvas — hide the option when inside a space. */
+  showSpaceOption?: boolean
+}
 
 const PLUS_FAB_MENU_PAD_X = 16
 
@@ -118,6 +118,7 @@ function MainMenuContent({
               key={type}
               icon={icon}
               label={label}
+              labelHoverScale
               disabled={type === 'space' && spacesFull}
               right={
                 type === 'space' ? (
@@ -127,6 +128,7 @@ function MainMenuContent({
                       fontWeight: 500,
                       fontVariantNumeric: 'tabular-nums',
                       color: spacesFull ? font.colorFaint : font.colorMuted,
+                      opacity: spacesFull ? 0.55 : 0.45,
                       flexShrink: 0,
                     }}
                   >
@@ -138,7 +140,12 @@ function MainMenuContent({
             />
           ))}
           <div ref={widgetsAnchorRef} data-plus-fab-submenu-anchor="widgets" style={{ paddingBottom: 10 }}>
-            <MenuRow icon={LayoutGrid} label="Widgets" onClick={onWidgetsClick} />
+            <MenuRow
+              icon={LayoutGrid}
+              label="Widgets"
+              labelHoverScale
+              onClick={onWidgetsClick}
+            />
           </div>
 
           <div style={plusFabSectionDividerStyle} />

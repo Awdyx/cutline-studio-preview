@@ -9,20 +9,19 @@ import {
   useCanvasItemsStore,
   useItemIsSoleSelected,
   useItemSelected,
-  useItemSelectionIndex,
   useItemZOrderPulse,
 } from './canvasItemsStore'
 import { useCanvasEditingAllowed } from '../canvasEdit/layer'
+import { useSpaceDropStore } from '../spaces/spaceDropStore'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import DragHandle from './DragHandle'
 import ResizeHandle from './ResizeHandle'
-import { Z_SELECTION_ABOVE_DIM } from './canvasZOrder'
+import { displayZIndexForCanvasItem } from './canvasZOrder'
 import { getGrabHandlePlacement } from './grabZone'
 import { useCanvasItemDrag } from './useCanvasItemDrag'
 import { useCanvasItemResize } from './useCanvasItemResize'
-import { useDeferredCanvasTap } from '../canvas/useDeferredCanvasTap'
-import { shouldSkipItemSelectForOutsideDismiss } from '../canvas/canvasSelectionDismiss'
+import { useCanvasItemAreaPointer } from '../canvas/useCanvasItemAreaPointer'
 import type { CanvasItem } from './types'
 import {
   STUDY_HUB_ASPECT,
@@ -36,6 +35,8 @@ import {
 import {
   canvasItemDeleteExit,
   canvasItemDeleteExitTransition,
+  canvasItemSpaceTransferExit,
+  canvasItemSpaceTransferExitTransition,
 } from './canvasItemMotion'
 import { card } from '../styles/tokens'
 
@@ -53,6 +54,7 @@ export default function CanvasItemShell({
   children: React.ReactNode
 }) {
   const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id)
+  const isAbsorbing = useSpaceDropStore((s) => s.absorbingItemId === item.id)
 
   const { isResizing, snapBack, handlePointerDown: onResizeDown } = useCanvasItemResize(
     item.id,
@@ -81,8 +83,9 @@ export default function CanvasItemShell({
   const frozen = isItemFrozen(item, isLocked)
   const interactionFrozen = frozen || moveBlocked
   const isSelected = useItemSelected(item.id)
-  const selectionIndex = useItemSelectionIndex(item.id)
   const isSoleSelected = useItemIsSoleSelected(item.id)
+  const selectedIds = useCanvasItemsStore((s) => s.selectedIds)
+  const allItems = useCanvasItemsStore((s) => s.items)
   const zOrderPulse = useItemZOrderPulse(item.id)
   const editingAllowed = useCanvasEditingAllowed()
   const zMenuSuppressedItemId = useCanvasItemsStore((s) => s.zMenuSuppressedItemId)
@@ -103,16 +106,24 @@ export default function CanvasItemShell({
     const timer = window.setTimeout(() => setZPulseClass(null), 360)
     return () => window.clearTimeout(timer)
   }, [zOrderPulse])
-  const selectItem = useCanvasItemsStore((s) => s.selectItem)
-  const itemTap = useDeferredCanvasTap((e) => {
-    if (shouldSkipItemSelectForOutsideDismiss(item.id)) return
-    selectItem(item.id, e.shiftKey)
+  const areaPointer = useCanvasItemAreaPointer({
+    itemId: item.id,
+    isSelected,
+    frozen,
+    moveBlocked,
+    onGrabPointerDown,
   })
-  const displayZIndex =
-    selectionIndex >= 0 ? Z_SELECTION_ABOVE_DIM + selectionIndex : item.zIndex
+  const displayZIndex = useMemo(
+    () =>
+      displayZIndexForCanvasItem(allItems, item, selectedIds, {
+        isActiveDrag: isDragging,
+      }),
+    [allItems, item, selectedIds, isDragging],
+  )
   const isFlatItem =
     item.type === 'text' || item.type === 'image' || item.type === 'video'
   const lifted = isDragging || isResizing
+  const absorbTransition = { duration: 0.34, ease: [0.4, 0, 0.2, 1] as const }
   const clipContent = item.type === 'sticky' || item.type === 'study_hub'
   const grabHandlePlacement = useMemo(
     () =>
@@ -126,6 +137,7 @@ export default function CanvasItemShell({
       ),
     [item.x, item.y, item.width, item.height],
   )
+  const handleOcclusionKey = `${item.x},${item.y},${item.width},${item.height},${item.zIndex},${displayZIndex}`
 
   const studyHubLayout =
     isStudyHub && !isResizing && !isDragging && !snapBack ? ('size' as const) : false
@@ -152,19 +164,29 @@ export default function CanvasItemShell({
       data-resizing={isResizing && isStudyHub ? true : undefined}
       data-dragging={isDragging && isStudyHub ? true : undefined}
       layout={studyHubLayout}
-      exit={{
-        ...canvasItemDeleteExit,
-        transition: canvasItemDeleteExitTransition,
-      }}
+      exit={
+        isAbsorbing
+          ? {
+              ...canvasItemSpaceTransferExit,
+              transition: canvasItemSpaceTransferExitTransition,
+            }
+          : {
+              ...canvasItemDeleteExit,
+              transition: canvasItemDeleteExitTransition,
+            }
+      }
       animate={{
-        scale: isFlatItem
-          ? 1
-          : lifted && !isResizing
-            ? 1.03
-            : 1,
+        scale: isAbsorbing
+          ? 0.86
+          : isFlatItem
+            ? 1
+            : lifted && !isResizing
+              ? 1.03
+              : 1,
+        opacity: isAbsorbing ? 0.35 : 1,
         boxShadow: shellBoxShadow,
       }}
-      transition={shellTransition}
+      transition={isAbsorbing ? absorbTransition : shellTransition}
       style={{
         position: 'absolute',
         left: item.x,
@@ -184,30 +206,26 @@ export default function CanvasItemShell({
             <DragHandle
               placement={grabHandlePlacement}
               onPointerDown={onGrabPointerDown}
+              occlusionRevisionKey={handleOcclusionKey}
+              occlusionActive={isSelected}
             />
           )}
-          <ResizeHandle onPointerDown={onResizeDown} />
+          <ResizeHandle
+            onPointerDown={onResizeDown}
+            occlusionRevisionKey={handleOcclusionKey}
+            occlusionActive={isSelected}
+          />
         </div>
       )}
       <div
         onPointerDown={(e) => {
-          if (frozen || e.pointerType === 'pen') return
           if (e.target instanceof HTMLElement && e.target.closest('button')) return
-          if (
-            isSelected &&
-            useCanvasItemsStore.getState().zMenuSuppressedItemId === item.id
-          ) {
-            useCanvasItemsStore.setState({ zMenuSuppressedItemId: null })
-          }
-          if (isSelected) {
-            if (!moveBlocked) onGrabPointerDown(e)
-            return
-          }
-          itemTap.onPointerDown(e)
+          areaPointer.onPointerDown(e)
         }}
-        onPointerMove={itemTap.onPointerMove}
-        onPointerUp={itemTap.onPointerUp}
-        onPointerCancel={itemTap.onPointerCancel}
+        onPointerMove={areaPointer.onPointerMove}
+        onPointerUp={areaPointer.onPointerUp}
+        onPointerCancel={areaPointer.onPointerCancel}
+        onContextMenu={areaPointer.onContextMenu}
         className={[
           isSelected ? 'canvas-item-selected-focus' : null,
           zPulseClass,

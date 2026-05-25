@@ -6,7 +6,7 @@ export function ensureStrokePath(stroke: Stroke): Stroke {
   if (typeof stroke.path === 'string' && stroke.path.length > 0) {
     return stroke
   }
-  const path = strokeToSvgPath(stroke, true)
+  const path = strokeToSvgPath(stroke, false)
   return path ? { ...stroke, path } : stroke
 }
 

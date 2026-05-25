@@ -22,7 +22,10 @@ import {
   textAlignmentEditorStyle,
 } from './textAlignment'
 import { useEditableCanvasTap } from '../canvas/useEditableCanvasTap'
-import { shouldSkipItemSelectForOutsideDismiss } from '../canvas/canvasSelectionDismiss'
+import { useCanvasItemAreaPointer } from '../canvas/useCanvasItemAreaPointer'
+import { dismissSelectionForOutsideItemTap } from '../canvas/canvasSelectionDismiss'
+import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
+import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { useCanvasItemDrag } from './useCanvasItemDrag'
 import type { TextCanvasItem } from './types'
 
@@ -46,6 +49,16 @@ export default function TextItem({
   const [isEditing, setIsEditing] = useState(false)
   const isSelected = useItemSelected(item.id)
   const { onGrabPointerDown } = useCanvasItemDrag(item.id)
+  const isPhone = useIsPhoneLayout()
+  const canvasEditEnabled = useCanvasEditStore((s) => s.enabled)
+  const moveBlocked = isPhone && !canvasEditEnabled
+  const areaPointer = useCanvasItemAreaPointer({
+    itemId: item.id,
+    isSelected,
+    frozen,
+    moveBlocked,
+    onGrabPointerDown,
+  })
 
   const scheduleSave = useCallback(
     (html: string) => {
@@ -110,7 +123,7 @@ export default function TextItem({
     focusOnTouchStart: () => isEditing,
     onFocus: () => focusEditor(),
     onTap: (e) => {
-      if (shouldSkipItemSelectForOutsideDismiss(item.id)) return
+      if (dismissSelectionForOutsideItemTap(item.id)) return
       useCanvasItemsStore.getState().selectItem(item.id, e.shiftKey)
       beginEditing(true)
     },
@@ -210,6 +223,10 @@ export default function TextItem({
                 e.preventDefault()
                 return
               }
+              if (e.pointerType === 'mouse' && e.button === 2) {
+                areaPointer.onPointerDown(e)
+                return
+              }
               const editor = editorRef.current
               if (
                 !editor ||
@@ -223,11 +240,20 @@ export default function TextItem({
                 })
                 return
               }
-              editorTap.onPointerDown(e)
+              if (isEditing) {
+                editorTap.onPointerDown(e)
+                return
+              }
+              areaPointer.onPointerDown(e)
             }}
-            onPointerMove={editorTap.onPointerMove}
-            onPointerUp={editorTap.onPointerUp}
-            onPointerCancel={editorTap.onPointerCancel}
+            onPointerMove={
+              isEditing ? editorTap.onPointerMove : areaPointer.onPointerMove
+            }
+            onPointerUp={isEditing ? editorTap.onPointerUp : areaPointer.onPointerUp}
+            onPointerCancel={
+              isEditing ? editorTap.onPointerCancel : areaPointer.onPointerCancel
+            }
+            onContextMenu={areaPointer.onContextMenu}
           onInput={() => {
             const el = editorRef.current
             if (!el) return

@@ -2,7 +2,7 @@
 export const HANDLE_VISUAL_SIZE = 20
 
 /** Slightly larger tap/drag target than the visible icon. */
-export const HANDLE_HIT_SIZE = 36
+export const HANDLE_HIT_SIZE = 72
 
 /** Grab handle: left of the item, vertically aligned with the item's top edge. */
 export const GRAB_HANDLE_GAP = 4

@@ -19,12 +19,44 @@ export function resolveSpacePreviewPan(
   pan: Partial<SpacePreviewPan> | undefined,
 ): SpacePreviewPan {
   if (!pan) return DEFAULT_SPACE_PREVIEW_PAN
-  const x = Number.isFinite(pan.x) ? pan.x : 0
-  const y = Number.isFinite(pan.y) ? pan.y : 0
-  const scale = Number.isFinite(pan.scale)
-    ? Math.max(PREVIEW_ZOOM_MIN, Math.min(PREVIEW_ZOOM_MAX, pan.scale))
-    : 1
+  const x = typeof pan.x === 'number' && Number.isFinite(pan.x) ? pan.x : 0
+  const y = typeof pan.y === 'number' && Number.isFinite(pan.y) ? pan.y : 0
+  const rawScale = pan.scale
+  const scale =
+    typeof rawScale === 'number' && Number.isFinite(rawScale)
+      ? Math.max(PREVIEW_ZOOM_MIN, Math.min(PREVIEW_ZOOM_MAX, rawScale))
+      : 1
   return { x, y, scale }
+}
+
+export type PreviewScreenRect = {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/** Map a canvas item box to container pixels (matches SVG slice + preview pan). */
+export function canvasItemToPreviewScreenRect(
+  item: { x: number; y: number; width: number; height: number },
+  view: SpacePreviewPan,
+  containerWidth: number,
+  containerHeight: number,
+): PreviewScreenRect {
+  const pan = resolveSpacePreviewPan(view)
+  const renderScale = previewRenderScale(
+    containerWidth,
+    containerHeight,
+    pan.scale,
+  )
+  const cx = containerWidth / 2
+  const cy = containerHeight / 2
+  return {
+    left: cx + (item.x - CANVAS_WIDTH / 2 - pan.x) * renderScale,
+    top: cy + (item.y - CANVAS_HEIGHT / 2 - pan.y) * renderScale,
+    width: item.width * renderScale,
+    height: item.height * renderScale,
+  }
 }
 
 export function previewSliceScale(

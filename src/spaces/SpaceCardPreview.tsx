@@ -1,17 +1,27 @@
 import { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { resolveStrokeFill } from '../drawing/colorUtils'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
 import type { Stroke } from '../drawing/types'
 import {
   canvasBackgroundColor,
-  resolveStickyColor,
 } from '../theme/paletteGenerator'
 import { useThemeStore } from '../theme/themeStore'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
 import type { CanvasItem } from '../canvasItems/types'
 import { PreviewMediaImage } from '../canvasItems/PreviewMediaImage'
 import { useCanvasWorkspaceStore } from './canvasWorkspaceStore'
-import { resolveSpacePreviewPan, previewTransform, type SpacePreviewPan } from './spacePreviewPan'
+import { useSpaceDropStore } from './spaceDropStore'
+import {
+  PreviewStickyItem,
+  PreviewStudyHubItem,
+  PreviewTextItem,
+} from './spacePreviewItems'
+import {
+  resolveSpacePreviewPan,
+  previewTransform,
+  type SpacePreviewPan,
+} from './spacePreviewPan'
 
 function StrokePaths({
   strokes,
@@ -37,72 +47,86 @@ function StrokePaths({
 function PreviewItem({
   item,
   effectiveMode,
+  entering,
+  ghost,
 }: {
   item: CanvasItem
   effectiveMode: 'light' | 'dark'
+  entering?: boolean
+  ghost?: boolean
 }) {
-  if (item.type === 'sticky') {
-    return (
-      <g>
-        <rect
-          x={item.x}
-          y={item.y}
-          width={item.width}
-          height={item.height}
-          rx={4}
-          fill={resolveStickyColor(effectiveMode)}
-        />
-        <StrokePaths
-          strokes={item.strokes}
+  const opacity = ghost ? 0.52 : 1
+  const content = (() => {
+    if (item.type === 'sticky') {
+      return (
+        <PreviewStickyItem
+          item={item}
           effectiveMode={effectiveMode}
-          keyPrefix={`${item.id}-s`}
+          opacity={opacity}
         />
-        <StrokePaths
-          strokes={item.annotationStrokes ?? []}
+      )
+    }
+
+    if (item.type === 'image' || item.type === 'video') {
+      return (
+        <g opacity={opacity}>
+          <PreviewMediaImage
+            mediaId={item.mediaId}
+            x={item.x}
+            y={item.y}
+            width={item.width}
+            height={item.height}
+            opacity={item.type === 'video' ? 0.92 : 1}
+          />
+        </g>
+      )
+    }
+
+    if (item.type === 'text') {
+      return <PreviewTextItem item={item} opacity={opacity} />
+    }
+
+    if (item.type === 'study_hub') {
+      return (
+        <PreviewStudyHubItem
+          item={item}
           effectiveMode={effectiveMode}
-          keyPrefix={`${item.id}-a`}
+          opacity={opacity}
         />
-      </g>
-    )
-  }
+      )
+    }
 
-  if (item.type === 'image' || item.type === 'video') {
-    return (
-      <PreviewMediaImage
-        mediaId={item.mediaId}
-        x={item.x}
-        y={item.y}
-        width={item.width}
-        height={item.height}
-        opacity={item.type === 'video' ? 0.92 : 1}
-      />
-    )
-  }
+    return null
+  })()
 
-  if (item.type === 'text') {
-    return (
-      <rect
-        x={item.x}
-        y={item.y}
-        width={item.width}
-        height={item.height}
-        rx={3}
-        fill={effectiveMode === 'light' ? 'rgba(30, 35, 45, 0.06)' : 'rgba(255, 255, 255, 0.08)'}
-      />
-    )
-  }
+  if (!content) return null
+  if (!entering) return content
 
-  return null
+  return (
+    <motion.g
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {content}
+    </motion.g>
+  )
 }
 
 export default function SpaceCardPreview({
   spaceId,
   previewPan,
+  showDropGhost = false,
 }: {
   spaceId: string
   previewPan?: SpacePreviewPan
+  showDropGhost?: boolean
 }) {
   const space = useCanvasWorkspaceStore((s) => s.spaces[spaceId])
+  const dropHover = useSpaceDropStore((s) => s.hover)
+  const enteringItemId = useSpaceDropStore((s) => s.enteringItemId)
+  const dropGhost =
+    showDropGhost && dropHover?.spaceId === spaceId ? dropHover.ghostItem : null
   const palette = useThemeStore((s) => s.palette)
   const themeMode = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeMode)
@@ -120,6 +144,7 @@ export default function SpaceCardPreview({
   return (
     <div
       style={{
+        position: 'relative',
         width: '100%',
         height: '100%',
         background: bg,
@@ -147,10 +172,19 @@ export default function SpaceCardPreview({
             keyPrefix="ann"
           />
           {sortedItems.map((item) => (
-            <PreviewItem key={item.id} item={item} effectiveMode={effectiveMode} />
+            <PreviewItem
+              key={item.id}
+              item={item}
+              effectiveMode={effectiveMode}
+              entering={enteringItemId === item.id}
+            />
           ))}
+          {dropGhost && (
+            <PreviewItem item={dropGhost} effectiveMode={effectiveMode} ghost />
+          )}
         </g>
       </svg>
+      <div className="space-preview-vignette" aria-hidden />
     </div>
   )
 }

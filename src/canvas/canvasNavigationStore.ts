@@ -56,9 +56,11 @@ export const CANVAS_PAN_EXCLUDED = [
   'canvas-item-drag-handle',
   'canvas-item-resize-handle',
   'canvas-item-selected-focus',
+  'canvas-item-hold-drag-pending',
   'space-preview-adjust',
   'study-hub-scroll',
   'study-hub-practice',
+  'study-hub-menu-dismiss',
   'profile-media-frame-editor',
 ] as const
 

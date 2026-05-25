@@ -247,14 +247,22 @@ export function useDrawing(
     }
 
     function isCanvasEventTarget(target: EventTarget | null): boolean {
-      if (!(target instanceof Node)) return false
-      return canvasEl.contains(target)
+      // Canvas DOM hit — always allow (covers items, mesh blobs, etc.).
+      if (target instanceof Node && canvasEl.contains(target)) return true
+      // Outside the canvas viewport (chrome UI: FABs, top bar, panels, menus)
+      // — don't hijack the event so buttons stay clickable in draw mode.
+      if (target instanceof Element) {
+        return !!target.closest('.cutline-canvas-viewport')
+      }
+      return false
     }
 
     function onTouchStart(event: TouchEvent) {
-      if (!isCanvasEventTarget(event.target)) return
       if (event.touches.length !== 1) return
       const touch = event.touches[0]
+      if (!isCanvasEventTarget(event.target)) {
+        return
+      }
 
       if (isPhoneFingerDrawMode() && isFingerTouch(touch)) {
         if (!penMenu()?.isMenuOpen()) {

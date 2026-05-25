@@ -88,6 +88,7 @@ type CanvasWorkspaceState = {
   persistWorkspace: () => void
   /** Sync active canvas into memory and write workspace to localStorage immediately. */
   flushPersistWorkspace: () => void
+  insertMainCanvasItem: (item: CanvasItem) => void
   addSpaceData: (spaceId: string, name?: string, opts?: { persist?: boolean }) => void
   updateSpaceName: (spaceId: string, name: string) => void
   updateSpaceSnapshot: (spaceId: string, snapshotDataUrl: string | null) => Promise<void>
@@ -389,6 +390,10 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
   flushPersistWorkspace: () => {
     if (!persistEnabled) return
     flushScheduledWorkspaceSave(snapshotForPersist)
+  },
+
+  insertMainCanvasItem: (item) => {
+    mainItemsCache = [...mainItemsCache, item]
   },
 
   addSpaceData: (spaceId, name = DEFAULT_SPACE_NAME, opts) => {

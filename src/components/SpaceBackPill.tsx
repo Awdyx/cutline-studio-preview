@@ -164,7 +164,9 @@ export default function SpaceBackPill({
           type="button"
           onClick={onExit}
           aria-label="Back to main canvas"
+          className="space-back-pill-chevron"
           style={{
+            position: 'relative',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

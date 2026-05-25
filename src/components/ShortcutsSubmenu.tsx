@@ -40,7 +40,7 @@ const shortcutRowStyle: React.CSSProperties = {
   gap: 10,
   padding: '7px 10px',
   borderRadius: 8,
-  cursor: 'default',
+  cursor: 'var(--cursor-default)',
 }
 
 function ShortcutCategorySection({

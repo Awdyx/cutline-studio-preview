@@ -1,10 +1,13 @@
 import { memo, useRef, useState, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
+import { X } from 'lucide-react'
+import { animateCameraToTarget } from '../canvas/canvasCamera'
 import StudyHubPanel from '../components/study/StudyHubPanel'
 import StudyHubPracticePicker, {
   DEFAULT_STUDY_PRACTICE,
 } from '../components/study/StudyHubPracticePicker'
 import { STUDY_SUBJECTS, STUDY_SUBJECT_CATALOG } from '../components/study/studyHubData'
+import { playSubmenuTap } from '../sound/submenuSound'
 import {
   CHROME_PRESERVE_CASE_CLASS,
   card,
@@ -13,6 +16,7 @@ import {
 } from '../styles/tokens'
 import { useCanvasItemDragStore } from './canvasItemDragStore'
 import { useCanvasItemResizeStore } from './canvasItemResizeStore'
+import { useCanvasItemsStore } from './canvasItemsStore'
 import CanvasItemShell from './CanvasItemShell'
 import { useCanvasItemScrollCapture } from './useCanvasItemScrollCapture'
 import { studyHubContentScaleForSize } from './studyHubSpawnScale'
@@ -40,8 +44,21 @@ function StudyHubItem({
     s.snapBackItemId === item.id ? s.snapBackNonce : 0,
   )
   const perfDrag = isDragging || isResizing
+  const showMenuDismiss = useCanvasItemsStore(
+    (s) => s.zMenuSuppressedItemId === item.id && s.menuFocusReturnCamera != null,
+  )
   useCanvasItemScrollCapture(scrollRef)
   const contentScale = studyHubContentScaleForSize(item.width)
+
+  function handleDismissMenuFocus(e: React.MouseEvent | React.PointerEvent) {
+    e.stopPropagation()
+    e.preventDefault()
+    playSubmenuTap()
+    const returnCamera = useCanvasItemsStore.getState().takeMenuFocusReturnCamera()
+    if (returnCamera) {
+      animateCameraToTarget(transformRef.current, returnCamera, { curved: true })
+    }
+  }
 
   return (
     <CanvasItemShell
@@ -95,6 +112,35 @@ function StudyHubItem({
                 overflow: 'hidden',
               }}
             >
+              {showMenuDismiss && (
+                <button
+                  type="button"
+                  className="study-hub-menu-dismiss"
+                  aria-label="Return to previous canvas view"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={handleDismissMenuFocus}
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    zIndex: 3,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 28,
+                    height: 28,
+                    padding: 0,
+                    border: 'none',
+                    borderRadius: 999,
+                    background: 'var(--glass-bg)',
+                    boxShadow: 'var(--glass-shadow)',
+                    color: 'var(--ui-text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={14} strokeWidth={2} />
+                </button>
+              )}
               <header
                 style={{
                   display: 'flex',

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 import { chromeLabel, font } from '../styles/tokens'
 import { useSubmenuSoundScope } from './SubmenuSoundScope'
@@ -18,6 +19,7 @@ export function MenuRow({
   inset = false,
   compact = false,
   preserveCase = false,
+  labelHoverScale = false,
 }: {
   icon?: React.ElementType
   label: string
@@ -37,8 +39,11 @@ export function MenuRow({
   compact?: boolean
   /** Keep label casing (e.g. HUBS, CHEM) instead of chrome lowercase. */
   preserveCase?: boolean
+  /** Scale label on hover — same motion as notification @username links. */
+  labelHoverScale?: boolean
 }) {
   const [hovered, setHovered] = useState(false)
+  const reduceMotion = useReducedMotion()
   const inSubmenuScope = useSubmenuSoundScope()
   const sounds = submenuSounds ?? inSubmenuScope
   const canInteract = !disabled
@@ -117,12 +122,34 @@ export function MenuRow({
           style={{ flexShrink: 0 }}
         />
       ) : null}
-      <span
-        className={preserveCase ? 'ui-chrome-preserve-case' : undefined}
-        style={{ flex: 1, fontSize: compact ? 13 : 14 }}
-      >
-        {preserveCase ? label : chromeLabel(label)}
-      </span>
+      {labelHoverScale ? (
+        <motion.span
+          className={preserveCase ? 'ui-chrome-preserve-case' : undefined}
+          animate={{ scale: hovered && canInteract && !reduceMotion ? 1.045 : 1 }}
+          whileTap={reduceMotion || !canInteract ? undefined : { scale: 0.97 }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { type: 'spring', stiffness: 420, damping: 32, mass: 0.5 }
+          }
+          style={{
+            flex: 1,
+            fontSize: compact ? 13 : 14,
+            display: 'inline-block',
+            transformOrigin: 'left center',
+            minWidth: 0,
+          }}
+        >
+          {preserveCase ? label : chromeLabel(label)}
+        </motion.span>
+      ) : (
+        <span
+          className={preserveCase ? 'ui-chrome-preserve-case' : undefined}
+          style={{ flex: 1, fontSize: compact ? 13 : 14 }}
+        >
+          {preserveCase ? label : chromeLabel(label)}
+        </span>
+      )}
       {right}
     </button>
   )

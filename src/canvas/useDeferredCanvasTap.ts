@@ -25,6 +25,7 @@ export function useDeferredCanvasTap(onTap: (event: React.PointerEvent) => void)
       if (event.pointerType === 'pen') return
 
       if (event.pointerType === 'mouse') {
+        if (event.button !== 0) return
         if (useCanvasNavigationStore.getState().shouldSuppressItemTap()) return
         onTap(event)
         return

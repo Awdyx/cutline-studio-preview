@@ -19,6 +19,7 @@ import {
 import { useCanvasNavigationTracking } from './canvas/useCanvasNavigationTracking'
 import { useStudyHubCanvasPanCoordination } from './canvas/useStudyHubCanvasPanCoordination'
 import { useCanvasSelectionPointer } from './canvas/useCanvasSelectionPointer'
+import { useCanvasContextMenuPointer } from './canvas/useCanvasContextMenuPointer'
 import TopBar from './components/TopBar'
 import NotificationsPanel from './components/NotificationsPanel'
 import NewsPanel from './components/NewsPanel'
@@ -42,6 +43,7 @@ import { useCanvasItemDragStore } from './canvasItems/canvasItemDragStore'
 import CanvasItemsLayer from './canvasItems/CanvasItemsLayer'
 import CanvasItemZOrderMenu from './canvasItems/CanvasItemZOrderMenu'
 import SelectionBlurOverlay from './canvasItems/SelectionBlurOverlay'
+import CanvasContextMenu from './components/CanvasContextMenu'
 import { useCanvasFileHandlers } from './canvasItems/useCanvasFileHandlers'
 import { useCanvasLockStore } from './canvasLock/canvasLockStore'
 import { useCanvasEditStore } from './canvasEdit/canvasEditStore'
@@ -299,6 +301,7 @@ function App() {
   const zoomEdgeEase = useCanvasZoomEdgeEase(minScale)
   const panBounce = useCanvasPanBounce()
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const canvasContextMenuPointer = useCanvasContextMenuPointer(transformRef, canvasRef)
   const [canvasMount, setCanvasMount] = useState<HTMLDivElement | null>(null)
   const [appHydrated, setAppHydrated] = useState(false)
   const [penDown, setPenDown] = useState(false)
@@ -314,6 +317,7 @@ function App() {
     spawnTextAtViewportCenter,
     spawnSpaceAtViewportCenter,
     spawnStudyHubAtViewportCenter,
+    spawnAtCanvasPoint,
   } = useCanvasFileHandlers(transformRef, viewportRef, canvasRef)
 
   const isInsideSpace = useCanvasWorkspaceStore((s) => s.activeCanvasId !== 'main')
@@ -576,6 +580,8 @@ function App() {
                 onPointerMove={canvasSelectionPointer.onPointerMove}
                 onPointerUp={canvasSelectionPointer.onPointerUp}
                 onPointerCancel={canvasSelectionPointer.onPointerCancel}
+                onContextMenu={canvasContextMenuPointer.onContextMenu}
+                onDoubleClick={canvasContextMenuPointer.onDoubleClick}
                 style={{
                   width: CANVAS_WIDTH,
                   height: CANVAS_HEIGHT,
@@ -609,9 +615,12 @@ function App() {
                 })}
                 <CanvasLockFlattenLayer />
                 <CanvasItemsLayer plane="below" transformRef={transformRef} />
-                <DrawingLayer />
+                <DrawingLayer band="committed-below" />
                 <CanvasItemsLayer plane="above" transformRef={transformRef} />
+                <DrawingLayer band="committed-above" />
                 <CanvasItemsLayer plane="annotation" transformRef={transformRef} />
+                <DrawingLayer band="annotation" />
+                <DrawingLayer band="active" />
                 <SelectionBlurOverlay />
               </div>
             </TransformComponent>
@@ -649,6 +658,13 @@ function App() {
 
       <PenToolPillMenu state={penMenu.state} />
       <CanvasItemZOrderMenu />
+
+      <CanvasContextMenu
+        showSpaceOption={!isInsideSpace}
+        onAddToCanvas={(type, canvasX, canvasY) => {
+          spawnAtCanvasPoint(canvasX, canvasY, type)
+        }}
+      />
 
       <input
         ref={imageInputRef}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { focusItemOnCanvas } from '../canvas/canvasCamera'
+import { focusItemOnCanvas, readCameraFromRef } from '../canvas/canvasCamera'
 import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
@@ -14,6 +14,7 @@ import { readCanvasTransformScale } from './studyHubSpawnScale'
 import { isAcceptedMediaFile, prepareMediaFromFile } from './mediaUtils'
 import { TEXT_HEIGHT, type StudySubjectId } from './types'
 import { viewportCenterCanvas, viewportItemSpawnCanvas } from './viewportCenter'
+import type { CanvasAddType } from '../components/PlusFab'
 
 function spawnPointCanvas(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
@@ -34,6 +35,7 @@ export function useCanvasFileHandlers(
   canvasRef: RefObject<HTMLDivElement | null>,
 ) {
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const pendingSpawnCanvasRef = useRef<{ x: number; y: number } | null>(null)
 
   const placeMediaAt = useCallback(
     async (file: File, canvasX: number, canvasY: number) => {
@@ -64,6 +66,7 @@ export function useCanvasFileHandlers(
   )
 
   const openImagePicker = useCallback(() => {
+    pendingSpawnCanvasRef.current = null
     imageInputRef.current?.click()
   }, [])
 
@@ -104,10 +107,12 @@ export function useCanvasFileHandlers(
       const existing = findStudyHubForSubject(items, subjectId)
 
       if (existing) {
+        const returnCamera = readCameraFromRef(transformRef.current)
         useCanvasNavigationStore.getState().suppressBackgroundSelectionClear(600)
         useCanvasItemsStore.getState().selectItem(existing.id, false, {
           allowFrozen: true,
           suppressZMenu: true,
+          menuFocusReturnCamera: returnCamera,
         })
         focusItemOnCanvas(transformRef.current, existing, {
           fit: true,
@@ -139,16 +144,36 @@ export function useCanvasFileHandlers(
     [transformRef, viewportRef, canvasRef],
   )
 
+  const spawnAtCanvasPoint = useCallback(
+    (canvasX: number, canvasY: number, type: CanvasAddType) => {
+      if (isPhoneLayout() && !useCanvasEditStore.getState().enabled) {
+        useCanvasEditStore.getState().setEnabled(true)
+      }
+
+      const store = useCanvasItemsStore.getState()
+      if (type === 'sticky') {
+        store.addSticky(canvasX, canvasY)
+      } else if (type === 'text') {
+        store.addText(canvasX, canvasY)
+      } else if (type === 'space') {
+        store.addSpace(canvasX, canvasY)
+      } else if (type === 'image') {
+        pendingSpawnCanvasRef.current = { x: canvasX, y: canvasY }
+        imageInputRef.current?.click()
+      }
+    },
+    [],
+  )
+
   const onImageInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
       e.target.value = ''
       if (!file) return
-      const center = spawnPointCanvas(
-        transformRef,
-        viewportRef.current,
-        canvasRef.current,
-      )
+      const center =
+        pendingSpawnCanvasRef.current ??
+        spawnPointCanvas(transformRef, viewportRef.current, canvasRef.current)
+      pendingSpawnCanvasRef.current = null
       await placeMediaAt(file, center.x, center.y)
     },
     [transformRef, viewportRef, canvasRef, placeMediaAt],
@@ -220,5 +245,6 @@ export function useCanvasFileHandlers(
     spawnTextAtViewportCenter,
     spawnSpaceAtViewportCenter,
     spawnStudyHubAtViewportCenter,
+    spawnAtCanvasPoint,
   }
 }

@@ -8,6 +8,12 @@ const ROW_STYLE: React.CSSProperties = {
   alignItems: 'center',
   gap: 10,
   padding: '11px 14px',
+  width: '100%',
+  border: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
+  fontFamily: font.family,
+  textAlign: 'left',
 }
 
 const LABEL_STYLE: React.CSSProperties = {
@@ -16,22 +22,61 @@ const LABEL_STYLE: React.CSSProperties = {
   color: font.colorPrimary,
 }
 
-function IconTrackToggle({
+function IconTrackVisual({
   active,
-  onChange,
-  ariaLabel,
-  disabled = false,
-  playClickSound = true,
   leftIcon: LeftIcon,
   rightIcon: RightIcon,
 }: {
   active: boolean
-  onChange: (next: boolean) => void
-  ariaLabel: string
-  disabled?: boolean
-  playClickSound?: boolean
   leftIcon: ElementType
   rightIcon: ElementType
+}) {
+  return (
+    <span className="chrome-menu-toggle" aria-hidden>
+      <LeftIcon
+        size={14}
+        strokeWidth={2}
+        className={`chrome-menu-toggle__side-icon${
+          !active ? ' chrome-menu-toggle__side-icon--active' : ''
+        }`}
+      />
+      <RightIcon
+        size={14}
+        strokeWidth={2}
+        className={`chrome-menu-toggle__side-icon${
+          active ? ' chrome-menu-toggle__side-icon--active' : ''
+        }`}
+      />
+    </span>
+  )
+}
+
+function ToggleRowButton({
+  icon: Icon,
+  label,
+  active,
+  onChange,
+  ariaLabel,
+  className = 'chrome-menu-toggle-row',
+  disabled = false,
+  playClickSound = true,
+  trackLeftIcon,
+  trackRightIcon,
+  labelClassName,
+  labelStyle = LABEL_STYLE,
+}: {
+  icon?: ElementType
+  label: string
+  active: boolean
+  onChange: (next: boolean) => void
+  ariaLabel: string
+  className?: string
+  disabled?: boolean
+  playClickSound?: boolean
+  trackLeftIcon: ElementType
+  trackRightIcon: ElementType
+  labelClassName?: string
+  labelStyle?: React.CSSProperties
 }) {
   return (
     <button
@@ -40,27 +85,24 @@ function IconTrackToggle({
       aria-checked={active}
       aria-label={ariaLabel}
       aria-disabled={disabled || undefined}
-      className={`chrome-menu-toggle${disabled ? ' chrome-menu-toggle--disabled' : ''}`}
+      className={className}
+      style={ROW_STYLE}
+      onMouseEnter={() => {
+        if (!disabled) playSubmenuHover()
+      }}
       onClick={() => {
         if (disabled) return
         runSubmenuClick(() => onChange(!active), playClickSound)
       }}
     >
-      <LeftIcon
-        size={14}
-        strokeWidth={2}
-        className={`chrome-menu-toggle__side-icon${
-          !active ? ' chrome-menu-toggle__side-icon--active' : ''
-        }`}
-        aria-hidden
-      />
-      <RightIcon
-        size={14}
-        strokeWidth={2}
-        className={`chrome-menu-toggle__side-icon${
-          active ? ' chrome-menu-toggle__side-icon--active' : ''
-        }`}
-        aria-hidden
+      {Icon ? <RowIcon icon={Icon} /> : null}
+      <span className={labelClassName} style={labelClassName ? undefined : labelStyle}>
+        {chromeLabel(label)}
+      </span>
+      <IconTrackVisual
+        active={active}
+        leftIcon={trackLeftIcon}
+        rightIcon={trackRightIcon}
       />
     </button>
   )
@@ -102,18 +144,16 @@ export default function MenuToggleRow({
   playClickSound?: boolean
 }) {
   return (
-    <div onMouseEnter={() => playSubmenuHover()} style={ROW_STYLE}>
-      {Icon ? <RowIcon icon={Icon} /> : null}
-      <span style={LABEL_STYLE}>{chromeLabel(label)}</span>
-      <IconTrackToggle
-        active={enabled}
-        onChange={onChange}
-        ariaLabel={label}
-        playClickSound={playClickSound}
-        leftIcon={trackLeftIcon}
-        rightIcon={trackRightIcon}
-      />
-    </div>
+    <ToggleRowButton
+      icon={Icon}
+      label={label}
+      active={enabled}
+      onChange={onChange}
+      ariaLabel={label}
+      playClickSound={playClickSound}
+      trackLeftIcon={trackLeftIcon}
+      trackRightIcon={trackRightIcon}
+    />
   )
 }
 
@@ -129,26 +169,18 @@ export function LockToggleRow({
   disabled?: boolean
 }) {
   return (
-    <div
-      onMouseEnter={() => {
-        if (!disabled) playSubmenuHover()
-      }}
+    <ToggleRowButton
+      icon={Icon}
+      label="Canvas lock"
+      active={locked}
+      onChange={onChange}
+      ariaLabel="Canvas lock"
       className={lockRowClassName(disabled)}
-      style={ROW_STYLE}
-    >
-      {Icon ? <RowIcon icon={Icon} /> : null}
-      <span className="chrome-menu-toggle-row__label">
-        {chromeLabel('Canvas lock')}
-      </span>
-      <IconTrackToggle
-        active={locked}
-        onChange={onChange}
-        ariaLabel="Canvas lock"
-        disabled={disabled}
-        leftIcon={LockOpen}
-        rightIcon={Lock}
-      />
-    </div>
+      disabled={disabled}
+      trackLeftIcon={LockOpen}
+      trackRightIcon={Lock}
+      labelClassName="chrome-menu-toggle-row__label"
+    />
   )
 }
 
@@ -162,16 +194,14 @@ export function ThemeToggleRow({
   onChange: (dark: boolean) => void
 }) {
   return (
-    <div onMouseEnter={() => playSubmenuHover()} style={ROW_STYLE}>
-      {Icon ? <RowIcon icon={Icon} /> : null}
-      <span style={LABEL_STYLE}>{chromeLabel('Theme')}</span>
-      <IconTrackToggle
-        active={dark}
-        onChange={onChange}
-        ariaLabel="Theme"
-        leftIcon={Sun}
-        rightIcon={Moon}
-      />
-    </div>
+    <ToggleRowButton
+      icon={Icon}
+      label="Theme"
+      active={dark}
+      onChange={onChange}
+      ariaLabel="Theme"
+      trackLeftIcon={Sun}
+      trackRightIcon={Moon}
+    />
   )
 }

@@ -99,7 +99,9 @@ export const useStrokesStore = create<StrokesState>((set, get) => ({
     if (!active) return
 
     let points = [...active.points]
-    while (points.length > 2 && points[points.length - 1].pressure < 0.15) {
+    // Drop a single pen-hover tail point only — trimming a run of low-pressure
+    // lift-off samples was shortening finished strokes vs the live preview.
+    if (points.length > 2 && points[points.length - 1].pressure < 0.05) {
       points.pop()
     }
 
@@ -113,7 +115,7 @@ export const useStrokesStore = create<StrokesState>((set, get) => ({
     pushUndoSnapshot()
 
     const trimmed: Stroke = { ...active, points }
-    const path = strokeToSvgPath(trimmed, true)
+    const path = strokeToSvgPath(trimmed, false)
     const completed = { ...trimmed, path }
     const isLocked = effectiveCanvasLocked(
       useCanvasLockStore.getState().isLocked,

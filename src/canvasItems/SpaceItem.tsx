@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { motion } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
@@ -7,22 +7,24 @@ import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { DEFAULT_SPACE_NAME } from '../spaces/types'
-import { useDeferredCanvasTap } from '../canvas/useDeferredCanvasTap'
 import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
-import { shouldSkipItemSelectForOutsideDismiss } from '../canvas/canvasSelectionDismiss'
+import { useCanvasItemAreaPointer } from '../canvas/useCanvasItemAreaPointer'
 import { useCanvasEditingAllowed } from '../canvasEdit/layer'
 import DragHandle from './DragHandle'
-import { Z_SELECTION_ABOVE_DIM } from './canvasZOrder'
-import { getGrabHandlePlacement } from './grabZone'
+import ResizeHandle from './ResizeHandle'
+import { displayZIndexForCanvasItem } from './canvasZOrder'
+import { getGrabHandlePlacement, SPACE_RESIZE_CORNER_OUTSET } from './grabZone'
 import { useCanvasItemDrag } from './useCanvasItemDrag'
+import { useCanvasItemDragStore } from './canvasItemDragStore'
+import { useCanvasItemResize } from './useCanvasItemResize'
 import { useSpacePreviewPanDrag } from './useSpacePreviewPanDrag'
 import {
   useCanvasItemsStore,
   useItemIsSoleSelected,
   useItemSelected,
-  useItemSelectionIndex,
 } from './canvasItemsStore'
 import SpaceCardPreview from '../spaces/SpaceCardPreview'
+import { useSpaceDropStore } from '../spaces/spaceDropStore'
 import { card, font, glass, SPACE_GLASS_CLASS } from '../styles/tokens'
 import type { SpaceCanvasItem } from './types'
 import {
@@ -44,16 +46,15 @@ function dist(x1: number, y1: number, x2: number, y2: number): number {
 export default function SpaceItem({
   item,
   transformRef,
+  onItemResizeStateChange,
 }: {
   item: SpaceCanvasItem
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
-  /** Accepted for API parity with other items; ignored. */
   onItemResizeStateChange?: (resizing: boolean) => void
 }) {
   const isLocked = useCanvasLockStore((s) => s.isLocked)
   const frozen = isItemFrozen(item, isLocked)
   const spaceMeta = useCanvasWorkspaceStore((s) => s.spaces[item.id])
-  const selectItem = useCanvasItemsStore((s) => s.selectItem)
   const displayName = spaceMeta?.name ?? item.name
   const isDefaultName =
     displayName.trim().toLowerCase() === DEFAULT_SPACE_NAME.toLowerCase()
@@ -72,6 +73,13 @@ export default function SpaceItem({
   const isPreviewAdjusting = previewAdjustSpaceId === item.id
 
   const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id)
+  const { isResizing, handlePointerDown: onResizeDown } = useCanvasItemResize(
+    item.id,
+    item.width,
+    item.height,
+    transformRef,
+    onItemResizeStateChange,
+  )
   const {
     isPanDragging,
     onPreviewAdjustPointerDown,
@@ -81,14 +89,70 @@ export default function SpaceItem({
   } = useSpacePreviewPanDrag(item, previewRef, isPreviewAdjusting)
 
   const isSelected = useItemSelected(item.id)
-  const selectionIndex = useItemSelectionIndex(item.id)
   const isSoleSelected = useItemIsSoleSelected(item.id)
   const editingAllowed = useCanvasEditingAllowed()
   const zMenuSuppressedItemId = useCanvasItemsStore((s) => s.zMenuSuppressedItemId)
+  const selectedIds = useCanvasItemsStore((s) => s.selectedIds)
+  const allItems = useCanvasItemsStore((s) => s.items)
+  const dropHoverSpaceId = useSpaceDropStore((s) => s.hover?.spaceId ?? null)
+  const dropConfirmSpaceId = useSpaceDropStore((s) => s.confirmPulseSpaceId)
+  const dropConfirmNonce = useSpaceDropStore((s) => s.confirmPulseNonce)
+  const isDropHoverTarget = dropHoverSpaceId === item.id
+  const dragActiveItemId = useCanvasItemDragStore((s) => s.activeItemId)
+  /**
+   * Only ease-blur the space when the dim overlay is actually visible (i.e. a
+   * selection is active). Dragging via the handle starts a drag without
+   * selecting the item, so the dim never appears and the space shouldn't
+   * pretend to be dim'd.
+   */
+  const selectionActive = selectedIds.length > 0
+  /** During a drag, lift other spaces above the dim so we can ease their blur via an own CSS filter (z-flip would be a hard cut). */
+  const dragLift =
+    selectionActive &&
+    dragActiveItemId != null &&
+    dragActiveItemId !== item.id &&
+    !isSelected
+  const ownBlurActive = dragLift && !isDropHoverTarget
+  /**
+   * Drag start force-lifts the space above the dim — without this gate, the
+   * filter would animate from 0 → 7px and flash the card clear for a moment.
+   * We snap the filter into place on drag start, then enable easing one frame
+   * later so subsequent hover-target toggles transition smoothly.
+   */
+  const [easeBlur, setEaseBlur] = useState(false)
+  useLayoutEffect(() => {
+    if (!dragLift) {
+      setEaseBlur(false)
+      return
+    }
+    const id = requestAnimationFrame(() => setEaseBlur(true))
+    return () => {
+      cancelAnimationFrame(id)
+      setEaseBlur(false)
+    }
+  }, [dragLift])
+  const [dropConfirmClass, setDropConfirmClass] = useState<string | null>(null)
+  const lastDropConfirmNonce = useRef(0)
+
+  useEffect(() => {
+    if (dropConfirmSpaceId !== item.id) return
+    if (dropConfirmNonce === lastDropConfirmNonce.current) return
+    lastDropConfirmNonce.current = dropConfirmNonce
+    setDropConfirmClass('space-preview-drop-confirm')
+    const timer = window.setTimeout(() => setDropConfirmClass(null), 360)
+    return () => window.clearTimeout(timer)
+  }, [dropConfirmNonce, dropConfirmSpaceId, item.id])
+
   const hideDragHandle =
     isSoleSelected && editingAllowed && zMenuSuppressedItemId !== item.id
-  const displayZIndex =
-    selectionIndex >= 0 ? Z_SELECTION_ABOVE_DIM + selectionIndex : item.zIndex
+  const displayZIndex = useMemo(
+    () =>
+      displayZIndexForCanvasItem(allItems, item, selectedIds, {
+        forceLift: isDropHoverTarget || dragLift,
+        isActiveDrag: isDragging,
+      }),
+    [allItems, item, selectedIds, isDropHoverTarget, dragLift, isDragging],
+  )
 
   const enterSpace = useCallback(() => {
     if (useCanvasWorkspaceStore.getState().canvasSwapBusy) return
@@ -98,33 +162,22 @@ export default function SpaceItem({
       .enterSpace(item.id, transformRef.current)
   }, [item.id, transformRef])
 
-  const shellSelectTap = useDeferredCanvasTap((e) => {
-    if (shouldSkipItemSelectForOutsideDismiss(item.id)) return
-    selectItem(item.id, e.shiftKey)
+  const areaPointer = useCanvasItemAreaPointer({
+    itemId: item.id,
+    isSelected,
+    frozen,
+    moveBlocked: false,
+    onGrabPointerDown,
   })
-
-  const handleShellPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (frozen || e.pointerType === 'pen') return
-      if (
-        isSelected &&
-        useCanvasItemsStore.getState().zMenuSuppressedItemId === item.id
-      ) {
-        useCanvasItemsStore.setState({ zMenuSuppressedItemId: null })
-      }
-      if (isSelected) {
-        onGrabPointerDown(e as React.PointerEvent<HTMLElement>)
-        return
-      }
-      shellSelectTap.onPointerDown(e)
-    },
-    [frozen, isSelected, item.id, onGrabPointerDown, shellSelectTap],
-  )
 
   const handlePreviewPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.pointerType === 'pen') return
       e.stopPropagation()
+      if (e.pointerType === 'mouse' && e.button === 2) {
+        areaPointer.onPointerDown(e)
+        return
+      }
       if (isPreviewAdjusting) {
         onPreviewAdjustPointerDown(e)
         return
@@ -133,7 +186,7 @@ export default function SpaceItem({
       previewPointerRef.current = { startX: e.clientX, startY: e.clientY }
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     },
-    [isPreviewAdjusting, onPreviewAdjustPointerDown],
+    [areaPointer, isPreviewAdjusting, onPreviewAdjustPointerDown],
   )
 
   const handlePreviewPointerMove = useCallback(
@@ -190,7 +243,7 @@ export default function SpaceItem({
   )
 
   const [hovered, setHovered] = useState(false)
-  const lifted = isDragging
+  const lifted = isDragging || isResizing
   const canHover = !frozen && !isLocked
   const grabHandlePlacement = useMemo(
     () =>
@@ -204,6 +257,7 @@ export default function SpaceItem({
       ),
     [item.x, item.y, item.width, item.height],
   )
+  const handleOcclusionKey = `${item.x},${item.y},${item.width},${item.height},${item.zIndex},${displayZIndex}`
 
   return (
     <motion.div
@@ -233,13 +287,26 @@ export default function SpaceItem({
         transformOrigin: 'top left',
         overflow: 'visible',
         pointerEvents: 'none',
+        filter: ownBlurActive ? 'blur(7px)' : dragLift ? 'blur(0px)' : 'none',
+        transition: easeBlur ? 'filter 220ms ease-out' : 'none',
+        willChange: dragLift ? 'filter' : undefined,
       }}
     >
-      {!frozen && !hideDragHandle && (
+      {!frozen && (
         <div data-lock-flatten-skip>
-          <DragHandle
-            placement={grabHandlePlacement}
-            onPointerDown={onGrabPointerDown}
+          {!hideDragHandle && (
+            <DragHandle
+              placement={grabHandlePlacement}
+              onPointerDown={onGrabPointerDown}
+              occlusionRevisionKey={handleOcclusionKey}
+              occlusionActive={isSelected}
+            />
+          )}
+          <ResizeHandle
+            onPointerDown={onResizeDown}
+            cornerOutset={SPACE_RESIZE_CORNER_OUTSET}
+            occlusionRevisionKey={handleOcclusionKey}
+            occlusionActive={isSelected}
           />
         </div>
       )}
@@ -262,10 +329,11 @@ export default function SpaceItem({
       />
 
       <div
-        onPointerDown={handleShellPointerDown}
-        onPointerMove={shellSelectTap.onPointerMove}
-        onPointerUp={shellSelectTap.onPointerUp}
-        onPointerCancel={shellSelectTap.onPointerCancel}
+        onPointerDown={areaPointer.onPointerDown}
+        onPointerMove={areaPointer.onPointerMove}
+        onPointerUp={areaPointer.onPointerUp}
+        onPointerCancel={areaPointer.onPointerCancel}
+        onContextMenu={areaPointer.onContextMenu}
         className={`theme-surface ${SPACE_GLASS_CLASS}${isSelected ? ' canvas-item-selected-focus' : ''}`}
         style={{
           position: 'relative',
@@ -277,7 +345,7 @@ export default function SpaceItem({
           boxShadow: glass.shadow,
           overflow: 'hidden',
           pointerEvents: 'auto',
-          cursor: 'default',
+          cursor: 'var(--cursor-default)',
           display: 'flex',
           flexDirection: 'column',
         }}
@@ -302,7 +370,13 @@ export default function SpaceItem({
           role="button"
           tabIndex={0}
           data-space-preview=""
-          className={isPreviewAdjusting ? 'space-preview-adjust' : undefined}
+          className={[
+            isPreviewAdjusting ? 'space-preview-adjust' : null,
+            isDropHoverTarget ? 'space-preview-drop-hover' : null,
+            dropConfirmClass,
+          ]
+            .filter(Boolean)
+            .join(' ') || undefined}
           aria-label={
             isPreviewAdjusting
               ? `Adjust preview for space: ${displayName}`
@@ -312,6 +386,7 @@ export default function SpaceItem({
           onPointerMove={handlePreviewPointerMove}
           onPointerUp={handlePreviewPointerUp}
           onPointerCancel={handlePreviewPointerCancel}
+          onContextMenu={areaPointer.onContextMenu}
           onKeyDown={(e) => {
             if (isPreviewAdjusting) return
             if (e.key === 'Enter' || e.key === ' ') {
@@ -338,8 +413,12 @@ export default function SpaceItem({
             touchAction: isPreviewAdjusting ? 'none' : undefined,
           }}
         >
-          {hasPreviewContent ? (
-            <SpaceCardPreview spaceId={item.id} previewPan={item.previewPan} />
+          {hasPreviewContent || isDropHoverTarget ? (
+            <SpaceCardPreview
+              spaceId={item.id}
+              previewPan={item.previewPan}
+              showDropGhost={isDropHoverTarget}
+            />
           ) : (
             <div
               style={{

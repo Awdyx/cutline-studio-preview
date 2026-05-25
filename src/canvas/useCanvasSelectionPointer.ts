@@ -1,6 +1,9 @@
 import { useCallback } from 'react'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
-import { isPointerOnSelectedItem } from './canvasSelectionDismiss'
+import {
+  isPointerOnSelectedItem,
+  isPointerOnSpacePreview,
+} from './canvasSelectionDismiss'
 import { useCanvasNavigationStore } from './canvasNavigationStore'
 import { useDeferredCanvasTap } from './useDeferredCanvasTap'
 
@@ -9,6 +12,18 @@ import { useDeferredCanvasTap } from './useDeferredCanvasTap'
  * Empty canvas and other objects both count as "outside".
  */
 export function useCanvasSelectionPointer() {
+  const previewAdjustDismissTap = useDeferredCanvasTap((event) => {
+    if (useCanvasNavigationStore.getState().shouldSuppressBackgroundSelectionClear()) {
+      return
+    }
+
+    const adjustId = useCanvasItemsStore.getState().previewAdjustSpaceId
+    if (!adjustId) return
+    if (isPointerOnSpacePreview(event.target, adjustId)) return
+
+    useCanvasItemsStore.getState().setPreviewAdjustSpace(null)
+  })
+
   const outsideDismissTap = useDeferredCanvasTap((event) => {
     if (useCanvasNavigationStore.getState().shouldSuppressBackgroundSelectionClear()) {
       return
@@ -25,19 +40,35 @@ export function useCanvasSelectionPointer() {
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (event.pointerType === 'pen') return
 
+      const adjustId = useCanvasItemsStore.getState().previewAdjustSpaceId
+      if (adjustId) {
+        if (!isPointerOnSpacePreview(event.target, adjustId)) {
+          previewAdjustDismissTap.onPointerDown(event)
+        }
+      }
+
       const selectedIds = useCanvasItemsStore.getState().selectedIds
       if (selectedIds.length === 0) return
       if (isPointerOnSelectedItem(event.target, selectedIds)) return
 
       outsideDismissTap.onPointerDown(event)
     },
-    [outsideDismissTap],
+    [outsideDismissTap, previewAdjustDismissTap],
   )
 
   return {
     onPointerDown,
-    onPointerMove: outsideDismissTap.onPointerMove,
-    onPointerUp: outsideDismissTap.onPointerUp,
-    onPointerCancel: outsideDismissTap.onPointerCancel,
+    onPointerMove: () => {
+      previewAdjustDismissTap.onPointerMove()
+      outsideDismissTap.onPointerMove()
+    },
+    onPointerUp: () => {
+      previewAdjustDismissTap.onPointerUp()
+      outsideDismissTap.onPointerUp()
+    },
+    onPointerCancel: () => {
+      previewAdjustDismissTap.onPointerCancel()
+      outsideDismissTap.onPointerCancel()
+    },
   }
 }

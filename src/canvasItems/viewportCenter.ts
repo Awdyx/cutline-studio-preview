@@ -7,8 +7,8 @@ import { readEditablePlacementRect } from '../platform/viewportSize'
 /** Upper-middle spawn on desktop — matches reference screenshot. */
 export const EDITABLE_SPAWN_VERTICAL_RATIO = 0.38
 
-/** Touch spawn within the keyboard-safe band. */
-const EDITABLE_SPAWN_TOUCH_VERTICAL_RATIO = 0.26
+/** Touch spawn centred in the keyboard-safe band (top half of screen). */
+const EDITABLE_SPAWN_TOUCH_VERTICAL_RATIO = 0.5
 
 /** Room for the arrangement menu beside a newly spawned text item. */
 const Z_MENU_HEIGHT_ESTIMATE = 220
@@ -87,10 +87,6 @@ export function viewportItemSpawnCanvas(
   canvasEl: HTMLElement | null | undefined,
   options?: { editableTextHeight?: number },
 ): { x: number; y: number } | null {
-  const isTouch = window.matchMedia('(pointer: coarse)').matches
-  if (isTouch) {
-    return viewportBalancedSpawnCanvas(transformRef, viewportHost, canvasEl)
-  }
   if (options?.editableTextHeight != null) {
     return viewportEditableSpawnCanvas(
       transformRef,
@@ -98,6 +94,10 @@ export function viewportItemSpawnCanvas(
       canvasEl,
       options.editableTextHeight,
     )
+  }
+  const isTouch = window.matchMedia('(pointer: coarse)').matches
+  if (isTouch) {
+    return viewportBalancedSpawnCanvas(transformRef, viewportHost, canvasEl)
   }
   return viewportCenterCanvas(transformRef, viewportHost, canvasEl)
 }

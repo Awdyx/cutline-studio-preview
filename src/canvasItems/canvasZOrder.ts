@@ -22,8 +22,46 @@ export const Z_ANNOTATION_MIN = 2000
 /** Blurs the canvas behind selected items (pointer-events: none). */
 export const Z_SELECTION_DIM = 2900
 
-/** Selected items render above the blur overlay. */
+/**
+ * Force-lifted items (e.g. a space widget being hovered as a drop target during
+ * a drag) sit just above the dim — visible/unblurred — but stay below the
+ * selected/dragged items so they don't cover the thing the user is moving.
+ */
+export const Z_SELECTION_LIFT_HOVER = 2901
+
+/** Selected items render above the blur overlay (and above force-lifted items). */
 export const Z_SELECTION_ABOVE_DIM = 3000
+
+export function committedItemZRank(items: CanvasItem[], id: string): number {
+  const sorted = [...committedItems(items)].sort(
+    (a, b) => a.zIndex - b.zIndex || a.id.localeCompare(b.id),
+  )
+  const rank = sorted.findIndex((entry) => entry.id === id)
+  return rank >= 0 ? rank : 0
+}
+
+/**
+ * Lift selected items (and any explicit force-lift item, e.g. a space being
+ * hovered as a drop target) above the dim overlay while keeping their relative
+ * z-order. Unselected, non-lifted items keep their natural z-index so the dim
+ * overlay can blur them.
+ *
+ * Force-lifted items sit on a lower tier than selected/dragged items, so a
+ * hovered space stays beneath the item being dragged across it — including
+ * handle-drags where the item was never selected.
+ */
+export function displayZIndexForCanvasItem(
+  items: CanvasItem[],
+  item: CanvasItem,
+  selectedIds: readonly string[],
+  options?: { forceLift?: boolean; isActiveDrag?: boolean },
+): number {
+  if (selectedIds.includes(item.id) || options?.isActiveDrag === true) {
+    return Z_SELECTION_ABOVE_DIM + committedItemZRank(items, item.id)
+  }
+  if (options?.forceLift === true) return Z_SELECTION_LIFT_HOVER
+  return item.zIndex
+}
 
 export function isAboveStrokes(zIndex: number): boolean {
   return zIndex >= Z_ITEMS_ABOVE_MIN
@@ -70,6 +108,11 @@ export function committedStrokeZIndex(stroke: { zIndex?: number }): number {
   return stroke.zIndex ?? Z_STROKES
 }
 
+/** Committed strokes at or above this render after the above-items plane. */
+export function isStrokeAboveItems(zIndex: number): boolean {
+  return zIndex >= Z_ITEMS_ABOVE_MIN
+}
+
 export function maxCommittedStrokeZ(strokes: { zIndex?: number }[]): number {
   if (strokes.length === 0) return Z_STROKES
   return Math.max(...strokes.map(committedStrokeZIndex))
@@ -106,52 +149,83 @@ export function nextZIndexAnnotation(items: CanvasItem[]): number {
 export function zIndexForBringToFront(
   items: { id: string; zIndex: number; layer?: CanvasLayer }[],
   id: string,
+  strokes: { zIndex?: number }[] = [],
 ): number {
   const item = items.find((i) => i.id === id)
   if (item && isAnnotationItem(item)) {
     return zIndexForBringToFrontAnnotation(items as CanvasItem[], id)
   }
-  const above = committedItems(items as CanvasItem[]).filter(
-    (i) => isAboveStrokes(i.zIndex) && i.id !== id,
-  )
-  const maxAbove =
-    above.length > 0 ? Math.max(...above.map((i) => i.zIndex)) : Z_ITEMS_ABOVE_MIN - 1
-  return maxAbove + 1
+
+  const committed = committedItems(items as CanvasItem[])
+  const others = committed.filter((i) => i.id !== id)
+  // Strokes share the canvas committed plane, so an item brought to front
+  // must clear them too — otherwise drawings drawn after the item stay on top.
+  const strokeZs = strokes.map(committedStrokeZIndex)
+  if (others.length === 0 && strokeZs.length === 0) {
+    return item?.zIndex ?? Z_ITEMS_ABOVE_MIN
+  }
+
+  const maxOther = Math.max(...others.map((i) => i.zIndex), ...strokeZs)
+  if (item && item.zIndex > maxOther) return item.zIndex
+
+  return Math.max(maxOther + 1, Z_ITEMS_ABOVE_MIN)
 }
 
 export function zIndexForBringToFrontAnnotation(
   items: CanvasItem[],
   id: string,
 ): number {
+  const item = items.find((i) => i.id === id)
   const ann = annotationItems(items).filter((i) => i.id !== id)
-  const maxAnn =
-    ann.length > 0 ? Math.max(...ann.map((i) => i.zIndex)) : Z_ANNOTATION_MIN - 1
-  return maxAnn + 1
+  if (ann.length === 0) return item?.zIndex ?? Z_ANNOTATION_MIN
+
+  const maxOther = Math.max(...ann.map((i) => i.zIndex))
+  if (item && item.zIndex > maxOther) return item.zIndex
+
+  return maxOther + 1
 }
 
 export function zIndexForSendToBack(
   items: { id: string; zIndex: number; layer?: CanvasLayer }[],
   id: string,
+  strokes: { zIndex?: number }[] = [],
 ): number {
   const item = items.find((i) => i.id === id)
   if (item && isAnnotationItem(item)) {
     return zIndexForSendToBackAnnotation(items as CanvasItem[], id)
   }
-  const below = committedItems(items as CanvasItem[]).filter(
-    (i) => isBelowStrokes(i.zIndex) && i.id !== id,
-  )
-  const minBelow = below.length > 0 ? Math.min(...below.map((i) => i.zIndex)) : Z_STROKES
-  return Math.max(Z_ITEMS_BELOW_MIN, minBelow - 1)
+
+  const committed = committedItems(items as CanvasItem[])
+  const others = committed.filter((i) => i.id !== id)
+  // Strokes share the canvas committed plane, so an item sent to back must
+  // dive below them too — otherwise drawings stay above the "back" item.
+  const strokeZs = strokes.map(committedStrokeZIndex)
+  if (others.length === 0 && strokeZs.length === 0) {
+    return item?.zIndex ?? Z_ITEMS_BELOW_MIN
+  }
+
+  const minOther = Math.min(...others.map((i) => i.zIndex), ...strokeZs)
+  if (item && item.zIndex < minOther) return item.zIndex
+
+  let next = minOther - 1
+  if (next >= Z_ITEMS_ABOVE_MIN) return next
+  // Skip the reserved stroke layer z-index (1000) — it is not a valid item band.
+  if (next >= Z_STROKES) next = Z_STROKES - 1
+  return Math.max(Z_ITEMS_BELOW_MIN, next)
 }
 
 export function zIndexForSendToBackAnnotation(
   items: CanvasItem[],
   id: string,
 ): number {
+  const item = items.find((i) => i.id === id)
   const ann = annotationItems(items).filter((i) => i.id !== id)
-  const minAnn =
-    ann.length > 0 ? Math.min(...ann.map((i) => i.zIndex)) : Z_ANNOTATION_MIN + 1
-  return Math.max(Z_ANNOTATION_MIN, minAnn - 1)
+  if (ann.length === 0) return item?.zIndex ?? Z_ANNOTATION_MIN
+
+  const minOther = Math.min(...ann.map((i) => i.zIndex))
+  if (item && item.zIndex < minOther) return item.zIndex
+
+  return Math.max(Z_ANNOTATION_MIN, minOther - 1)
 }
 
 /** Raise within the item's stacking band — used while dragging. */

@@ -1,0 +1,16 @@
+---
+description: When the user asks to push, commit and sync to personal demo + company GitHub
+alwaysApply: true
+---
+
+# Push workflow
+
+The user works in `cutline-studio` and should never need to run git commands manually.
+
+When they say things like "push", "push my changes", "upload to github", or "ship it":
+
+1. Commit any uncommitted changes in `cutline-studio` (use a clear message from the diff).
+2. Run `npm run push` from the `cutline-studio` directory.
+3. Report what was pushed: personal demo (`Awdyx/cutline-studio-demo`) and company repo (`Cutline-Tutoring/cutline-2.0` → `web/`).
+
+Do not ask them to open terminals, switch repos, or run scripts themselves.

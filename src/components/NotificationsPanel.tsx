@@ -269,7 +269,7 @@ export default function NotificationsPanel({
         data-notifications-panel=""
         className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
         style={{
-          ...(isPhone ? phonePanelSheetStyle({ height: undefined }) : cardBase),
+          ...(isPhone ? phonePanelSheetStyle({ height: undefined }, 'right') : cardBase),
           ...chromeFrostedMenuStyle,
           fontFamily: font.family,
           color: font.colorPrimary,

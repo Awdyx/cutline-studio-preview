@@ -169,7 +169,7 @@ export default function SubscriptionSubmenu({
       })}
       style={{
         ...(isPhone
-          ? phoneSubmenuSheetStyle({ display: 'flex', flexDirection: 'column' })
+          ? phoneSubmenuSheetStyle({ display: 'flex', flexDirection: 'column' }, 'right')
           : {
               position: 'fixed',
               top: layout.top,

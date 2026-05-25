@@ -1,6 +1,18 @@
 import { getStroke } from 'perfect-freehand'
 import { getFlatSvgPathFromStroke } from './pathUtils'
-import type { Stroke } from './types'
+import type { Stroke, StrokePoint } from './types'
+
+/** Tap / click dots — duplicate the last point so perfect-freehand can render. */
+export function ensureMinimumStrokePoints(
+  points: StrokePoint[],
+  min: number,
+): StrokePoint[] {
+  const out = [...points]
+  while (out.length > 0 && out.length < min) {
+    out.push({ ...out[out.length - 1] })
+  }
+  return out
+}
 
 export function strokeToSvgPath(stroke: Stroke, isComplete: boolean): string {
   if (stroke.points.length === 0) return ''

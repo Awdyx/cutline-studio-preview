@@ -201,13 +201,13 @@ export default function ProfilePanel({
         className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
         style={{
           ...(isPhone
-            ? phonePanelSheetStyle()
+            ? phonePanelSheetStyle(undefined, 'right')
             : { ...cardBase, top: PROFILE_PANEL_TOP + visualViewportOffsetTop }),
           ...chromeFrostedMenuStyle,
           fontFamily: font.family,
           color: font.colorPrimary,
           zIndex: 30,
-          overflow: 'hidden',
+          overflow: isPhone ? 'auto' : 'hidden',
         }}
         {...(isPhone ? phoneSubmenuSlideMotion : {
           initial: { opacity: 0, scale: 0.96, y: -4 },

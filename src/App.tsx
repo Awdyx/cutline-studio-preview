@@ -341,9 +341,11 @@ function App() {
   }
 
   const itemDragActive = useCanvasItemDragStore((s) => s.activeItemId !== null)
+  const toolPaletteOpen = useShortcutUiStore((s) => s.toolPaletteOpen)
 
   const isPenDown =
     penDown || penMenu.state.phase !== 'idle' || itemDragActive
+  const canvasGestureLocked = isPenDown || toolPaletteOpen
   useCanvasCursorWheelZoom({
     transformRef,
     viewportRef,
@@ -506,6 +508,7 @@ function App() {
         >
           <TransformWrapper
             ref={transformRef}
+            disabled={canvasGestureLocked}
             initialScale={minScale}
             minScale={Math.max(minScale - CANVAS_ZOOM_MIN_EDGE_PADDING, 0.05)}
             maxScale={CANVAS_MAX_SCALE + CANVAS_ZOOM_EDGE_PADDING}
@@ -535,15 +538,16 @@ function App() {
                 keys.includes('Control') || keys.includes('Meta'),
             }}
             trackPadPanning={{
-              disabled: false,
+              disabled: canvasGestureLocked,
               excluded: panExcluded,
             }}
             panning={{
               velocityDisabled: false,
-              disabled: isPenDown,
+              disabled: canvasGestureLocked,
               excluded: panExcluded,
             }}
             pinch={{
+              disabled: canvasGestureLocked,
               excluded: panExcluded,
             }}
             velocityAnimation={{
@@ -633,6 +637,7 @@ function App() {
         user={topBarUser}
         unreadCount={unreadCount}
         cutlineMenuOpen={openPanel === 'cutline'}
+        phoneMenuOpen={openPanel !== null}
         transformRef={transformRef}
         onCutlineClick={() => openOnly('cutline')}
         newsCount={newsCount}

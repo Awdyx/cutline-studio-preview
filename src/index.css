@@ -38,6 +38,10 @@ html[data-space-draw] .cutline-canvas-viewport {
   cursor: crosshair;
 }
 
+.cutline-canvas-viewport.cutline-phone-draw .cutline-draw-target {
+  touch-action: none;
+}
+
 .pen-fab-menu {
   position: absolute;
   right: 64px;
@@ -102,25 +106,47 @@ html[data-space-draw] .cutline-canvas-viewport {
 
 /* ─── Phone layout (narrow + coarse pointer; iPad unchanged) ─────────────── */
 
-html[data-layout='phone'] .pen-fab-menu--phone {
-  position: fixed;
-  right: 12px;
-  left: 12px;
-  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 52px + 12px);
-  width: auto;
-  transform-origin: bottom center;
-  flex-direction: column;
-  max-width: none;
+html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone {
+  right: 64px !important;
+  bottom: 0 !important;
+  left: auto !important;
+  width: max-content !important;
+  max-width: calc(100vw - 88px);
+  transform-origin: 100% 50%;
+  pointer-events: none;
 }
 
-html[data-layout='phone'] .pen-fab-menu--phone > div:first-of-type {
-  overflow-x: auto;
-  max-width: 100%;
-  -webkit-overflow-scrolling: touch;
+html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone:not(.pen-fab-menu--visible) {
+  transform: translateX(4px) scale(0.94);
+}
+
+html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone.pen-fab-menu--visible {
+  transform: translateX(0) scale(0.94);
 }
 
 html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-tool-settings {
   border-top: 1px solid var(--ui-divider);
+  pointer-events: auto;
+}
+
+html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone button {
+  pointer-events: auto;
+}
+
+html[data-layout='phone'] .cutline-top-bar-search {
+  width: 100%;
+  pointer-events: auto;
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity 0.14s ease,
+    filter 0.14s ease;
+}
+
+html[data-layout='phone'] .cutline-top-bar-search--hidden {
+  opacity: 0;
+  filter: blur(6px);
+  pointer-events: none;
 }
 
 html[data-layout='phone'] .cutline-space-back-pill-host {
@@ -135,7 +161,15 @@ html[data-layout='phone'] [data-plus-fab] {
 }
 
 html[data-layout='phone'] [data-pen-fab] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   z-index: 23;
+}
+
+/* Prevent iOS Safari focus-zoom on inputs (<16px triggers automatic zoom). */
+html[data-layout='phone'] [data-canvas-search-input] {
+  font-size: 16px;
 }
 
 :root {

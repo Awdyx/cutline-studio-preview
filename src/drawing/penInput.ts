@@ -1,3 +1,4 @@
+import { isPhoneLayout } from '../platform/layoutProfile'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { useToolStore } from './toolStore'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './canvasDimensions'
@@ -22,22 +23,33 @@ export function isSpaceDrawHeld(): boolean {
   return spaceDrawHeld
 }
 
+/** Sync flag set when the pen FAB menu opens — do not use toolPalette.isOpen() (React ref). */
+export function isToolPaletteOpen(): boolean {
+  return useShortcutUiStore.getState().toolPaletteOpen
+}
+
+/** Phone: pen FAB open — finger draws on canvas instead of panning. */
+export function isPhoneFingerDrawMode(): boolean {
+  return isPhoneLayout() && isToolPaletteOpen()
+}
+
 /** Desktop draw mode: pen FAB open and no stylus this session. */
 export function isDesktopPenDrawMode(): boolean {
   if (hasStylusInput()) return false
-  return useShortcutUiStore.getState().toolPalette?.isOpen() ?? false
+  return isToolPaletteOpen()
 }
 
-/** Pen hover menu pointer (Pencil, or mouse while desktop pen FAB is open). */
+/** Pen hover menu pointer (Pencil, mouse while desktop pen FAB open, or phone finger while pen FAB open). */
 export function isPenMenuPointer(event: PointerEvent): boolean {
   if (isPenInput(event)) return true
   if (event.pointerType === 'mouse' && isDesktopPenDrawMode()) return true
+  if (event.pointerType === 'touch' && isPhoneFingerDrawMode()) return true
   return false
 }
 
 /** Drawing tools active — desktop FAB, stylus session, or pen/highlighter/erase selected. */
 export function isPenDrawMode(): boolean {
-  if (useShortcutUiStore.getState().toolPalette?.isOpen()) return true
+  if (isToolPaletteOpen()) return true
   if (hasStylusInput()) return true
   const mode = useToolStore.getState().mode
   return mode === 'pen' || mode === 'highlighter' || mode === 'erase'
@@ -79,7 +91,10 @@ export function canStartDrawingPointer(event: PointerEvent): boolean {
     return true
   }
   if (event.pointerType === 'mouse') {
-    return useShortcutUiStore.getState().toolPalette?.isOpen() ?? false
+    return isToolPaletteOpen()
+  }
+  if (event.pointerType === 'touch' && isPhoneFingerDrawMode()) {
+    return true
   }
   return false
 }

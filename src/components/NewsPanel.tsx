@@ -235,7 +235,7 @@ export default function NewsPanel({
       ref={panelRef}
       className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
       style={{
-        ...(isPhone ? phonePanelSheetStyle() : cardBase),
+        ...(isPhone ? phonePanelSheetStyle(undefined, 'right') : cardBase),
         ...chromeFrostedMenuStyle,
         fontFamily: font.family,
         color: font.colorPrimary,

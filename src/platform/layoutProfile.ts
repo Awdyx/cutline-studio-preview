@@ -17,3 +17,10 @@ export function syncLayoutProfileAttribute(): LayoutProfile {
   document.documentElement.dataset.layout = profile
   return profile
 }
+
+export function isPhoneLayout(): boolean {
+  if (typeof document === 'undefined') return false
+  const attr = document.documentElement.dataset.layout
+  if (attr === 'phone' || attr === 'desktop') return attr === 'phone'
+  return detectLayoutProfile() === 'phone'
+}

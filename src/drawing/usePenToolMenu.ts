@@ -4,6 +4,7 @@ import { playSound } from '../sound/playSound'
 import { clientToCanvas } from './canvasCoords'
 import { isPenInput, isPenMenuPointer, noteStylusInput } from './penInput'
 import { hitTestPenToolPill } from './penToolMenuLayout'
+import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { useStrokesStore } from './strokesStore'
 import { useToolStore, type ToolMode } from './toolStore'
 
@@ -42,6 +43,9 @@ export type PenToolMenuBridge = {
   moveSpaceHold: (clientX: number, clientY: number) => boolean
   endSpaceHold: (clientX: number, clientY: number) => boolean
   cancelSpaceHold: () => void
+  /** Cancel an in-progress pointer hold (e.g. finger started drawing). */
+  cancelPointerHold: () => void
+  resetHold: () => void
 }
 
 function dist(x1: number, y1: number, x2: number, y2: number): number {
@@ -166,7 +170,7 @@ export function usePenToolMenu(
     onPointerDown(e) {
       if (!isPenMenuPointer(e)) return false
       if (isPenInput(e)) noteStylusInput()
-      if (phaseRef.current === 'open') return true
+      if (phaseRef.current === 'open') return false
 
       if (holdSourceRef.current === 'space') {
         cancelHold()
@@ -274,7 +278,25 @@ export function usePenToolMenu(
       }
       cancelHold()
     },
+
+    cancelPointerHold() {
+      if (holdSourceRef.current !== 'pointer') return
+      if (phaseRef.current === 'open') return
+      cancelHold()
+    },
+
+    resetHold() {
+      resetToIdle()
+    },
   }
+
+  useEffect(() => {
+    return useShortcutUiStore.subscribe((state, prev) => {
+      if (prev.toolPaletteOpen && !state.toolPaletteOpen) {
+        resetToIdle()
+      }
+    })
+  }, [])
 
   useEffect(() => {
     function onHide() {

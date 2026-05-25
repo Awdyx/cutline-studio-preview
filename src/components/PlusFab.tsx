@@ -15,7 +15,7 @@ import {
   glass,
   menuDividerStyle,
 } from '../styles/tokens'
-import { phoneFabSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
+import { phoneFabSheetStyle, phoneFabMenuSlideMotion } from '../styles/phoneChrome'
 import { useShortcutUiStore, type ChromeMenuSoundOpts } from '../shortcuts/shortcutUiStore'
 import { countSpaceWidgets, useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { MAX_SPACE_WIDGETS } from '../canvasItems/types'
@@ -286,7 +286,7 @@ export default function PlusFab({
           <motion.div
             key="fab-menu"
             ref={menuPanelRef}
-            {...(isPhone ? phoneSubmenuSlideMotion : PLUS_FAB_MENU_MOTION)}
+            {...(isPhone ? phoneFabMenuSlideMotion : PLUS_FAB_MENU_MOTION)}
             className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
             style={{
               ...(isPhone
@@ -303,9 +303,7 @@ export default function PlusFab({
             <SubmenuSoundScope>
               <div
                 ref={menuContentRef}
-                style={{
-                  minHeight: menuShellHeight,
-                }}
+                style={isPhone ? undefined : { minHeight: menuShellHeight }}
               >
                 <MainMenuContent
                   onAddToCanvas={handleAddToCanvas}

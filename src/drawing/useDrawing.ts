@@ -2,7 +2,9 @@ import { useEffect, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import {
   canStartDrawingPointer,
+  isFingerTouch,
   isPenDrawMode,
+  isPhoneFingerDrawMode,
   isSpaceDrawHeld,
   isSpaceDrawPointer,
   isStylusTouch,
@@ -18,6 +20,7 @@ import type { StrokePoint } from './types'
 import { clientToCanvasFromElement } from './canvasCoords'
 
 const captureOpts = { capture: true } as const
+const capturePassiveOpts = { capture: true, passive: false } as const
 const ERASE_THROTTLE_MS = 16
 
 function readPressure(pressure: number): number {
@@ -267,10 +270,26 @@ export function useDrawing(
       }
     }
 
+    function isCanvasEventTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof Node)) return false
+      return canvasEl.contains(target)
+    }
+
     function onTouchStart(event: TouchEvent) {
-      if (penMenu()?.isActive()) return
+      if (!isCanvasEventTarget(event.target)) return
       if (event.touches.length !== 1) return
       const touch = event.touches[0]
+
+      if (isPhoneFingerDrawMode() && isFingerTouch(touch)) {
+        if (!penMenu()?.isMenuOpen()) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+        return
+      }
+
+      if (penMenu()?.isActive()) return
+
       if (!isStylusTouch(touch)) return
       noteStylusInput()
       event.stopPropagation()
@@ -287,7 +306,9 @@ export function useDrawing(
     }
 
     function onPointerDown(event: PointerEvent) {
-      if (penMenu()?.onPointerDown(event)) return
+      if (!isCanvasEventTarget(event.target)) return
+      if (penMenu()?.isMenuOpen()) return
+      penMenu()?.onPointerDown(event)
       if (!canStartDrawingPointer(event)) return
 
       event.preventDefault()
@@ -315,6 +336,14 @@ export function useDrawing(
         applySpaceDrawAt(event)
       }
 
+      if (
+        pointerPenActive &&
+        event.pointerId === activePointerId &&
+        isPhoneFingerDrawMode()
+      ) {
+        penMenu()?.cancelPointerHold()
+      }
+
       if (penMenu()?.onPointerMove(event)) return
       if (!pointerPenActive || event.pointerId !== activePointerId) return
 
@@ -328,7 +357,8 @@ export function useDrawing(
       }
 
       event.preventDefault()
-      if (event.pointerType !== 'mouse' && event.pressure < 0.05) return
+      // iOS finger touch reports 0 pressure — only gate pen hover moves.
+      if (event.pointerType === 'pen' && event.pressure < 0.05) return
 
       const coords = toCanvasCoords(event.clientX, event.clientY)
       if (!coords) return
@@ -368,12 +398,19 @@ export function useDrawing(
       }
     }
 
-    canvasEl.addEventListener('touchstart', onTouchStart, captureOpts)
+    function onTouchMove(event: TouchEvent) {
+      if (!pointerPenActive) return
+      if (event.cancelable) event.preventDefault()
+    }
+
+    document.addEventListener('touchstart', onTouchStart, capturePassiveOpts)
+    document.addEventListener('touchmove', onTouchMove, capturePassiveOpts)
+
     canvasEl.addEventListener('touchend', onTouchEnd, captureOpts)
     canvasEl.addEventListener('touchcancel', onTouchEnd, captureOpts)
 
-    canvasEl.addEventListener('pointerdown', onPointerDown, captureOpts)
-    canvasEl.addEventListener('pointermove', onPointerMove, captureOpts)
+    document.addEventListener('pointerdown', onPointerDown, captureOpts)
+    document.addEventListener('pointermove', onPointerMove, captureOpts)
     canvasEl.addEventListener('pointerup', releasePen, captureOpts)
     canvasEl.addEventListener('pointercancel', releasePen, captureOpts)
 
@@ -419,11 +456,12 @@ export function useDrawing(
       window.removeEventListener('keydown', onSpaceDown)
       window.removeEventListener('keyup', onSpaceUp)
       window.removeEventListener('blur', onWindowBlur)
-      canvasEl.removeEventListener('touchstart', onTouchStart, captureOpts)
+      document.removeEventListener('touchstart', onTouchStart, capturePassiveOpts)
+      document.removeEventListener('touchmove', onTouchMove, capturePassiveOpts)
       canvasEl.removeEventListener('touchend', onTouchEnd, captureOpts)
       canvasEl.removeEventListener('touchcancel', onTouchEnd, captureOpts)
-      canvasEl.removeEventListener('pointerdown', onPointerDown, captureOpts)
-      canvasEl.removeEventListener('pointermove', onPointerMove, captureOpts)
+      document.removeEventListener('pointerdown', onPointerDown, captureOpts)
+      document.removeEventListener('pointermove', onPointerMove, captureOpts)
       canvasEl.removeEventListener('pointerup', releasePen, captureOpts)
       canvasEl.removeEventListener('pointercancel', releasePen, captureOpts)
       setSpaceDrawHeld(false)

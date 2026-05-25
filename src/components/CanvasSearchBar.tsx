@@ -73,9 +73,15 @@ function KindIcon({ kind }: { kind: CanvasSearchEntry['kind'] }) {
 interface CanvasSearchBarProps {
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
   compact?: boolean
+  /** Collapsed by phone chrome menus — dismiss focus and dropdown. */
+  hidden?: boolean
 }
 
-export default function CanvasSearchBar({ transformRef, compact = false }: CanvasSearchBarProps) {
+export default function CanvasSearchBar({
+  transformRef,
+  compact = false,
+  hidden = false,
+}: CanvasSearchBarProps) {
   const themeMode = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeMode)
   const stickyPreviewBg = resolveStickyColor(effectiveMode)
@@ -98,7 +104,13 @@ export default function CanvasSearchBar({ transformRef, compact = false }: Canva
     [entries, value],
   )
 
-  const showDropdown = dropdownOpen && value.trim().length > 0
+  const showDropdown = dropdownOpen && value.trim().length > 0 && !hidden
+
+  useEffect(() => {
+    if (!hidden) return
+    setDropdownOpen(false)
+    inputRef.current?.blur()
+  }, [hidden])
 
   function selectEntry(entry: CanvasSearchEntry) {
     const now = Date.now()
@@ -240,7 +252,7 @@ export default function CanvasSearchBar({ transformRef, compact = false }: Canva
             border: 'none',
             background: 'transparent',
             outline: 'none',
-            fontSize: 14,
+            fontSize: compact ? 16 : 14,
             fontFamily: font.family,
             color: font.colorPrimary,
             minWidth: 0,

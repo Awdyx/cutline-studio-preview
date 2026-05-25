@@ -325,7 +325,7 @@ export default function ProfileSubmenu({ panelRef, onClose, onDraftChange }: Pro
         })}
         style={{
           ...(isPhone
-            ? phoneSubmenuSheetStyle({ display: 'flex', flexDirection: 'column' })
+            ? phoneSubmenuSheetStyle({ display: 'flex', flexDirection: 'column' }, 'right')
             : {
                 position: 'fixed',
                 top: layout.top,

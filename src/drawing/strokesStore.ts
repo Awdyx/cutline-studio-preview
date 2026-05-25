@@ -10,7 +10,7 @@ import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { effectiveCanvasLocked } from '../canvasLock/layer'
 import { ERASE_HIT_RADIUS, hitTestStroke } from './eraseUtils'
 import { notifyWorkspacePersist, useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
-import { strokeToSvgPath } from './strokePath'
+import { strokeToSvgPath, ensureMinimumStrokePoints } from './strokePath'
 import { generateStrokeId } from './strokeId'
 import type { DrawTool, Stroke, StrokePoint } from './types'
 
@@ -98,10 +98,12 @@ export const useStrokesStore = create<StrokesState>((set, get) => ({
       points.pop()
     }
 
-    if (points.length < 3) {
+    if (points.length === 0) {
       set({ activeStroke: null })
       return
     }
+
+    points = ensureMinimumStrokePoints(points, 3)
 
     pushUndoSnapshot()
 

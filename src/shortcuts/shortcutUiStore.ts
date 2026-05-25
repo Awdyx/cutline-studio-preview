@@ -56,6 +56,8 @@ type ShortcutUiState = {
   registerPlusFab: (controls: PlusFabControls | null) => void
   toolPalette: ToolPaletteControls | null
   registerToolPalette: (controls: ToolPaletteControls | null) => void
+  toolPaletteOpen: boolean
+  setToolPaletteOpen: (open: boolean) => void
   appPanels: AppPanelControls | null
   registerAppPanels: (controls: AppPanelControls | null) => void
   cutlineMenu: ChromeSubmenuControls | null
@@ -87,6 +89,8 @@ export const useShortcutUiStore = create<ShortcutUiState>((set, get) => ({
 
   toolPalette: null,
   registerToolPalette: (controls) => set({ toolPalette: controls ?? null }),
+  toolPaletteOpen: false,
+  setToolPaletteOpen: (open) => set({ toolPaletteOpen: open }),
 
   appPanels: null,
   registerAppPanels: (controls) => set({ appPanels: controls ?? null }),

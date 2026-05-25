@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { playSubmenuHover, playSubmenuTap } from '../../sound/submenuSound'
 import { useIsPhoneLayout } from '../../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, chromeLabel, font } from '../../styles/tokens'
-import { phoneFabSheetStyle, phoneSubmenuSlideMotion } from '../../styles/phoneChrome'
+import { phoneFabSheetStyle, phoneFabMenuSlideMotion } from '../../styles/phoneChrome'
 import ChromeScrollFade from '../ChromeScrollFade'
 import { SubmenuSoundScope } from '../SubmenuSoundScope'
 import { useSubmenuPosition } from '../useSubmenuPosition'
@@ -175,7 +175,7 @@ export default function WidgetsSubmenu({
     <motion.div
       ref={panelRef}
       data-plus-fab-submenu="widgets"
-      {...(isPhone ? phoneSubmenuSlideMotion : {
+      {...(isPhone ? phoneFabMenuSlideMotion : {
         initial: { opacity: 0, scale: 0.96, x: 4 },
         animate: { opacity: 1, scale: 1, x: 0 },
         exit: { opacity: 0, scale: 0.96, x: 4 },
@@ -183,7 +183,7 @@ export default function WidgetsSubmenu({
       })}
       style={{
         ...(isPhone
-          ? phoneFabSheetStyle({ zIndex: 42, maxHeight: 'min(70dvh, 560px)' })
+          ? phoneFabSheetStyle({ zIndex: 42 })
           : {
               position: 'fixed',
               top: pos.top,

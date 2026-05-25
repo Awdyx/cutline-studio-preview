@@ -204,6 +204,8 @@ interface TopBarProps {
   user: UserClusterProps['user']
   unreadCount: number
   cutlineMenuOpen?: boolean
+  /** Phone: collapse search row while a top chrome menu is open. */
+  phoneMenuOpen?: boolean
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
   onCutlineClick: () => void
   onNewsClick: () => void
@@ -216,6 +218,7 @@ export default function TopBar({
   user,
   unreadCount,
   cutlineMenuOpen = false,
+  phoneMenuOpen = false,
   transformRef,
   onCutlineClick,
   onNewsClick,
@@ -265,8 +268,18 @@ export default function TopBar({
             />
           </div>
         </div>
-        <div style={{ pointerEvents: 'auto', width: '100%' }}>
-          <CanvasSearchBar transformRef={transformRef} compact />
+        <div
+          className={
+            phoneMenuOpen
+              ? 'cutline-top-bar-search cutline-top-bar-search--hidden'
+              : 'cutline-top-bar-search'
+          }
+        >
+          <CanvasSearchBar
+            transformRef={transformRef}
+            compact
+            hidden={phoneMenuOpen}
+          />
         </div>
       </div>
     )

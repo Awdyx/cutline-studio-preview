@@ -48,12 +48,14 @@ function ToolRowButton({
   children,
   label,
   submenuClickSound = true,
+  size = 36,
 }: {
   active?: boolean
   onClick: () => void
   children: React.ReactNode
   label: string
   submenuClickSound?: boolean
+  size?: number
 }) {
   const [hovered, setHovered] = useState(false)
   const inSubmenuScope = useSubmenuSoundScope()
@@ -73,8 +75,8 @@ function ToolRowButton({
       onMouseLeave={() => setHovered(false)}
       style={{
         position: 'relative',
-        width: 36,
-        height: 36,
+        width: size,
+        height: size,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -105,6 +107,7 @@ function PenFabMenuContent({
   onHighlighterClick,
   onEraserClick,
   onClearLayer,
+  compact = false,
 }: {
   canUndo: boolean
   canRedo: boolean
@@ -116,40 +119,46 @@ function PenFabMenuContent({
   onHighlighterClick: () => void
   onEraserClick: () => void
   onClearLayer: () => void
+  compact?: boolean
 }) {
   const isErase = mode === 'erase'
+  const iconSize = compact ? 16 : 18
+  const toolBtnSize = compact ? 32 : 36
 
   return (
     <div
+      data-pen-fab-tools-row=""
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 4,
-        padding: '8px',
+        gap: compact ? 2 : 4,
+        padding: compact ? 6 : 8,
       }}
     >
       <ToolRowButton
         label="Undo"
+        size={toolBtnSize}
         submenuClickSound={false}
         onClick={() => {
           if (canUndo) onUndo()
         }}
       >
         <Undo2
-          size={18}
+          size={iconSize}
           strokeWidth={2}
           style={{ opacity: canUndo ? 1 : 0.5 }}
         />
       </ToolRowButton>
       <ToolRowButton
         label="Redo"
+        size={toolBtnSize}
         submenuClickSound={false}
         onClick={() => {
           if (canRedo) onRedo()
         }}
       >
         <Redo2
-          size={18}
+          size={iconSize}
           strokeWidth={2}
           style={{ opacity: canRedo ? 1 : 0.5 }}
         />
@@ -157,34 +166,36 @@ function PenFabMenuContent({
 
       <div style={menuDividerVerticalStyle} />
 
-      <ToolRowButton label="Pen" active={mode === 'pen'} onClick={onPenClick}>
-        <Pen size={18} strokeWidth={2} />
+      <ToolRowButton label="Pen" size={toolBtnSize} active={mode === 'pen'} onClick={onPenClick}>
+        <Pen size={iconSize} strokeWidth={2} />
       </ToolRowButton>
 
       <ToolRowButton
         label="Highlighter"
+        size={toolBtnSize}
         active={mode === 'highlighter'}
         onClick={onHighlighterClick}
       >
-        <Highlighter size={18} strokeWidth={2} />
+        <Highlighter size={iconSize} strokeWidth={2} />
       </ToolRowButton>
 
       <div style={menuDividerVerticalStyle} />
 
-      <ToolRowButton label="Eraser" active={isErase} onClick={onEraserClick}>
-        <Eraser size={18} strokeWidth={2} />
+      <ToolRowButton label="Eraser" size={toolBtnSize} active={isErase} onClick={onEraserClick}>
+        <Eraser size={iconSize} strokeWidth={2} />
       </ToolRowButton>
 
       <div style={menuDividerVerticalStyle} />
 
       <ToolRowButton
         label="Clear layer"
+        size={toolBtnSize}
         onClick={() => {
           if (hasClearableContent) onClearLayer()
         }}
       >
         <Trash2
-          size={18}
+          size={iconSize}
           strokeWidth={2}
           style={{ opacity: hasClearableContent ? 1 : 0.5 }}
         />
@@ -240,12 +251,14 @@ export default function PenFab() {
     setFabHoverScale(false)
     setIsOpen(false)
     setColorPopover(null)
+    useShortcutUiStore.getState().setToolPaletteOpen(false)
   }
 
   function openMenu() {
     playSound('menuOpen')
     setFabHoverScale(false)
     setIsOpen(true)
+    useShortcutUiStore.getState().setToolPaletteOpen(true)
   }
 
   function handleFabTriggerClick() {
@@ -324,13 +337,19 @@ export default function PenFab() {
     if (!(viewport instanceof HTMLElement)) return
 
     const desktopDraw = isOpen && !hasStylusInput()
+    const phoneDraw = isOpen && isPhone && !hasStylusInput()
     viewport.classList.toggle('cutline-desktop-draw', desktopDraw)
+    viewport.classList.toggle('cutline-phone-draw', phoneDraw)
 
-    return () => viewport.classList.remove('cutline-desktop-draw')
-  }, [isOpen, colorPopover])
+    return () => {
+      viewport.classList.remove('cutline-desktop-draw')
+      viewport.classList.remove('cutline-phone-draw')
+    }
+  }, [isOpen, isPhone, colorPopover])
 
   useEffect(() => {
-    if (!isOpen) return
+    // Phone: keep menu open while drawing on the canvas with a finger.
+    if (!isOpen || isPhone) return
 
     function handleMouseDown(e: MouseEvent) {
       const target = e.target
@@ -342,7 +361,7 @@ export default function PenFab() {
 
     document.addEventListener('mousedown', handleMouseDown)
     return () => document.removeEventListener('mousedown', handleMouseDown)
-  }, [isOpen])
+  }, [isOpen, isPhone])
 
   useEffect(() => {
     if (!isOpen) return
@@ -412,7 +431,7 @@ export default function PenFab() {
             ...chromeFrostedMenuStyle,
             fontFamily: font.family,
             color: font.colorPrimary,
-            pointerEvents: isOpen ? 'auto' : 'none',
+            pointerEvents: isOpen ? (isPhone ? 'none' : 'auto') : 'none',
           }}
         >
           <SubmenuSoundScope>
@@ -427,6 +446,7 @@ export default function PenFab() {
               onHighlighterClick={handleHighlighterClick}
               onEraserClick={handleEraserClick}
               onClearLayer={clearLayer}
+              compact={isPhone}
             />
             <AnimatePresence initial={false}>
               {colorPopover && (

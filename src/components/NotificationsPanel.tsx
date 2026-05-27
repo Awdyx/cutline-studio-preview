@@ -1,6 +1,6 @@
 import { useRef, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
-import { BellOff } from 'lucide-react'
+import { Bell, BellOff } from 'lucide-react'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, CHROME_PRESERVE_CASE_CLASS, chromeFrostedMenuStyle, chromeLabel, font } from '../styles/tokens'
 import { phonePanelSheetStyle, phoneTopPanelSlideMotion, phoneTopPanelTransformOrigin, PHONE_TOP_PANEL_SCALE } from '../styles/phoneChrome'
@@ -195,6 +195,7 @@ function NotificationRow({
             lineHeight: 1.35,
             flex: 1,
             minWidth: 0,
+            maxWidth: 190,
           }}
         >
           <NotificationMessage
@@ -203,7 +204,7 @@ function NotificationRow({
             onVisitActorCanvas={onVisitActorCanvas}
           />
         </p>
-        <span style={{ ...timestampStyle, opacity: opacity.timestamp }}>
+        <span style={{ ...timestampStyle, opacity: opacity.timestamp, marginLeft: 'auto' }}>
           {chromeLabel(n.timestamp)}
         </span>
       </div>
@@ -310,24 +311,14 @@ function NotificationsPanelBody({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 12,
+            gap: 8,
           }}
         >
+          <Bell size={16} color={panelTone.title} strokeWidth={1.8} aria-hidden />
           <span style={{ fontSize: 16, fontWeight: 600, color: panelTone.title, opacity: opacity.title }}>
             {chromeLabel('Notifications')}
           </span>
         </div>
-        <p
-          style={{
-            margin: '4px 0 0',
-            fontSize: 12,
-            color: font.colorMuted,
-            lineHeight: 1.4,
-            opacity: opacity.subtitle,
-          }}
-        >
-          {chromeLabel('Comments, shares, and mentions')}
-        </p>
       </div>
 
       <div

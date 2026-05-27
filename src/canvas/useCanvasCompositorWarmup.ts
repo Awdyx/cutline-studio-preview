@@ -20,16 +20,12 @@ export function useCanvasCompositorWarmup(
 
     doneRef.current = true
 
-    const prevWillChange = layer.style.willChange
-    layer.style.willChange = 'transform, opacity'
+    // Force a one-time rasterisation flush so the GPU layer is warm before
+    // the first pan gesture. will-change:transform is handled permanently in CSS.
     layer.style.opacity = '0.999'
     void layer.offsetHeight
-
     requestAnimationFrame(() => {
-      layer.style.opacity = '1'
-      requestAnimationFrame(() => {
-        layer.style.willChange = prevWillChange
-      })
+      layer.style.opacity = ''
     })
   }, [ready, canvasRef])
 }

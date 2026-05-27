@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { playSound } from '../sound/playSound'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
-import { Eraser, Highlighter, Pen, Redo2, Trash2, Undo2 } from 'lucide-react'
+import { Eraser, Highlighter, Image, PenLine, Pen, Redo2, StickyNote, Trash2, Type, Undo2 } from 'lucide-react'
+import { LassoIcon } from '../drawing/LassoIcon'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import ChromeTapSqueezeWrap from './ChromeTapSqueezeWrap'
 import {
@@ -30,6 +31,9 @@ import { useShortcutUiStore, type ChromeMenuSoundOpts } from '../shortcuts/short
 import { SubmenuSoundScope, useSubmenuSoundScope } from './SubmenuSoundScope'
 import { isSwapChromeMenuTarget } from './chromeMenuDismiss'
 import { useCanvasMeshPauseWhile } from '../canvas/useCanvasMeshPause'
+import UiPinHost from '../uiCustomization/UiPinHost'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
+import { useLassoStore, type LassoTargetType } from '../drawing/useLassoStore'
 
 const FAB_SIZE = 52
 const FAB_GAP = 12
@@ -38,12 +42,19 @@ const PEN_FAB_RIGHT = 16 + FAB_SIZE + FAB_GAP
 const PEN_FAB_MENU_TRANSITION_MS = 180
 const PEN_FAB_HOST_TRANSITION_MS = 160
 
-const TOOL_SETTINGS_PANEL_MOTION = {
-  initial: { opacity: 0, height: 0 },
-  animate: { opacity: 1, height: 'auto' },
-  exit: { opacity: 0, height: 0 },
+/** Dissolve shared by color-popover and lasso-panel — opacity + blur only, no movement. */
+const SUBMENU_SWITCH_MOTION = {
+  initial: { opacity: 0, filter: 'blur(4px)' },
+  animate: { opacity: 1, filter: 'blur(0px)' },
+  exit: { opacity: 0, filter: 'blur(4px)' },
   transition: CHROME_MENU_TRANSITION,
 }
+
+/**
+ * Both submenus are designed to this height (12px pad × 2 + 76px switch-host).
+ * The overlay container holds this height while panels crossfade so layout never shifts.
+ */
+const SUBMENU_PANEL_HEIGHT = 100
 
 function ToolRowButton({
   active,
@@ -99,6 +110,93 @@ function ToolRowButton({
   )
 }
 
+const LASSO_TARGET_OPTIONS: { id: LassoTargetType; label: string; Icon: typeof Pen }[] = [
+  { id: 'strokes', label: 'Strokes', Icon: PenLine },
+  { id: 'sticky', label: 'Stickies', Icon: StickyNote },
+  { id: 'text', label: 'Text', Icon: Type },
+  { id: 'image', label: 'Images', Icon: Image },
+]
+
+function LassoTargetPanel({
+  targets,
+  onToggle,
+}: {
+  targets: LassoTargetType[]
+  onToggle: (t: LassoTargetType) => void
+}) {
+  return (
+    <div
+      data-tool-settings=""
+      style={{
+        padding: '12px 12px 12px',
+        fontFamily: font.family,
+        width: '100%',
+        boxSizing: 'border-box',
+      }}
+    >
+      {/* Reuse the switch-host class so min-height matches ToolColorPopover exactly */}
+      <div
+        className="tool-settings-switch-host"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-around',
+        }}
+      >
+        {LASSO_TARGET_OPTIONS.map(({ id, label, Icon }) => {
+          const active = targets.includes(id)
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-label={label}
+              aria-pressed={active}
+              onMouseEnter={() => playSubmenuHover()}
+              onClick={() => {
+                if (targets.length === 1 && targets.includes(id)) {
+                  const store = useShortcutUiStore.getState()
+                  if (store.toast?.shortcutId === 'lasso-easter-egg') {
+                    store.shakeActionToast()
+                  } else {
+                    store.showActionToast({
+                      shortcutId: 'lasso-easter-egg',
+                      label: "let's think about what we're trying to achieve",
+                      keys: [],
+                      holdMs: 2800,
+                    })
+                  }
+                  return
+                }
+                playSubmenuTap()
+                onToggle(id)
+              }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 10px',
+                borderRadius: 10,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                outline: 'none',
+                color: active
+                  ? 'color-mix(in srgb, var(--ui-text) 72%, var(--ui-text-muted))'
+                  : font.colorFaint,
+                transition: 'color 150ms ease',
+              }}
+            >
+              <Icon size={22} strokeWidth={1.75} />
+              <span className="lasso-target-label">{label.toLowerCase()}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function PenFabMenuContent({
   canUndo,
   canRedo,
@@ -109,6 +207,7 @@ function PenFabMenuContent({
   onPenClick,
   onHighlighterClick,
   onEraserClick,
+  onLassoClick,
   onClearLayer,
   compact = false,
 }: {
@@ -121,6 +220,7 @@ function PenFabMenuContent({
   onPenClick: () => void
   onHighlighterClick: () => void
   onEraserClick: () => void
+  onLassoClick: () => void
   onClearLayer: () => void
   compact?: boolean
 }) {
@@ -182,7 +282,9 @@ function PenFabMenuContent({
         <Highlighter size={iconSize} strokeWidth={2} />
       </ToolRowButton>
 
-      <div style={menuDividerVerticalStyle} />
+      <ToolRowButton label="Lasso" size={toolBtnSize} active={mode === 'lasso'} onClick={onLassoClick}>
+        <LassoIcon size={iconSize} strokeWidth={2} />
+      </ToolRowButton>
 
       <ToolRowButton label="Eraser" size={toolBtnSize} active={isErase} onClick={onEraserClick}>
         <Eraser size={iconSize} strokeWidth={2} />
@@ -235,6 +337,9 @@ export default function PenFab() {
   const [colorPopover, setColorPopover] = useState<'pen' | 'highlighter' | null>(
     null,
   )
+  const [lassoTargetOpen, setLassoTargetOpen] = useState(false)
+  const lassoTargetTypes = useLassoStore((s) => s.targetTypes)
+  const toggleLassoTarget = useLassoStore((s) => s.toggleTargetType)
   const [hasClearableContent, setHasClearableContent] = useState(false)
   const [hostMounted, setHostMounted] = useState(penFabActive)
   const [hostVisible, setHostVisible] = useState(penFabActive)
@@ -258,10 +363,12 @@ export default function PenFab() {
     setFabHoverScale(false)
     setIsOpen(false)
     setColorPopover(null)
+    setLassoTargetOpen(false)
     useShortcutUiStore.getState().setToolPaletteOpen(false)
   }
 
   function openMenu() {
+    if (useUiCustomizationStore.getState().editing) return
     playSound('menuOpen')
     setFabHoverScale(false)
     setIsOpen(true)
@@ -269,6 +376,7 @@ export default function PenFab() {
   }
 
   function handleFabTriggerClick() {
+    if (useUiCustomizationStore.getState().editing) return
     if (isOpen) {
       closeMenu()
       return
@@ -348,8 +456,12 @@ export default function PenFab() {
     cancelActiveDrawing()
   }, [isOpen])
 
+  const openMenuRef = useRef(openMenu)
+  openMenuRef.current = openMenu
+
   useEffect(() => {
     useShortcutUiStore.getState().registerToolPalette({
+      open: () => openMenuRef.current(),
       close: closeMenu,
       isOpen: () => isOpenRef.current,
       closeColorPopover,
@@ -412,28 +524,39 @@ export default function PenFab() {
   }, [colorPopover])
 
   function handlePenClick() {
+    setLassoTargetOpen(false)
     if (mode === 'pen' && colorPopover === 'pen') {
       setColorPopover(null)
       return
     }
     setMode('pen')
-    setColorPopover(colorPopover !== null || mode === 'pen' ? 'pen' : null)
+    setColorPopover('pen')
   }
 
   function handleHighlighterClick() {
+    setLassoTargetOpen(false)
     if (mode === 'highlighter' && colorPopover === 'highlighter') {
       setColorPopover(null)
       return
     }
     setMode('highlighter')
-    setColorPopover(
-      colorPopover !== null || mode === 'highlighter' ? 'highlighter' : null,
-    )
+    setColorPopover('highlighter')
   }
 
   function handleEraserClick() {
     setMode('erase')
     setColorPopover(null)
+    setLassoTargetOpen(false)
+  }
+
+  function handleLassoClick() {
+    if (mode === 'lasso') {
+      setLassoTargetOpen((v) => !v)
+      return
+    }
+    setMode('lasso')
+    setColorPopover(null)
+    setLassoTargetOpen(true)
   }
 
   if (!hostMounted) return null
@@ -453,48 +576,93 @@ export default function PenFab() {
       {menuMounted && (
         <div
           data-pen-fab-menu=""
-          className={`pen-fab-menu theme-surface ${CHROME_FROSTED_MENU_CLASS} ${
+          className={`pen-fab-menu ${
             menuVisible ? 'pen-fab-menu--visible' : ''
           } ${isPhone ? 'pen-fab-menu--phone' : ''}`}
           style={{
-            ...chromeFrostedMenuStyle,
             fontFamily: font.family,
             color: font.colorPrimary,
             pointerEvents: isOpen ? (isPhone ? 'none' : 'auto') : 'none',
           }}
         >
           <SubmenuSoundScope>
-            <PenFabMenuContent
-              canUndo={canUndo}
-              canRedo={canRedo}
-              hasClearableContent={hasClearableContent}
-              mode={mode}
-              onUndo={undo}
-              onRedo={redo}
-              onPenClick={handlePenClick}
-              onHighlighterClick={handleHighlighterClick}
-              onEraserClick={handleEraserClick}
-              onClearLayer={clearLayer}
-              compact={isPhone}
-            />
-            <AnimatePresence initial={false}>
-              {colorPopover && (
-                <motion.div
-                  key="pen-fab-tool-settings"
-                  className="pen-fab-tool-settings"
-                  {...(reduceMotion
-                    ? {
-                        initial: { opacity: 0 },
-                        animate: { opacity: 1 },
-                        exit: { opacity: 0 },
-                        transition: { duration: 0.12 },
-                      }
-                    : TOOL_SETTINGS_PANEL_MOTION)}
-                >
-                  <ToolColorPopover tool={colorPopover} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Height shell: snaps instantly, opacity fades — no spatial movement */}
+            <motion.div
+              animate={{
+                height: colorPopover || lassoTargetOpen ? SUBMENU_PANEL_HEIGHT : 0,
+                opacity: colorPopover || lassoTargetOpen ? 1 : 0,
+              }}
+              transition={{
+                // Opening: height snaps open instantly so opacity can fade into the space.
+                // Closing: opacity fades out first, then height collapses after.
+                height: {
+                  duration: 0,
+                  delay: colorPopover || lassoTargetOpen ? 0 : CHROME_MENU_TRANSITION.duration,
+                },
+                opacity: CHROME_MENU_TRANSITION,
+              }}
+              className="pen-fab-settings-shell"
+              style={{ position: 'relative' }}
+            >
+              <AnimatePresence initial={false}>
+                {colorPopover && (
+                  <motion.div
+                    key="pen-fab-tool-settings"
+                    className={`pen-fab-tool-settings theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+                    style={{ ...chromeFrostedMenuStyle, position: 'absolute', inset: 0 }}
+                    {...(reduceMotion
+                      ? {
+                          initial: { opacity: 0 },
+                          animate: { opacity: 1 },
+                          exit: { opacity: 0 },
+                          transition: { duration: 0.12 },
+                        }
+                      : SUBMENU_SWITCH_MOTION)}
+                  >
+                    <ToolColorPopover tool={colorPopover} />
+                  </motion.div>
+                )}
+                {lassoTargetOpen && (
+                  <motion.div
+                    key="lasso-target-panel"
+                    className={`pen-fab-lasso-panel theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+                    style={{ ...chromeFrostedMenuStyle, position: 'absolute', inset: 0 }}
+                    {...(reduceMotion
+                      ? {
+                          initial: { opacity: 0 },
+                          animate: { opacity: 1 },
+                          exit: { opacity: 0 },
+                          transition: { duration: 0.12 },
+                        }
+                      : SUBMENU_SWITCH_MOTION)}
+                  >
+                    <LassoTargetPanel
+                      targets={lassoTargetTypes}
+                      onToggle={toggleLassoTarget}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+            <div
+              className={`pen-fab-toolbar theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+              style={{ ...chromeFrostedMenuStyle }}
+            >
+              <PenFabMenuContent
+                canUndo={canUndo}
+                canRedo={canRedo}
+                hasClearableContent={hasClearableContent}
+                mode={mode}
+                onUndo={undo}
+                onRedo={redo}
+                onPenClick={handlePenClick}
+                onHighlighterClick={handleHighlighterClick}
+                onEraserClick={handleEraserClick}
+                onLassoClick={handleLassoClick}
+                onClearLayer={clearLayer}
+                compact={isPhone}
+              />
+            </div>
           </SubmenuSoundScope>
         </div>
       )}
@@ -503,6 +671,7 @@ export default function PenFab() {
         <button
           type="button"
           data-pen-fab-trigger
+          data-ui-anchor="pen-fab"
           aria-label={isOpen ? 'Close drawing tools' : 'Open drawing tools'}
           aria-expanded={isOpen}
           onClick={handleFabTriggerClick}
@@ -514,9 +683,11 @@ export default function PenFab() {
           style={{
             background: isOpen ? 'var(--card-bg)' : glass.bg,
             border: glass.border,
+            position: 'relative',
           }}
         >
           <Pen size={22} color="var(--ui-text)" strokeWidth={2} />
+          <UiPinHost anchorId="pen-fab" />
         </button>
       </ChromeTapSqueezeWrap>
     </div>

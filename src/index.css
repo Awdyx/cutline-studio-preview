@@ -38,6 +38,26 @@ html[data-space-draw] .cutline-canvas-viewport {
   cursor: crosshair;
 }
 
+html[data-tool-mode="pen"] .cutline-canvas-viewport.cutline-desktop-draw,
+html[data-tool-mode="pen"][data-space-draw] .cutline-canvas-viewport {
+  cursor: url('/cursors/pen.svg') 1 14, crosshair;
+}
+
+html[data-tool-mode="highlighter"] .cutline-canvas-viewport.cutline-desktop-draw,
+html[data-tool-mode="highlighter"][data-space-draw] .cutline-canvas-viewport {
+  cursor: url('/cursors/highlighter.svg') 2 11, crosshair;
+}
+
+html[data-tool-mode="erase"] .cutline-canvas-viewport.cutline-desktop-draw,
+html[data-tool-mode="erase"][data-space-draw] .cutline-canvas-viewport {
+  cursor: url('/cursors/eraser.svg') 2 11, crosshair;
+}
+
+html[data-tool-mode="lasso"] .cutline-canvas-viewport.cutline-desktop-draw,
+html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
+  cursor: var(--cursor-default);
+}
+
 .cutline-canvas-viewport.cutline-phone-draw .cutline-draw-target {
   touch-action: none;
 }
@@ -47,21 +67,22 @@ html[data-space-draw] .cutline-canvas-viewport {
   right: 64px;
   bottom: 0;
   opacity: 0;
-  transform: translateX(4px) scale(0.96);
-  transform-origin: 100% 50%;
+  filter: blur(4px);
   transition:
     opacity 0.18s ease-out,
-    transform 0.18s ease-out;
+    filter 0.18s ease-out;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  gap: 8px;
   width: max-content;
   pointer-events: auto;
+  /* background/border/radius live on the child cards (.pen-fab-toolbar, .pen-fab-tool-settings, .pen-fab-lasso-panel) */
 }
 
 .pen-fab-menu--visible {
   opacity: 1;
-  transform: translateX(0) scale(1);
+  filter: blur(0px);
 }
 
 .chrome-fab-trigger {
@@ -100,8 +121,29 @@ html[data-space-draw] .cutline-canvas-viewport {
   transform: rotate(-20deg) scale(1.05);
 }
 
-.pen-fab-tool-settings {
+.pen-fab-settings-shell {
   overflow: hidden;
+  border-radius: 16px;
+}
+
+.pen-fab-toolbar,
+.pen-fab-tool-settings,
+.pen-fab-lasso-panel {
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.pen-fab-lasso-panel .lasso-target-label {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ui-text-muted);
+  opacity: 0.68;
+  transition: color 150ms ease, opacity 150ms ease;
+}
+
+.pen-fab-lasso-panel button[aria-pressed='true'] .lasso-target-label {
+  color: color-mix(in srgb, var(--ui-text) 72%, var(--ui-text-muted));
+  opacity: 1;
 }
 
 /* ─── Phone layout (narrow + coarse pointer; iPad unchanged) ─────────────── */
@@ -117,15 +159,16 @@ html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone {
 }
 
 html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone:not(.pen-fab-menu--visible) {
-  transform: translateX(4px) scale(0.94);
+  transform: scale(0.94);
 }
 
 html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone.pen-fab-menu--visible {
-  transform: translateX(0) scale(0.94);
+  transform: scale(0.94);
 }
 
-html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-tool-settings {
-  border-top: 1px solid var(--ui-divider);
+html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-tool-settings,
+html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-lasso-panel,
+html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-toolbar {
   pointer-events: auto;
 }
 
@@ -274,6 +317,15 @@ html[data-layout='phone'] .canvas-search-icon {
   animation: chrome-tap-squeeze-compact 220ms ease-out both;
 }
 
+/* During Edit UI mode, the focus transition owns `transform` on every chrome
+   anchor. The tap-squeeze keyframe would otherwise commandeer transform for
+   220ms (overriding any transition), which makes anchors that are themselves
+   the squeeze target — Cutline brand pill, canvas search island — teleport
+   into focus instead of animating. */
+html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
+  animation: none;
+}
+
 @keyframes chrome-tap-squeeze {
   0%,
   100% {
@@ -323,6 +375,7 @@ html[data-layout='phone'] .canvas-search-icon {
   --vignette-rgba-mid: rgba(26, 34, 48, 0.15);
   --vignette-rgba-soft: rgba(26, 34, 48, 0.06);
   --vignette-glow-rgba: rgba(18, 24, 36, 0.42);
+  --study-hub-focus-scrim: rgba(26, 34, 48, 0.14);
   --glass-shadow: 0 4px 24px rgba(20, 30, 50, 0.08);
   --card-shadow: 0 8px 40px rgba(20, 30, 50, 0.14);
   --pill-backdrop: blur(40px) saturate(180%);
@@ -350,6 +403,28 @@ html[data-layout='phone'] .canvas-search-icon {
   --menu-toggle-side-icon-opacity: 0.38;
   --menu-toggle-side-icon-opacity-active: 0.82;
   --cursor-default: url('/cursors/default.svg') 2 2, default;
+  /* Flat dim — applied to the backdrop layer. Stays uniform whether or not
+     an anchor is focused. */
+  --ui-customize-backdrop: rgba(0, 0, 0, 0.18);
+  /* Vignette ring — stacked on top of the flat dim only when an anchor is
+     focused. Transparent in the centre so the focused chrome reads on the
+     unmodified base dim, ramping into a darker corner. */
+  --ui-customize-vignette: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 35%,
+    rgba(0, 0, 0, 0.22) 70%,
+    rgba(0, 0, 0, 0.42) 100%
+  );
+}
+
+[data-theme='dark'] {
+  --ui-customize-backdrop: rgba(0, 0, 0, 0.44);
+  --ui-customize-vignette: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 35%,
+    rgba(0, 0, 0, 0.26) 70%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
 }
 
 .profile-cohort-pill {
@@ -476,6 +551,7 @@ html[data-layout='phone'] .canvas-search-icon {
   --vignette-rgba-mid: rgba(236, 240, 248, 0.039);
   --vignette-rgba-soft: rgba(236, 240, 248, 0.017);
   --vignette-glow-rgba: rgba(248, 250, 255, 0.088);
+  --study-hub-focus-scrim: rgba(8, 10, 16, 0.28);
   --profile-cohort-bg: #121820;
   --profile-cohort-border: rgba(0, 0, 0, 0.45);
   --profile-cohort-text: rgba(240, 244, 252, 0.94);
@@ -591,6 +667,14 @@ input::placeholder {
   height: 1500px !important;
   max-width: none !important;
   max-height: none !important;
+  will-change: transform;
+  filter: blur(var(--canvas-motion-blur, 0px));
+  transition: filter 160ms ease-out;
+}
+
+/* Menu-focus zoom can pan past canvas edges — let the oversized scrim paint outside. */
+html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transform-component {
+  overflow: visible !important;
 }
 
 .media-load-placeholder {
@@ -771,6 +855,40 @@ input::placeholder {
   display: none;
 }
 
+/* UI customize tray: category labels are hidden, collapse frimousse header slots */
+[data-ui-customization-tray] .ui-emoji-picker-root {
+  --frimousse-category-header-height: 1px !important;
+}
+
+[data-ui-customization-tray] .ui-emoji-viewport [frimousse-list-sizer] > div:empty {
+  height: 1px !important;
+  min-height: 0 !important;
+}
+
+[data-ui-customization-tray] .ui-emoji-scroll-wrap {
+  margin-top: -5px;
+}
+
+[data-ui-customization-tray] [data-ui-draw-canvas] {
+  cursor: crosshair;
+}
+
+html[data-tool-mode='pen'] [data-ui-customization-tray] [data-ui-draw-canvas] {
+  cursor: url('/cursors/pen.svg') 1 14, crosshair;
+}
+
+html[data-tool-mode='highlighter'] [data-ui-customization-tray] [data-ui-draw-canvas] {
+  cursor: url('/cursors/highlighter.svg') 2 11, crosshair;
+}
+
+html[data-tool-mode='erase'] [data-ui-customization-tray] [data-ui-draw-canvas] {
+  cursor: url('/cursors/eraser.svg') 2 11, crosshair;
+}
+
+html[data-tool-mode='lasso'] [data-ui-customization-tray] [data-ui-draw-canvas] {
+  cursor: var(--cursor-default);
+}
+
 [data-plus-fab-submenu='widgets'] .chrome-scroll-fade .ui-chrome-preserve-case,
 [data-plus-fab-submenu='widgets'] .chrome-scroll-fade .ui-chrome-preserve-case * {
   text-transform: lowercase;
@@ -789,6 +907,49 @@ input::placeholder {
   border-radius: 16px;
   isolation: isolate;
   overflow: hidden;
+}
+
+.study-hub-menu-dismiss {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  outline: none;
+  border-radius: 999px;
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+  color: color-mix(in srgb, var(--ui-text-muted) 78%, var(--ui-text));
+  cursor: pointer;
+  transition:
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.study-hub-menu-dismiss:hover {
+  transform: scale(1.06);
+  color: var(--ui-text-muted);
+  background: color-mix(in srgb, var(--glass-bg) 80%, var(--ui-text));
+  box-shadow: var(--card-shadow);
+}
+
+.study-hub-menu-dismiss:active {
+  transform: scale(0.96);
+  transition-duration: 90ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .study-hub-menu-dismiss {
+    transition-duration: 0.01ms;
+  }
 }
 
 .study-hub-widget--resizing,
@@ -1175,6 +1336,9 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-w
   -webkit-backdrop-filter: blur(10px) saturate(140%);
   backdrop-filter: blur(10px) saturate(140%);
   filter: saturate(var(--ui-saturate, 1));
+  transition:
+    backdrop-filter 300ms ease-out,
+    -webkit-backdrop-filter 300ms ease-out;
 }
 
 @media (pointer: coarse) {
@@ -1184,10 +1348,51 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-w
   }
 }
 
+/* Pan-simplification — quickly dissolve expensive blur effects while panning,
+   restore them gently when pan stops. Fast in (120ms), slow out (300ms on base). */
+html[data-canvas-panning] .ui-space-glass {
+  -webkit-backdrop-filter: blur(0px) saturate(100%);
+  backdrop-filter: blur(0px) saturate(100%);
+  transition:
+    backdrop-filter 120ms ease-in,
+    -webkit-backdrop-filter 120ms ease-in;
+}
+
+html[data-canvas-panning] .study-hub-widget.plus-fab-menu-glass {
+  --study-hub-glass-blur: 0px;
+  --study-hub-glass-saturate: 100%;
+  transition:
+    backdrop-filter 120ms ease-in,
+    -webkit-backdrop-filter 120ms ease-in,
+    background 120ms ease-in,
+    box-shadow 120ms ease-in;
+}
+
+/* Fade out drag/resize handles during pan.
+   Single consistent transition duration so the browser never has to reconcile
+   a transition-property change alongside an opacity change (which breaks restore). */
+.canvas-item-drag-handle-wrapper,
+.canvas-item-drag-handle,
+.canvas-item-resize-handle {
+  transition: opacity 200ms ease-in-out;
+}
+
+html[data-canvas-panning] .canvas-item-drag-handle-wrapper,
+html[data-canvas-panning] .canvas-item-drag-handle,
+html[data-canvas-panning] .canvas-item-resize-handle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Blur canvas behind selection (no saturate — that boosted the whole background). */
 .ui-selection-depth {
   -webkit-backdrop-filter: blur(7px);
   backdrop-filter: blur(7px);
+}
+
+/* Study-hub menu focus — extra dim on top of the selection blur. */
+.ui-selection-depth--menu-focus {
+  background: var(--study-hub-focus-scrim);
 }
 
 .canvas-item-selected-focus {
@@ -1245,12 +1450,35 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-w
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  opacity: 0.62;
+  opacity: 0.42;
+  /* Three-stop gradients (the middle stop sits below the linear midpoint) bend
+     the falloff into an ease-out instead of a hard ramp, so the inner edge
+     softens out further with no visible knee. */
   background:
-    linear-gradient(to right, var(--vignette-rgba-mid) 0%, transparent 18%),
-    linear-gradient(to left, var(--vignette-rgba-mid) 0%, transparent 18%),
-    linear-gradient(to bottom, var(--vignette-rgba-mid) 0%, transparent 20%),
-    linear-gradient(to top, var(--vignette-rgba-mid) 0%, transparent 20%);
+    linear-gradient(
+      to right,
+      var(--vignette-rgba-mid) 0%,
+      color-mix(in srgb, var(--vignette-rgba-mid) 38%, transparent) 12%,
+      transparent 30%
+    ),
+    linear-gradient(
+      to left,
+      var(--vignette-rgba-mid) 0%,
+      color-mix(in srgb, var(--vignette-rgba-mid) 38%, transparent) 12%,
+      transparent 30%
+    ),
+    linear-gradient(
+      to bottom,
+      var(--vignette-rgba-mid) 0%,
+      color-mix(in srgb, var(--vignette-rgba-mid) 38%, transparent) 13%,
+      transparent 32%
+    ),
+    linear-gradient(
+      to top,
+      var(--vignette-rgba-mid) 0%,
+      color-mix(in srgb, var(--vignette-rgba-mid) 38%, transparent) 13%,
+      transparent 32%
+    );
 }
 
 @keyframes space-preview-drop-hover {
@@ -1304,7 +1532,9 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-w
   height: 100%;
   display: flex;
   align-items: stretch;
-  padding: 4px;
+  /* No padding — buttons go edge-to-edge so overflow:hidden clips them to the
+     pill shape, matching the UI customization toolbar hover style. */
+  padding: 0;
   border-radius: 999px;
   overflow: hidden;
   color: var(--ui-text);
@@ -1325,12 +1555,22 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-w
   align-items: center;
   justify-content: center;
   min-width: 0;
-  border-radius: 999px;
+  /* No per-segment border-radius — overflow:hidden on the pill clips each
+     segment's fill to the pill contour instead of boxing it. */
+  border-radius: 0;
   transition: background-color 0.12s ease;
 }
 
 .pen-tool-pill__segment--hovered {
   background: var(--ui-divider-vertical);
+}
+
+[data-draw-tab-pill] button:hover:not(:disabled) {
+  background: var(--ui-divider-vertical) !important;
+}
+
+[data-draw-tab-pill] button:focus {
+  outline: none;
 }
 
 .pen-tool-pill__icon {
@@ -1360,6 +1600,13 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-w
 [data-fab-trigger]:focus-visible,
 .chrome-fab-trigger:focus,
 .chrome-fab-trigger:focus-visible {
+  outline: none;
+}
+
+/* Suppress the browser default focus outline globally on buttons —
+   the chrome already conveys hover/press state via background + scale. */
+button:focus,
+button:focus-visible {
   outline: none;
 }
 
@@ -1441,13 +1688,6 @@ html[data-multi-touch] .canvas-item-resize-handle {
   }
 }
 
-.canvas-item-z-menu-row:hover {
-  background: rgba(20, 30, 50, 0.06);
-}
-
-.canvas-item-z-menu-row--destructive:hover {
-  background: rgba(196, 78, 78, 0.08);
-}
 
 /* Plain canvas text — drag/resize handles on hover or while selected */
 [data-canvas-item='text'] {
@@ -1583,5 +1823,473 @@ html[data-multi-touch] .canvas-item-resize-handle {
 @media (prefers-reduced-motion: reduce) {
   .theme-change-pulse {
     animation-duration: 180ms;
+  }
+}
+
+/* ─── UI customization (Edit UI) ─────────────────────────────────────────── */
+
+/*
+ * Anchor transform model (only active inside edit mode)
+ * -----------------------------------------------------
+ * Each chrome anchor composes its focus visual from CSS variables. The rule
+ * is scoped to `html[data-ui-customize='1']` so it doesn't shadow the FAB
+ * rotation / hover transforms outside edit mode.
+ *   - --ui-focus-tx / --ui-focus-ty :  viewport-centre translation (set by JS
+ *                                       when the anchor is focused).
+ *   - --ui-focus-scale              :  current focus zoom (1 idle, 1.6 focused).
+ *   - --ui-droptarget-scale         :  brief scale-up while a tray drag is
+ *                                       hovering the anchor.
+ *   - --ui-breath-scale             :  ambient breathing pulse in select state.
+ *   - --ui-hover-scale              :  pointer-hover lift in select state.
+ *
+ * Breath + hover scales are registered with `@property` so they interpolate
+ * smoothly when transitioned/keyframed; the consuming `transform` recomputes
+ * each frame from the multiplied vars.
+ */
+@property --ui-focus-tx {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --ui-focus-ty {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --ui-focus-scale {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@property --ui-droptarget-scale {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@property --ui-breath-scale {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
+html[data-ui-customize='1'] [data-ui-anchor] {
+  --ui-focus-tx: 0px;
+  --ui-focus-ty: 0px;
+  --ui-focus-scale: 1;
+  --ui-droptarget-scale: 1;
+  --ui-breath-scale: 1;
+  /* Per-anchor breath peak (read by the breath keyframe at 50%). The wide
+     search-bar pill stays gentle; the small chrome buttons / FABs get a
+     more visible inhale. */
+  --ui-breath-peak: 1.045;
+  transform: translate(var(--ui-focus-tx), var(--ui-focus-ty))
+    scale(
+      calc(
+        var(--ui-focus-scale) * var(--ui-droptarget-scale) *
+          var(--ui-breath-scale)
+      )
+    );
+  transform-origin: center center;
+  /* Neutral filter baseline — same function chain as the :hover state so
+     CSS interpolates each parameter smoothly instead of falling back to a
+     discrete switch. */
+  filter: brightness(1)
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  transition:
+    transform 380ms cubic-bezier(0.32, 1.2, 0.55, 1),
+    filter 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 240ms ease,
+    opacity 240ms ease;
+}
+
+
+/* Focused anchor sits above the dim backdrop. */
+html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-focused='1'] {
+  z-index: 80 !important;
+}
+
+/* Ambient breath in the "select an element" state. Each anchor inhales /
+   exhales over 3.2s, ease-in-out, with a per-anchor peak read from
+   `--ui-breath-peak`. Auto-stops as soon as anything gets focused (rule no
+   longer matches → variable falls back to 1, transform transition smooths
+   the landing). */
+@keyframes ui-anchor-breath {
+  0%,
+  100% {
+    --ui-breath-scale: 1;
+  }
+  50% {
+    --ui-breath-scale: var(--ui-breath-peak, 1.018);
+  }
+}
+
+/* The breath always starts at keyframe 0% (`--ui-breath-scale: 1`), which
+   is the same static value the hover-cooldown holds. That makes the
+   re-engage seamless: as soon as the cooldown attribute clears, the animation
+   begins inhaling from 1 → 1.018 → 1 instead of snapping to a mid-cycle
+   value. The previous staggered negative `animation-delay` was the source
+   of that snap (e.g. search bar resumed at ~1.005 not 1). */
+html[data-ui-customize='1']:not([data-ui-focused='1']) [data-ui-anchor] {
+  animation: ui-anchor-breath 3.2s ease-in-out infinite;
+}
+
+/* Search bar's wide pill amplifies any scale visually — keep its breath
+   subtle so it doesn't read as a wobble. */
+html[data-ui-customize='1'] [data-ui-anchor='search-bar'] {
+  --ui-breath-peak: 1.014;
+}
+
+/* News + notifications icons read as small, so they need a bigger inhale to
+   feel alive. */
+html[data-ui-customize='1'] [data-ui-anchor='news'],
+html[data-ui-customize='1'] [data-ui-anchor='notifications'] {
+  --ui-breath-peak: 1.085;
+}
+
+/* Bottom-right FABs (pen + plus) — bumped a touch beyond default so the
+   floating action affordance doesn't get lost against the canvas. */
+html[data-ui-customize='1'] [data-ui-anchor='pen-fab'],
+html[data-ui-customize='1'] [data-ui-anchor='plus-fab'] {
+  --ui-breath-peak: 1.06;
+}
+
+/* Ambient 40%-strength glow on all anchors while the customisation menu is
+   open (selection mode, nothing focused). Keeps the chrome feeling alive
+   without competing with the full-brightness hover glow below. */
+html[data-ui-customize='1']:not([data-ui-focused='1'])
+  [data-ui-anchor] {
+  filter: brightness(1.0374)
+    drop-shadow(0 0 20px rgba(255, 255, 255, 0.1188))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.1496));
+}
+
+/* FABs: ambient glow boosted 30% — they sit in the corner against the canvas
+   so they need a little more pop to read clearly. */
+html[data-ui-customize='1']:not([data-ui-focused='1'])
+  [data-ui-anchor='pen-fab'],
+html[data-ui-customize='1']:not([data-ui-focused='1'])
+  [data-ui-anchor='plus-fab'] {
+  filter: brightness(1.04862)
+    drop-shadow(0 0 20px rgba(255, 255, 255, 0.15444))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.19448));
+}
+
+/* News + notifications: ambient glow boosted 30% — small icons need more
+   contrast to register against the blurred backdrop. */
+html[data-ui-customize='1']:not([data-ui-focused='1'])
+  [data-ui-anchor='news'],
+html[data-ui-customize='1']:not([data-ui-focused='1'])
+  [data-ui-anchor='notifications'] {
+  filter: brightness(1.04862)
+    drop-shadow(0 0 20px rgba(255, 255, 255, 0.15444))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.19448));
+}
+
+/* Hover affordance in the "select an element" state — full-strength glow,
+   no geometry change. Overrides the ambient glow above via :hover specificity. */
+html[data-ui-customize='1']:not([data-ui-focused='1'])
+  [data-ui-anchor]:hover {
+  filter: brightness(1.0935)
+    drop-shadow(0 0 20px rgba(255, 255, 255, 0.297))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.374));
+}
+
+/* "tap a ui element" select-prompt pill — breathes the same hover glow
+   continuously so it reads as interactive without being distracting. */
+@keyframes ui-select-prompt-glow {
+  0%, 100% {
+    filter: brightness(1.04)
+      drop-shadow(0 0 8px rgba(255, 255, 255, 0.18))
+      drop-shadow(0 0 3px rgba(255, 255, 255, 0.22));
+  }
+  50% {
+    filter: brightness(1.09)
+      drop-shadow(0 0 22px rgba(255, 255, 255, 0.32))
+      drop-shadow(0 0 7px rgba(255, 255, 255, 0.38));
+  }
+}
+
+html[data-ui-customize='1']:not([data-ui-focused='1']) [data-ui-select-prompt] {
+  animation: ui-select-prompt-glow 3.2s ease-in-out infinite;
+}
+
+/* ── Prompt click: anchors nudge subtly into the screen ────────────────── */
+@keyframes ui-anchor-nudge-in {
+  0%   { scale: 1; }
+  38%  { scale: 0.975; }
+  100% { scale: 1; }
+}
+
+html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor] {
+  animation: ui-anchor-nudge-in 500ms cubic-bezier(0.32, 1.28, 0.48, 1) both;
+}
+
+@keyframes ui-anchor-nudge-in-subtle {
+  0%   { scale: 1; }
+  38%  { scale: 0.990; }
+  100% { scale: 1; }
+}
+
+html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor='brand-pill'],
+html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor='search-bar'] {
+  animation: ui-anchor-nudge-in-subtle 500ms cubic-bezier(0.32, 1.28, 0.48, 1) both;
+}
+
+/* ── Prompt hover: all anchors glow + backdrop darkens ─────────────────── */
+html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
+  [data-ui-anchor] {
+  filter: brightness(1.04)
+    drop-shadow(0 0 10px rgba(255, 255, 255, 0.13))
+    drop-shadow(0 0 3px rgba(255, 255, 255, 0.18));
+}
+
+/* News + notifications get the full-strength glow */
+html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
+  [data-ui-anchor='news'],
+html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
+  [data-ui-anchor='notifications'] {
+  filter: brightness(1.0935)
+    drop-shadow(0 0 20px rgba(255, 255, 255, 0.297))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.374));
+}
+
+/* Extra dim layer on the backdrop when hovering the prompt pill */
+html[data-ui-customize='1'] [data-ui-customization-backdrop]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  transition: opacity 260ms ease;
+  pointer-events: none;
+}
+html[data-ui-customize='1'][data-ui-prompt-hover] [data-ui-customization-backdrop]::after {
+  opacity: 1;
+}
+
+
+/* Motion blur pulse — fires on every focus *change* (gain or release) so the
+   chrome streaks slightly while it's traversing the viewport, then resolves
+   crisp. Duration matches the transform transition.
+   Declared *after* the breath rules so its `animation` shorthand wins on the
+   release path (breath rule and motion-blur rule have equal specificity). */
+@keyframes ui-anchor-motion-blur {
+  0% {
+    filter: blur(0);
+  }
+  35% {
+    filter: blur(3.5px);
+  }
+  100% {
+    filter: blur(0);
+  }
+}
+
+html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1'] {
+  animation: ui-anchor-motion-blur 380ms cubic-bezier(0.32, 1.2, 0.55, 1) both;
+}
+
+/* While editing, lift the entire chrome above the dim backdrop so all
+   anchors stay tappable. */
+html[data-ui-customize='1'] .cutline-top-bar,
+html[data-ui-customize='1'] [data-pen-fab],
+html[data-ui-customize='1'] [data-plus-fab] {
+  z-index: 60 !important;
+}
+
+/* While an element is focused, fade the *other* anchors so the focused one
+   reads as the active surface. */
+html[data-ui-customize='1'][data-ui-focused='1']
+  [data-ui-anchor]:not([data-ui-anchor-focused='1']) {
+  opacity: 0.32;
+}
+
+/* Edit mode default cursor: chrome buttons act as selectable cards. */
+html[data-ui-customize='1'] [data-ui-anchor] {
+  cursor: pointer;
+}
+
+/* Pin pointer events: pinned items are inert outside edit mode, interactive
+   only on the *focused* anchor while editing. (Pins on faded sibling anchors
+   stay visible but inert until that anchor is focused.) */
+[data-ui-pin] {
+  pointer-events: none;
+}
+
+html[data-ui-customize='1']
+  [data-ui-anchor-focused='1']
+  [data-ui-pin] {
+  pointer-events: auto;
+}
+
+[data-ui-pin][data-ui-pin-selected] {
+  cursor: grab;
+}
+
+/* Pin hover lift — emojis read as a pop because the glyph is inset; images,
+   gifs, and drawings fill the box so they need the same explicit scale +
+   shadow on the asset layer to match. */
+html[data-ui-customize='1'] [data-ui-anchor-focused='1'] [data-ui-pin] {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+  transition: filter 160ms ease;
+}
+
+html[data-ui-customize='1'] [data-ui-anchor-focused='1'] [data-ui-pin]:hover,
+html[data-ui-customize='1']
+  [data-ui-anchor-focused='1']
+  [data-ui-pin][data-ui-pin-selected] {
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.22));
+}
+
+html[data-ui-customize='1']
+  [data-ui-anchor-focused='1']
+  [data-ui-pin-asset] {
+  transform: scale(1);
+  transform-origin: center center;
+  transition: transform 220ms cubic-bezier(0.32, 1.2, 0.55, 1);
+}
+
+html[data-ui-customize='1']
+  [data-ui-anchor-focused='1']
+  [data-ui-pin]:hover
+  [data-ui-pin-asset],
+html[data-ui-customize='1']
+  [data-ui-anchor-focused='1']
+  [data-ui-pin][data-ui-pin-selected]
+  [data-ui-pin-asset] {
+  transform: scale(1.08);
+}
+
+@keyframes ui-customize-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ui-customize-spin {
+  animation: ui-customize-spin 0.9s linear infinite;
+}
+
+/* Pin spawn / delete animations — composed on a wrapper div so the body's
+   `transform: rotate(...)` is preserved during enter/exit. */
+[data-ui-pin-anim][data-ui-pin-enter='1'] {
+  animation: ui-pin-enter 200ms cubic-bezier(0.22, 1.6, 0.4, 1) both;
+}
+
+[data-ui-pin-anim][data-ui-pin-exit='1'] {
+  animation: ui-pin-exit 180ms cubic-bezier(0.4, 0, 0.6, 1) both;
+}
+
+@keyframes ui-pin-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.86) translateY(-5px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.03) translateY(1px);
+  }
+  78% {
+    transform: scale(0.985) translateY(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0px);
+  }
+}
+
+@keyframes ui-pin-exit {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.55) translateY(6px);
+    filter: blur(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ui-pin-anim][data-ui-pin-enter='1'],
+  [data-ui-pin-anim][data-ui-pin-exit='1'] {
+    animation-duration: 90ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui-customize='1'] [data-ui-anchor] {
+    transition-duration: 0ms;
+  }
+  html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1'] {
+    animation: none;
+  }
+  html[data-ui-customize='1']:not([data-ui-focused='1']) [data-ui-anchor] {
+    animation: none;
+  }
+  html[data-ui-customize='1']:not([data-ui-focused='1'])
+    [data-ui-anchor]:hover {
+    --ui-hover-scale: 1;
+  }
+  html[data-ui-customize='1']
+    [data-ui-anchor-focused='1']
+    [data-ui-pin-asset] {
+    transition-duration: 0ms;
+  }
+}
+
+/* ─── Drag-drop anchor hover animation ────────────────────────────────────── */
+
+@keyframes ui-anchor-drag-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(20, 30, 50, 0.14); }
+  50%  { box-shadow: 0 0 0 8px rgba(20, 30, 50, 0.0); }
+  100% { box-shadow: 0 0 0 0 rgba(20, 30, 50, 0.0); }
+}
+
+html[data-ui-customize='1']
+  [data-ui-anchor-focused='1'][data-ui-anchor-drag-hover='1'] {
+  outline: 2px solid rgba(20, 30, 50, 0.15);
+  outline-offset: 3px;
+  animation: ui-anchor-drag-pulse 0.8s ease-out infinite;
+}
+
+/* ─── Pin drag ghost ───────────────────────────────────────────────────────── */
+
+[data-ui-customization-drag-ghost] {
+  /* Prevent the ghost from triggering hover states on things below it */
+  pointer-events: none;
+  will-change: transform;
+  background: var(--card-bg);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+/* ─── Pin selection toolbar ───────────────────────────────────────────────── */
+
+[data-ui-pin-toolbar] {
+  /* pill shadow handled via inline style; just ensure it stacks above chrome */
+  isolation: isolate;
+}
+
+[data-ui-pin-toolbar-ctrl] {
+  /* Cursor affordance: horizontal drag to change value */
+  cursor: col-resize;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+[data-ui-pin-toolbar-ctrl]:hover {
+  background: rgba(20, 30, 50, 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ui-anchor-focused='1'][data-ui-anchor-drag-hover='1'] {
+    animation: none;
   }
 }

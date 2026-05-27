@@ -18,6 +18,8 @@ import { useStrokesStore } from './strokesStore'
 import { useToolStore } from './toolStore'
 import type { StrokePoint } from './types'
 import { clientToCanvasFromElement } from './canvasCoords'
+import { useLassoStore } from './useLassoStore'
+import { isPointerOnCanvasItem } from '../canvas/canvasSelectionDismiss'
 
 const captureOpts = { capture: true } as const
 const capturePassiveOpts = { capture: true, passive: false } as const
@@ -225,8 +227,14 @@ export function useDrawing(
       const { clientX, clientY } = lastPointerPos
       penMenu()?.beginSpaceHold(clientX, clientY)
 
-      const coords = toCanvasCoords(clientX, clientY)
-      if (coords) startDrawAt(coords, 0.5)
+      const mode = useToolStore.getState().mode
+      if (mode === 'lasso') {
+        useLassoStore.getState().clearSelection()
+        useLassoStore.getState().startLasso(clientX, clientY)
+      } else {
+        const coords = toCanvasCoords(clientX, clientY)
+        if (coords) startDrawAt(coords, 0.5)
+      }
     }
 
     function onSpaceUp(e: KeyboardEvent) {
@@ -241,7 +249,12 @@ export function useDrawing(
       penMenu()?.endSpaceHold(pos?.clientX ?? 0, pos?.clientY ?? 0)
 
       if (!pointerPenActive) {
-        endDrawSession()
+        const lasso = useLassoStore.getState()
+        if (lasso.isDrawing) {
+          lasso.commitLasso(canvasEl)
+        } else {
+          endDrawSession()
+        }
         setPenDown(false)
       }
     }
@@ -255,6 +268,11 @@ export function useDrawing(
         return !!target.closest('.cutline-canvas-viewport')
       }
       return false
+    }
+
+    function isHandleTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof Element)) return false
+      return !!target.closest('.canvas-item-resize-handle, .canvas-item-drag-handle-wrapper')
     }
 
     function onTouchStart(event: TouchEvent) {
@@ -291,9 +309,20 @@ export function useDrawing(
 
     function onPointerDown(event: PointerEvent) {
       if (!isCanvasEventTarget(event.target)) return
+      if (isHandleTarget(event.target)) return
       if (penMenu()?.isMenuOpen()) return
       penMenu()?.onPointerDown(event)
       if (!canStartDrawingPointer(event)) return
+
+      const mode = useToolStore.getState().mode
+      // Direct tap on a canvas item → standard item select, not a lasso gesture.
+      if (
+        mode === 'lasso' &&
+        isPointerOnCanvasItem(event.target) &&
+        !isHandleTarget(event.target)
+      ) {
+        return
+      }
 
       event.preventDefault()
       event.stopPropagation()
@@ -302,6 +331,12 @@ export function useDrawing(
       activePointerId = event.pointerId
       setPenDown(true)
       capturePointer(event)
+
+      if (mode === 'lasso') {
+        useLassoStore.getState().clearSelection()
+        useLassoStore.getState().startLasso(event.clientX, event.clientY)
+        return
+      }
 
       const coords = toCanvasCoords(event.clientX, event.clientY)
       if (!coords) return
@@ -317,8 +352,13 @@ export function useDrawing(
       if (isSpaceDrawHeld() && event.pointerType === 'mouse') {
         penMenu()?.moveSpaceHold(event.clientX, event.clientY)
         if (!penMenu()?.isMenuOpen()) {
-          const coords = toCanvasCoords(event.clientX, event.clientY)
-          if (coords) continueDrawAt(coords, readPressure(event.pressure))
+          const spaceMode = useToolStore.getState().mode
+          if (spaceMode === 'lasso' && useLassoStore.getState().isDrawing) {
+            useLassoStore.getState().addPoint(event.clientX, event.clientY)
+          } else {
+            const coords = toCanvasCoords(event.clientX, event.clientY)
+            if (coords) continueDrawAt(coords, readPressure(event.pressure))
+          }
         }
       }
 
@@ -334,6 +374,12 @@ export function useDrawing(
       if (!pointerPenActive || event.pointerId !== activePointerId) return
 
       const mode = useToolStore.getState().mode
+
+      if (mode === 'lasso' && useLassoStore.getState().isDrawing) {
+        event.preventDefault()
+        useLassoStore.getState().addPoint(event.clientX, event.clientY)
+        return
+      }
 
       if (mode === 'erase' && eraseActive) {
         event.preventDefault()
@@ -379,6 +425,12 @@ export function useDrawing(
       }
       releasePointer(event)
 
+      const modeAtRelease = useToolStore.getState().mode
+      if (modeAtRelease === 'lasso') {
+        useLassoStore.getState().commitLasso(canvasEl)
+        return
+      }
+
       if (!isSpaceDrawHeld()) {
         endDrawSession()
       }
@@ -414,7 +466,12 @@ export function useDrawing(
         setSpaceDrawHeld(false)
         document.documentElement.removeAttribute('data-space-draw')
         if (!pointerPenActive) {
-          endDrawSession()
+          const lasso = useLassoStore.getState()
+          if (lasso.isDrawing) {
+            lasso.cancelLasso()
+          } else {
+            endDrawSession()
+          }
           setPenDown(false)
         }
       }

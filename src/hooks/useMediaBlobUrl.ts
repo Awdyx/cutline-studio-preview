@@ -8,6 +8,25 @@ import {
 
 export type MediaBlobStatus = 'idle' | 'loading' | 'ready' | 'error'
 
+const BLOB_RESOLVE_MAX_ATTEMPTS = 20
+const BLOB_RESOLVE_RETRY_MS = 100
+
+async function resolveMediaObjectUrlWithRetry(
+  mediaId: string,
+  itemId?: string,
+): Promise<string | null> {
+  for (let attempt = 0; attempt < BLOB_RESOLVE_MAX_ATTEMPTS; attempt++) {
+    const objectUrl = await resolveMediaObjectUrl(mediaId, itemId)
+    if (objectUrl) return objectUrl
+    if (attempt < BLOB_RESOLVE_MAX_ATTEMPTS - 1) {
+      await new Promise((resolve) => {
+        globalThis.setTimeout(resolve, BLOB_RESOLVE_RETRY_MS)
+      })
+    }
+  }
+  return null
+}
+
 export function useMediaBlobUrl(
   mediaId: string | null | undefined,
   itemId?: string,
@@ -29,7 +48,7 @@ export function useMediaBlobUrl(
     setStatus('loading')
     setUrl(undefined)
 
-    void resolveMediaObjectUrl(mediaId, itemId)
+    void resolveMediaObjectUrlWithRetry(mediaId, itemId)
       .then((objectUrl) => {
         if (cancelled) {
           if (objectUrl) releaseMediaObjectUrl(mediaId)

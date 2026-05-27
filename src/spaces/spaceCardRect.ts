@@ -2,9 +2,14 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import type { SpaceCanvasItem } from '../canvasItems/types'
 import type { SpaceCamera } from './types'
 
-/** Screen-space rect of a space card from canvas item coords + pan/zoom. */
-export function spaceCardClientRect(
-  item: Pick<SpaceCanvasItem, 'x' | 'y' | 'width' | 'height'>,
+type CanvasItemRect = Pick<
+  { x: number; y: number; width: number; height: number },
+  'x' | 'y' | 'width' | 'height'
+>
+
+/** Screen-space rect of a canvas item from canvas coords + pan/zoom. */
+export function canvasItemClientRect(
+  item: CanvasItemRect,
   transformRef: ReactZoomPanPinchContentRef | null,
   camera?: SpaceCamera | null,
 ): DOMRect | null {
@@ -22,4 +27,13 @@ export function spaceCardClientRect(
   const height = item.height * scale
 
   return new DOMRect(left, top, width, height)
+}
+
+/** Screen-space rect of a space card from canvas item coords + pan/zoom. */
+export function spaceCardClientRect(
+  item: Pick<SpaceCanvasItem, 'x' | 'y' | 'width' | 'height'>,
+  transformRef: ReactZoomPanPinchContentRef | null,
+  camera?: SpaceCamera | null,
+): DOMRect | null {
+  return canvasItemClientRect(item, transformRef, camera)
 }

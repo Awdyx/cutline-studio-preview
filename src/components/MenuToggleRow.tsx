@@ -1,4 +1,5 @@
-import type { ElementType } from 'react'
+import { useState, type ElementType } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Lock, LockOpen, Moon, Sun } from 'lucide-react'
 import { chromeLabel, font } from '../styles/tokens'
 import { playSubmenuHover, runSubmenuClick } from '../sound/submenuSound'
@@ -78,6 +79,9 @@ function ToggleRowButton({
   labelClassName?: string
   labelStyle?: React.CSSProperties
 }) {
+  const [hovered, setHovered] = useState(false)
+  const reduceMotion = useReducedMotion()
+
   return (
     <button
       type="button"
@@ -88,17 +92,31 @@ function ToggleRowButton({
       className={className}
       style={ROW_STYLE}
       onMouseEnter={() => {
-        if (!disabled) playSubmenuHover()
+        if (!disabled) { setHovered(true); playSubmenuHover() }
       }}
+      onMouseLeave={() => setHovered(false)}
       onClick={() => {
         if (disabled) return
         runSubmenuClick(() => onChange(!active), playClickSound)
       }}
     >
       {Icon ? <RowIcon icon={Icon} /> : null}
-      <span className={labelClassName} style={labelClassName ? undefined : labelStyle}>
+      <motion.span
+        className={labelClassName}
+        animate={{ scale: hovered && !disabled && !reduceMotion ? 1.045 : 1 }}
+        transition={
+          reduceMotion
+            ? { duration: 0 }
+            : { type: 'spring', stiffness: 420, damping: 32, mass: 0.5 }
+        }
+        style={{
+          ...(labelClassName ? undefined : labelStyle),
+          display: 'inline-block',
+          transformOrigin: 'left center',
+        }}
+      >
         {chromeLabel(label)}
-      </span>
+      </motion.span>
       <IconTrackVisual
         active={active}
         leftIcon={trackLeftIcon}

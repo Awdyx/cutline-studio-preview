@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   AlignCenter,
   AlignLeft,
@@ -7,7 +8,7 @@ import {
   Minus,
 } from 'lucide-react'
 import { playSubmenuHover, runSubmenuClick } from '../sound/submenuSound'
-import { chromeLabel, font, menuDividerStyle } from '../styles/tokens'
+import { font, menuDividerStyle } from '../styles/tokens'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import type { ItemTextAlignment, TextAlignH, TextAlignV } from './textAlignment'
 
@@ -24,12 +25,19 @@ function AlignToggle({
   compact?: boolean
   children: React.ReactNode
 }) {
+  const [hovered, setHovered] = useState(false)
+  const bg = active
+    ? 'rgba(20, 30, 50, 0.1)'
+    : hovered
+      ? 'rgba(20, 30, 50, 0.056)'
+      : 'transparent'
   return (
     <button
       type="button"
       aria-label={label}
       aria-pressed={active}
-      onMouseEnter={() => playSubmenuHover()}
+      onMouseEnter={() => { setHovered(true); playSubmenuHover() }}
+      onMouseLeave={() => setHovered(false)}
       onClick={() => runSubmenuClick(onClick)}
       style={{
         flex: 1,
@@ -39,11 +47,11 @@ function AlignToggle({
         padding: compact ? '6px 0' : '8px 0',
         border: 'none',
         borderRadius: compact ? 6 : 8,
-        background: active ? 'rgba(20, 30, 50, 0.1)' : 'transparent',
+        background: bg,
         color: active ? font.colorPrimary : font.colorMuted,
         cursor: 'pointer',
+        transition: 'background 120ms ease',
       }}
-      className="canvas-item-z-menu-row"
     >
       {children}
     </button>
@@ -72,26 +80,13 @@ export default function TextAlignmentMenuSection({
   }
 
   const iconProps = { size: compact ? 14 : 16, strokeWidth: 2 }
-  const labelStyle = {
-    margin: showVertical
-      ? compact
-        ? '4px 10px 2px'
-        : '6px 14px 4px'
-      : compact
-        ? '4px 10px 0'
-        : '6px 14px 0',
-    fontSize: compact ? 10 : 11,
-    fontWeight: 600,
-    letterSpacing: '0.4px',
-    color: font.colorMuted,
-  } as const
   const horizontalRowStyle = {
     display: 'flex',
     gap: compact ? 2 : 4,
     padding: showVertical
       ? compact
-        ? '0 4px 2px'
-        : '0 6px 4px'
+        ? '4px 4px 2px'
+        : '6px 6px 4px'
       : compact
         ? '8px 4px'
         : '12px 6px',
@@ -99,9 +94,6 @@ export default function TextAlignmentMenuSection({
 
   return (
     <>
-      <p style={labelStyle}>
-        {chromeLabel('Text align')}
-      </p>
       <div style={horizontalRowStyle}>
         <AlignToggle
           active={alignment.horizontal === 'left'}

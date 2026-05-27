@@ -6,6 +6,10 @@ import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useStrokesStore } from '../drawing/strokesStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import type { Stroke } from '../drawing/types'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
+import { saveUiCustomizationToStorage } from '../uiCustomization/uiCustomizationPersistence'
+import type { UiPin } from '../uiCustomization/types'
+import { scheduleMediaBlobGc } from '../media/mediaBlobGc'
 
 const HISTORY_CAP = 50
 
@@ -13,6 +17,7 @@ export type CanvasSnapshot = {
   strokes: Stroke[]
   annotationStrokes: Stroke[]
   items: CanvasItem[]
+  pins: UiPin[]
 }
 
 let past: CanvasSnapshot[] = []
@@ -38,14 +43,27 @@ function mediaIdsFromItems(items: CanvasItem[]): Set<string> {
   return ids
 }
 
+function mediaIdsFromPins(pins: UiPin[]): Set<string> {
+  const ids = new Set<string>()
+  for (const pin of pins) {
+    if (pin.asset.kind === 'image') ids.add(pin.asset.mediaId)
+  }
+  return ids
+}
+
 /** Media still reachable via undo, redo, or the live canvas. */
 export function collectHistoryMediaIds(): Set<string> {
   const ids = mediaIdsFromItems(useCanvasItemsStore.getState().items)
+  for (const id of mediaIdsFromPins(useUiCustomizationStore.getState().pins)) {
+    ids.add(id)
+  }
   for (const snap of past) {
     for (const id of mediaIdsFromItems(snap.items)) ids.add(id)
+    for (const id of mediaIdsFromPins(snap.pins)) ids.add(id)
   }
   for (const snap of future) {
     for (const id of mediaIdsFromItems(snap.items)) ids.add(id)
+    for (const id of mediaIdsFromPins(snap.pins)) ids.add(id)
   }
   return ids
 }
@@ -58,12 +76,17 @@ function cloneItems(items: CanvasItem[]): CanvasItem[] {
   return JSON.parse(JSON.stringify(items)) as CanvasItem[]
 }
 
+function clonePins(pins: UiPin[]): UiPin[] {
+  return JSON.parse(JSON.stringify(pins)) as UiPin[]
+}
+
 function snapshotNow(): CanvasSnapshot {
   const strokeState = useStrokesStore.getState()
   return {
     strokes: cloneStrokes(strokeState.strokes),
     annotationStrokes: cloneStrokes(strokeState.annotationStrokes),
     items: cloneItems(useCanvasItemsStore.getState().items),
+    pins: clonePins(useUiCustomizationStore.getState().pins),
   }
 }
 
@@ -82,6 +105,21 @@ function applySnapshot(snap: CanvasSnapshot) {
     items: cloneItems(snap.items),
     activeStickyStroke: null,
   })
+  const pins = clonePins(snap.pins ?? [])
+  const clippedAnchorIds = useUiCustomizationStore.getState().clippedAnchorIds
+  useUiCustomizationStore.setState((state) => ({
+    pins,
+    selectedPinId:
+      state.selectedPinId &&
+      pins.some((pin) => pin.id === state.selectedPinId)
+        ? state.selectedPinId
+        : null,
+  }))
+  saveUiCustomizationToStorage({
+    pins,
+    clippedAnchorIds: Array.from(clippedAnchorIds),
+  })
+  scheduleMediaBlobGc()
   useCanvasWorkspaceStore.getState().flushPersistWorkspace()
 }
 

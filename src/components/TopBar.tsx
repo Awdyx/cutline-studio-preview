@@ -1,13 +1,65 @@
-import { useState, type ReactNode, type RefObject } from 'react'
-import { Bell, Newspaper } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Bell, GraduationCap, LayoutGrid, MessageSquare, Newspaper, Trophy, Users } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, CHROME_TAP_SQUEEZE_TARGET_CLASS, glass, font } from '../styles/tokens'
+import { APP_DESTINATION_LABELS, useAppDestinationStore } from '../navigation/appDestinationStore'
 import { PHONE_HEADER_ROW_GAP } from '../styles/phoneChrome'
 import CanvasSearchBar from './CanvasSearchBar'
 import ChromeTapSqueezeWrap from './ChromeTapSqueezeWrap'
 import UserAvatar from './UserAvatar'
+import UiPinHost from '../uiCustomization/UiPinHost'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import type { ProfileMediaFrame } from '../profile/types'
+
+// ─── Hold menu data ────────────────────────────────────────────────────────────
+
+const HOLD_ITEMS = [
+  { id: 'studio',      label: 'studio',      Icon: LayoutGrid },
+  { id: 'leaderboard', label: 'rankings', Icon: Trophy },
+  { id: 'forum',       label: 'forum',       Icon: MessageSquare },
+  { id: 'groups',      label: 'groups',      Icon: Users },
+  { id: 'ucat',        label: 'ucat',        Icon: GraduationCap },
+] as const
+
+// ─── Coming-soon overlay ───────────────────────────────────────────────────────
+
+function ComingSoonOverlay({ onDismiss }: { onDismiss: () => void }) {
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      onClick={onDismiss}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: '#000',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer',
+      }}
+    >
+      <motion.p
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.22 }}
+        style={{
+          margin: 0,
+          color: '#fff',
+          fontFamily: font.family,
+          fontSize: 20,
+          fontWeight: 500,
+          letterSpacing: '-0.02em',
+        }}
+      >
+        coming soon {'<3'}
+      </motion.p>
+    </motion.div>,
+    document.body,
+  )
+}
 
 const islandBase: React.CSSProperties = {
   display: 'flex',
@@ -25,58 +77,194 @@ const islandBase: React.CSSProperties = {
 interface BrandPillProps {
   isOpen?: boolean
   onClick?: () => void
+  /** Stretch pill to fill its column (desktop top bar balance). */
+  fullWidth?: boolean
 }
 
-export function BrandPill({ isOpen = false, onClick }: BrandPillProps) {
+export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandPillProps) {
+  const destination = useAppDestinationStore((s) => s.destination)
+  const destinationLabel = APP_DESTINATION_LABELS[destination]
   const [hovered, setHovered] = useState(false)
+  const [holdOpen, setHoldOpen] = useState(false)
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null)
+  const [comingSoon, setComingSoon] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
+
+  const editingUi = useUiCustomizationStore((s) => s.editing)
+  const showHoverBackground = hovered && !editingUi
+
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isHoldRef = useRef(false)
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  // Measure menu anchor when hold opens
+  useEffect(() => {
+    if (holdOpen && buttonRef.current) {
+      const r = buttonRef.current.getBoundingClientRect()
+      setMenuPos({ top: r.bottom + 8, left: r.left })
+    }
+  }, [holdOpen])
+
+  const cancelHold = () => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    isHoldRef.current = false
+    setHoldOpen(false)
+    setHoveredItem(null)
+  }
+
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 || editingUi) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    holdTimerRef.current = setTimeout(() => {
+      isHoldRef.current = true
+      setHoldOpen(true)
+    }, 380)
+  }
+
+  const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isHoldRef.current) return
+    // Hit-test item rects manually (menu has pointerEvents:none)
+    const { clientX, clientY } = e
+    let found: string | null = null
+    for (let i = 0; i < itemRefs.current.length; i++) {
+      const el = itemRefs.current[i]
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+        found = HOLD_ITEMS[i].id
+        break
+      }
+    }
+    setHoveredItem(found)
+  }
+
+  const onPointerUp = () => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    if (isHoldRef.current) {
+      if (hoveredItem && hoveredItem !== 'studio') setComingSoon(true)
+      cancelHold()
+    } else {
+      onClick?.()
+    }
+  }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-panel-trigger="cutline"
-      aria-label="Cutline menu"
-      aria-expanded={isOpen}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className={`${CHROME_TAP_SQUEEZE_TARGET_CLASS} theme-surface ${CHROME_GLASS_CLASS}`}
-      style={{
-        ...islandBase,
-        gap: 8,
-        padding: '8px 16px',
-        cursor: 'pointer',
-        background: isOpen
-          ? 'var(--card-bg)'
-          : hovered
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        data-panel-trigger="cutline"
+        data-ui-anchor="brand-pill"
+        aria-label="Cutline menu"
+        aria-expanded={isOpen}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={cancelHold}
+        className={`${CHROME_TAP_SQUEEZE_TARGET_CLASS} theme-surface ${CHROME_GLASS_CLASS}`}
+        style={{
+          ...islandBase,
+          position: 'relative',
+          gap: 8,
+          padding: '8px 16px',
+          width: fullWidth ? '100%' : undefined,
+          justifyContent: fullWidth ? 'center' : undefined,
+          cursor: 'pointer',
+          background: isOpen || holdOpen
             ? 'var(--card-bg)'
-            : glass.bg,
-        border: glass.border,
-      }}
-    >
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          backgroundColor: '#3ecf6e',
-          boxShadow: '0 0 6px rgba(62, 207, 110, 0.7)',
-          flexShrink: 0,
-        }}
-      />
-      <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>
-        Cutline
-      </span>
-      <span
-        style={{
-          fontSize: 12,
-          fontWeight: 500,
-          color: font.colorMuted,
-          letterSpacing: '0.01em',
+            : showHoverBackground
+              ? 'var(--card-bg)'
+              : glass.bg,
+          border: glass.border,
         }}
       >
-        2.0
-      </span>
-    </button>
+        <span
+          style={{
+            width: 7, height: 7, borderRadius: '50%',
+            backgroundColor: '#3ecf6e',
+            boxShadow: '0 0 6px rgba(62, 207, 110, 0.7)',
+            flexShrink: 0,
+          }}
+        />
+        <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>Cutline</span>
+        <span
+          style={{
+            fontSize: 14,
+            fontWeight: 400,
+            color: font.colorMuted,
+            opacity: 0.75,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          {destinationLabel}
+        </span>
+        <UiPinHost anchorId="brand-pill" />
+      </button>
+
+      {/* Hold submenu — rendered via portal so it floats above everything */}
+      {createPortal(
+        <AnimatePresence>
+          {holdOpen && menuPos && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: -4 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 28, mass: 0.6 }}
+              style={{
+                position: 'fixed',
+                top: menuPos.top,
+                left: menuPos.left,
+                zIndex: 9000,
+                pointerEvents: 'none',
+                transformOrigin: 'top left',
+                background: 'var(--card-bg)',
+                border: glass.border,
+                borderRadius: 16,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1)',
+                backdropFilter: 'blur(22px) saturate(1.4)',
+                WebkitBackdropFilter: 'blur(22px) saturate(1.4)',
+                padding: '6px 0',
+                minWidth: 168,
+                overflow: 'hidden',
+              }}
+            >
+              {HOLD_ITEMS.map(({ id, label, Icon }, i) => (
+                <div
+                  key={id}
+                  ref={el => { itemRefs.current[i] = el }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '9px 16px',
+                    fontFamily: font.family,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: hoveredItem === id ? 'var(--ui-text)' : font.colorMuted,
+                    background: hoveredItem === id ? 'var(--glass-hover-bg, rgba(120,120,140,0.10))' : 'transparent',
+                    transition: 'background 80ms ease, color 80ms ease',
+                    borderRadius: 10,
+                    margin: '0 4px',
+                  }}
+                >
+                  <Icon size={14} strokeWidth={1.9} style={{ flexShrink: 0, opacity: hoveredItem === id ? 1 : 0.55 }} />
+                  {label}
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+
+      {/* Coming-soon overlay */}
+      <AnimatePresence>
+        {comingSoon && <ComingSoonOverlay onDismiss={() => setComingSoon(false)} />}
+      </AnimatePresence>
+    </>
   )
 }
 
@@ -134,9 +322,11 @@ export function UserCluster({
           onClick={onNewsClick}
           aria-label={newsCount > 0 ? `News, ${newsCount} new` : 'News'}
           data-panel-trigger="news"
+          data-ui-anchor="news"
           className={`theme-surface ${CHROME_GLASS_CLASS}`}
           style={{
             ...islandBase,
+            position: 'relative',
             background: glass.bg,
             padding: 10,
             cursor: 'pointer',
@@ -145,6 +335,7 @@ export function UserCluster({
           <AttentionIcon active={newsCount > 0} origin="center center">
             <Newspaper size={16} color="var(--ui-text)" strokeWidth={1.8} />
           </AttentionIcon>
+          <UiPinHost anchorId="news" />
         </button>
       </ChromeTapSqueezeWrap>
 
@@ -156,9 +347,11 @@ export function UserCluster({
             unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'
           }
           data-panel-trigger="notifications"
+          data-ui-anchor="notifications"
           className={`theme-surface ${CHROME_GLASS_CLASS}`}
           style={{
             ...islandBase,
+            position: 'relative',
             background: glass.bg,
             padding: 10,
             cursor: 'pointer',
@@ -167,6 +360,7 @@ export function UserCluster({
           <AttentionIcon active={unreadCount > 0} origin="top center">
             <Bell size={16} color="var(--ui-text)" strokeWidth={1.8} />
           </AttentionIcon>
+          <UiPinHost anchorId="notifications" />
         </button>
       </ChromeTapSqueezeWrap>
 
@@ -176,9 +370,11 @@ export function UserCluster({
           onClick={onProfileClick}
           aria-label={`Profile: ${user.name}`}
           data-panel-trigger="profile"
+          data-ui-anchor="profile"
           className={`theme-surface ${CHROME_GLASS_CLASS}`}
           style={{
             ...islandBase,
+            position: 'relative',
             background: glass.bg,
             gap: compact ? 0 : 8,
             padding: compact ? 6 : '6px 12px 6px 8px',
@@ -201,6 +397,7 @@ export function UserCluster({
               {user.name}
             </span>
           )}
+          <UiPinHost anchorId="profile" />
         </button>
       </ChromeTapSqueezeWrap>
     </div>
@@ -236,6 +433,28 @@ export default function TopBar({
   newsCount,
 }: TopBarProps) {
   const isPhone = useIsPhoneLayout()
+  const userClusterRef = useRef<HTMLDivElement>(null)
+  const [sideColumnWidth, setSideColumnWidth] = useState<number | undefined>(undefined)
+
+  useEffect(() => {
+    if (isPhone) {
+      setSideColumnWidth(undefined)
+      return
+    }
+
+    const el = userClusterRef.current
+    if (!el) return
+
+    const update = () => {
+      const next = Math.ceil(el.getBoundingClientRect().width)
+      setSideColumnWidth((prev) => (prev === next ? prev : next))
+    }
+    update()
+
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [isPhone, user.name, unreadCount, newsCount])
 
   if (isPhone) {
     return (
@@ -294,6 +513,10 @@ export default function TopBar({
     )
   }
 
+  const sideColumnStyle: React.CSSProperties | undefined = sideColumnWidth
+    ? { width: sideColumnWidth, minWidth: sideColumnWidth, maxWidth: sideColumnWidth }
+    : undefined
+
   return (
     <div
       className="cutline-top-bar"
@@ -302,28 +525,43 @@ export default function TopBar({
         top: 16,
         left: 16,
         right: 16,
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns:
+          sideColumnWidth != null
+            ? `${sideColumnWidth}px 1fr ${sideColumnWidth}px`
+            : 'auto 1fr auto',
         alignItems: 'center',
-        justifyContent: 'space-between',
         gap: 12,
         zIndex: 20,
         pointerEvents: 'none',
       }}
     >
-      <div style={{ pointerEvents: 'auto', flexShrink: 0 }}>
-        <BrandPill isOpen={cutlineMenuOpen} onClick={onCutlineClick} />
+      <div style={{ pointerEvents: 'auto', ...sideColumnStyle }}>
+        <BrandPill
+          isOpen={cutlineMenuOpen}
+          onClick={onCutlineClick}
+          fullWidth={sideColumnWidth != null}
+        />
       </div>
       <div
         style={{
           pointerEvents: 'none',
-          flex: 1,
           display: 'flex',
           justifyContent: 'center',
+          minWidth: 0,
         }}
       >
         <CanvasSearchBar transformRef={transformRef} />
       </div>
-      <div style={{ pointerEvents: 'auto', flexShrink: 0 }}>
+      <div
+        ref={userClusterRef}
+        style={{
+          pointerEvents: 'auto',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          ...sideColumnStyle,
+        }}
+      >
         <UserCluster
           user={user}
           unreadCount={unreadCount}

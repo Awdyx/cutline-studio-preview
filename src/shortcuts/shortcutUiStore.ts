@@ -22,10 +22,18 @@ type PlusFabControls = {
 }
 
 type ToolPaletteControls = {
+  open: () => void
   close: (opts?: ChromeMenuSoundOpts) => void
   isOpen: () => boolean
   closeColorPopover: () => void
   isColorPopoverOpen: () => boolean
+}
+
+export type CanvasSpawnControls = {
+  spawnText: () => void
+  spawnSticky: () => void
+  openImageAtMousePos: () => void
+  spawnStudyHub: (subjectId: string) => void
 }
 
 type AppPanelControls = {
@@ -68,6 +76,18 @@ type ShortcutUiState = {
   registerNotificationProfilePreview: (
     controls: NotificationProfilePreviewControls | null,
   ) => void
+  /** Canvas spawn actions registered from App.tsx (requires refs). */
+  canvasSpawn: CanvasSpawnControls | null
+  registerCanvasSpawn: (controls: CanvasSpawnControls | null) => void
+  /** Open a top-level panel (notifications, news, profile). */
+  openPanel: ((panel: 'notifications' | 'news' | 'profile') => void) | null
+  registerOpenPanel: (fn: ((panel: 'notifications' | 'news' | 'profile') => void) | null) => void
+  /** Open the settings submenu near the last known mouse cursor position. */
+  openSettingsNearMouse: (() => void) | null
+  registerOpenSettingsNearMouse: (fn: (() => void) | null) => void
+  /** Close the keyboard-triggered floating settings submenu, if it's open. */
+  closeFloatingSettings: (() => boolean) | null
+  registerCloseFloatingSettings: (fn: (() => boolean) | null) => void
   closeAllChromeSubmenus: () => void
   /** Close flyout submenus and actor profile cards before swapping chrome UI. */
   dismissPeerChromeOverlays: (opts?: ChromeMenuSoundOpts) => void
@@ -76,7 +96,9 @@ type ShortcutUiState = {
   dismissPeerChromeForFab: (opening: 'plus' | 'pen') => void
   toast: ToastPayload | null
   toastNonce: number
+  toastShakeNonce: number
   showActionToast: (payload: ToastPayload) => void
+  shakeActionToast: () => void
   clearToast: () => void
 }
 
@@ -94,6 +116,18 @@ export const useShortcutUiStore = create<ShortcutUiState>((set, get) => ({
 
   appPanels: null,
   registerAppPanels: (controls) => set({ appPanels: controls ?? null }),
+
+  canvasSpawn: null,
+  registerCanvasSpawn: (controls) => set({ canvasSpawn: controls ?? null }),
+
+  openPanel: null,
+  registerOpenPanel: (fn) => set({ openPanel: fn }),
+
+  openSettingsNearMouse: null,
+  registerOpenSettingsNearMouse: (fn) => set({ openSettingsNearMouse: fn }),
+
+  closeFloatingSettings: null,
+  registerCloseFloatingSettings: (fn) => set({ closeFloatingSettings: fn }),
 
   cutlineMenu: null,
   registerCutlineMenu: (controls) => set({ cutlineMenu: controls ?? null }),
@@ -138,10 +172,12 @@ export const useShortcutUiStore = create<ShortcutUiState>((set, get) => ({
 
   toast: null,
   toastNonce: 0,
+  toastShakeNonce: 0,
   showActionToast: (payload) =>
     set((s) => ({
       toast: payload,
       toastNonce: s.toastNonce + 1,
     })),
+  shakeActionToast: () => set((s) => ({ toastShakeNonce: s.toastShakeNonce + 1 })),
   clearToast: () => set({ toast: null }),
 }))

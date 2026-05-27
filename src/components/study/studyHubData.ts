@@ -200,7 +200,7 @@ export const STUDY_SUBJECT_CATALOG: Record<StudySubjectId, StudySubjectCatalog> 
     id: 'hubs',
     label: 'HUBS',
     fullName: 'Human Body Systems',
-    paperCode: 'HUBS 191 · 192',
+    paperCode: 'HUBS 191',
     modules: [
       {
         name: 'HUBS 191 — Foundations',

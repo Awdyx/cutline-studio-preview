@@ -64,10 +64,29 @@ export const CANVAS_PAN_EXCLUDED = [
   'profile-media-frame-editor',
 ] as const
 
+/**
+ * Trackpad two-finger pan excluded classes — intentionally excludes drag/resize handles
+ * so hovering the cursor over a handle doesn't block trackpad panning.
+ */
+const CANVAS_TRACKPAD_PAN_EXCLUDED = [
+  'canvas-item-selected-focus',
+  'space-preview-adjust',
+  'study-hub-scroll',
+  'study-hub-practice',
+  'study-hub-menu-dismiss',
+  'profile-media-frame-editor',
+] as const
+
 const STUDY_HUB_PAN_EXCLUDED = new Set(['study-hub-scroll', 'study-hub-practice'])
 
-/** Pan/zoom excluded classes — study hub scroll areas drop out while a canvas pan burst is locked. */
+/** Mouse-drag pan excluded classes — study hub scroll areas drop out while a canvas pan burst is locked. */
 export function canvasPanExcludedClasses(trackpadPanLockActive: boolean): string[] {
   if (!trackpadPanLockActive) return [...CANVAS_PAN_EXCLUDED]
   return CANVAS_PAN_EXCLUDED.filter((cls) => !STUDY_HUB_PAN_EXCLUDED.has(cls))
+}
+
+/** Trackpad-pan excluded classes — study hub scroll areas drop out while a canvas pan burst is locked. */
+export function canvasTrackpadPanExcludedClasses(trackpadPanLockActive: boolean): string[] {
+  if (!trackpadPanLockActive) return [...CANVAS_TRACKPAD_PAN_EXCLUDED]
+  return CANVAS_TRACKPAD_PAN_EXCLUDED.filter((cls) => !STUDY_HUB_PAN_EXCLUDED.has(cls))
 }

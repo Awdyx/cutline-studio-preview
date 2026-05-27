@@ -58,7 +58,7 @@ export default function CutlineAppNavSection({ onNavigate }: { onNavigate: () =>
         right={destination === 'studio' ? <ActiveDestinationDot /> : undefined}
         onClick={() => goTo('studio')}
       />
-      <MenuRow icon={Trophy} label="Leaderboard" inset disabled onClick={() => {}} />
+      <MenuRow icon={Trophy} label="Rankings" inset disabled onClick={() => {}} />
       <MenuRow icon={MessagesSquare} label="Forum" inset disabled onClick={() => {}} />
       <MenuRow icon={UsersRound} label="Groups" inset disabled onClick={() => {}} />
       <MenuRow icon={GraduationCap} label="UCAT" inset disabled onClick={() => {}} />

@@ -1,15 +1,23 @@
 import type { LucideIcon } from 'lucide-react'
 import {
+  Bell,
   Copy,
   Eraser,
+  GraduationCap,
   Highlighter,
+  Image,
+  Lasso,
   Lock,
   Pen,
   Plus,
   Redo2,
   Search,
+  Settings,
+  StickyNote,
   Trash2,
+  Type,
   Undo2,
+  User,
 } from 'lucide-react'
 import { modKeyLabel } from './modKey'
 
@@ -32,6 +40,7 @@ function modKeys(...parts: string[]): ShortcutKeyPart[] {
 }
 
 export const SHORTCUTS: ShortcutDef[] = [
+  // ── Edit ──────────────────────────────────────────────────────────────────
   {
     id: 'undo',
     label: 'Undo',
@@ -49,28 +58,59 @@ export const SHORTCUTS: ShortcutDef[] = [
   {
     id: 'duplicate',
     label: 'Duplicate',
-    category: 'Canvas',
+    category: 'Edit',
     keys: modKeys('D'),
     icon: Copy,
   },
   {
-    id: 'select-all',
-    label: 'Select all',
-    category: 'Canvas',
-    keys: modKeys('A'),
-  },
-  {
     id: 'delete',
     label: 'Delete',
-    category: 'Canvas',
+    category: 'Edit',
     keys: ['⌫'],
     icon: Trash2,
   },
   {
     id: 'deselect',
     label: 'Deselect / dismiss',
-    category: 'Canvas',
+    category: 'Edit',
     keys: ['Esc'],
+  },
+  // ── Create ────────────────────────────────────────────────────────────────
+  {
+    id: 'add-text',
+    label: 'New text',
+    category: 'Create',
+    keys: modKeys('E'),
+    icon: Type,
+  },
+  {
+    id: 'add-sticky',
+    label: 'New sticky',
+    category: 'Create',
+    keys: modKeys('S'),
+    icon: StickyNote,
+  },
+  {
+    id: 'add-image',
+    label: 'New image',
+    category: 'Create',
+    keys: modKeys('I'),
+    icon: Image,
+  },
+  {
+    id: 'open-fab',
+    label: 'Add to canvas',
+    category: 'Create',
+    keys: modKeys('K'),
+    icon: Plus,
+    skipToast: true,
+  },
+  // ── Canvas ────────────────────────────────────────────────────────────────
+  {
+    id: 'select-all',
+    label: 'Select all',
+    category: 'Canvas',
+    keys: modKeys('A'),
   },
   {
     id: 'toggle-lock',
@@ -79,24 +119,16 @@ export const SHORTCUTS: ShortcutDef[] = [
     keys: modKeys('L'),
     icon: Lock,
   },
-  {
-    id: 'open-fab',
-    label: 'Add to canvas',
-    category: 'Canvas',
-    keys: modKeys('K'),
-    icon: Plus,
-    skipToast: true,
-  },
-  {
-    id: 'find',
-    label: 'Search canvas',
-    category: 'Navigation',
-    keys: modKeys('F'),
-    icon: Search,
-    skipToast: true,
-  },
+  // ── Drawing ───────────────────────────────────────────────────────────────
   {
     id: 'draw-pen',
+    label: 'Pen',
+    category: 'Drawing',
+    keys: ['P'],
+    icon: Pen,
+  },
+  {
+    id: 'draw-pen-d',
     label: 'Pen',
     category: 'Drawing',
     keys: ['D'],
@@ -116,13 +148,91 @@ export const SHORTCUTS: ShortcutDef[] = [
     keys: ['E'],
     icon: Eraser,
   },
+  {
+    id: 'draw-lasso',
+    label: 'Lasso',
+    category: 'Drawing',
+    keys: ['L'],
+    icon: Lasso,
+  },
+  // ── Navigation ────────────────────────────────────────────────────────────
+  {
+    id: 'find',
+    label: 'Search canvas',
+    category: 'Navigation',
+    keys: modKeys('F'),
+    icon: Search,
+    skipToast: true,
+  },
+  // ── Panels ────────────────────────────────────────────────────────────────
+  {
+    id: 'open-settings',
+    label: 'Settings',
+    category: 'Panels',
+    keys: modKeys('⇧', 'S'),
+    icon: Settings,
+    skipToast: true,
+  },
+  {
+    id: 'open-profile',
+    label: 'Profile',
+    category: 'Panels',
+    keys: modKeys('⇧', 'P'),
+    icon: User,
+    skipToast: true,
+  },
+  {
+    id: 'open-notifications',
+    label: 'Notis / News',
+    category: 'Panels',
+    keys: modKeys('⇧', 'N'),
+    icon: Bell,
+    skipToast: true,
+  },
+  // ── Study shortcuts ────────────────────────────────────────────────────────
+  {
+    id: 'study-hub-1',
+    label: 'Hubs hub',
+    category: 'Study shortcuts',
+    keys: modKeys('1'),
+    icon: GraduationCap,
+  },
+  {
+    id: 'study-hub-2',
+    label: 'Cels hub',
+    category: 'Study shortcuts',
+    keys: modKeys('2'),
+    icon: GraduationCap,
+  },
+  {
+    id: 'study-hub-3',
+    label: 'Chem hub',
+    category: 'Study shortcuts',
+    keys: modKeys('3'),
+    icon: GraduationCap,
+  },
+  {
+    id: 'study-hub-4',
+    label: 'Phsi hub',
+    category: 'Study shortcuts',
+    keys: modKeys('4'),
+    icon: GraduationCap,
+  },
 ]
 
 export const SHORTCUTS_BY_ID = Object.fromEntries(
   SHORTCUTS.map((s) => [s.id, s]),
 ) as Record<string, ShortcutDef>
 
-export const SHORTCUT_CATEGORIES = ['Edit', 'Canvas', 'Drawing', 'Navigation'] as const
+export const SHORTCUT_CATEGORIES = [
+  'Edit',
+  'Create',
+  'Canvas',
+  'Drawing',
+  'Navigation',
+  'Panels',
+  'Study shortcuts',
+] as const
 
 export function shortcutsByCategory(): Map<string, ShortcutDef[]> {
   const map = new Map<string, ShortcutDef[]>()

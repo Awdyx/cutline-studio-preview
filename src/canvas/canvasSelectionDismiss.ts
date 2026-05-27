@@ -1,4 +1,5 @@
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
+import { useLassoStore } from '../drawing/useLassoStore'
 import { useCanvasNavigationStore } from './canvasNavigationStore'
 
 /** True when the pointer target is on a space card preview for the given space id. */
@@ -36,6 +37,32 @@ export function isPointerOnSelectedItem(
   return itemId != null && selectedIds.includes(itemId)
 }
 
+/** True when the pointer target is on the floating z-order menu for the selection. */
+export function isPointerOnCanvasItemZMenu(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return target.closest('[data-canvas-item-z-menu]') != null
+}
+
+/** True when a tap outside the current selection should clear it. */
+export function shouldDismissSelectionForPointer(
+  target: EventTarget | null,
+  selectedIds: readonly string[],
+): boolean {
+  if (selectedIds.length === 0) return false
+  if (isPointerOnCanvasItemZMenu(target)) return false
+  return !isPointerOnSelectedItem(target, selectedIds)
+}
+
+/** Clear canvas item or lasso selection. */
+export function dismissCanvasSelection(): void {
+  const lasso = useLassoStore.getState()
+  if (lasso.selectedStrokeIds.length > 0 || lasso.selectedItemIds.length > 0) {
+    lasso.clearSelection()
+    return
+  }
+  useCanvasItemsStore.getState().clearSelection()
+}
+
 /** Item tap handlers skip selection when another item is selected — canvas dismisses instead. */
 export function shouldSkipItemSelectForOutsideDismiss(itemId: string): boolean {
   const { selectedIds } = useCanvasItemsStore.getState()
@@ -48,6 +75,6 @@ export function dismissSelectionForOutsideItemTap(itemId: string): boolean {
   if (useCanvasNavigationStore.getState().shouldSuppressBackgroundSelectionClear()) {
     return true
   }
-  useCanvasItemsStore.getState().clearSelection()
+  dismissCanvasSelection()
   return true
 }

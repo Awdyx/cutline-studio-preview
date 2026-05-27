@@ -5,7 +5,7 @@ import {
   grabHandleHorizontalStyle,
   grabHandlePlacementKey,
   grabHandleVerticalStyle,
-  HANDLE_HIT_SIZE,
+  resolveCanvasHandleHitSize,
   type GrabHandlePlacement,
 } from './grabZone'
 
@@ -16,6 +16,7 @@ export default function DragHandle({
   onPointerDown,
   occlusionRevisionKey = '',
   occlusionActive = true,
+  hitSize = resolveCanvasHandleHitSize(),
 }: {
   placement: GrabHandlePlacement
   onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => void
@@ -23,6 +24,8 @@ export default function DragHandle({
   occlusionRevisionKey?: string
   /** Only probe occlusion while the item is selected (avoids flash on deselect). */
   occlusionActive?: boolean
+  /** Override the invisible tap/drag target size (layout-aware default). */
+  hitSize?: number
 }) {
   const [shownPlacement, setShownPlacement] = useState(placement)
   const [revealed, setRevealed] = useState(true)
@@ -67,12 +70,13 @@ export default function DragHandle({
 
   return (
     <div
+      className="canvas-item-drag-handle-wrapper"
       style={{
         position: 'absolute',
-        ...grabHandleVerticalStyle(shownPlacement.vertical),
-        ...grabHandleHorizontalStyle(shownPlacement.side),
-        width: HANDLE_HIT_SIZE,
-        height: HANDLE_HIT_SIZE,
+        ...grabHandleVerticalStyle(shownPlacement.vertical, hitSize),
+        ...grabHandleHorizontalStyle(shownPlacement.side, hitSize),
+        width: hitSize,
+        height: hitSize,
         zIndex: 3,
         opacity: revealed ? 1 : 0,
         filter: revealed ? 'blur(0px)' : 'blur(10px)',

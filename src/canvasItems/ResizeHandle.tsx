@@ -1,9 +1,9 @@
 import { useRef } from 'react'
 import { useCanvasHandleOccluded } from './canvasHandleOcclusion'
 import {
-  HANDLE_HIT_SIZE,
   HANDLE_VISUAL_SIZE,
   RESIZE_CORNER_OUTSET,
+  resolveCanvasHandleHitSize,
 } from './grabZone'
 import ResizeCornerBracket from './ResizeCornerBracket'
 
@@ -12,13 +12,16 @@ export default function ResizeHandle({
   cornerOutset = RESIZE_CORNER_OUTSET,
   occlusionRevisionKey = '',
   occlusionActive = true,
+  hitSize = resolveCanvasHandleHitSize(),
 }: {
   onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => void
   cornerOutset?: number
   occlusionRevisionKey?: string
   occlusionActive?: boolean
+  /** Override the invisible tap/drag target size (layout-aware default). */
+  hitSize?: number
 }) {
-  const hitOutset = (HANDLE_HIT_SIZE - HANDLE_VISUAL_SIZE) / 2
+  const hitOutset = (hitSize - HANDLE_VISUAL_SIZE) / 2
   const handleRef = useRef<HTMLButtonElement>(null)
   const occluded = useCanvasHandleOccluded(
     handleRef,
@@ -39,17 +42,17 @@ export default function ResizeHandle({
         position: 'absolute',
         left: '100%',
         top: '100%',
-        marginLeft: cornerOutset,
-        marginTop: cornerOutset,
-        width: HANDLE_HIT_SIZE,
-        height: HANDLE_HIT_SIZE,
+        marginLeft: cornerOutset - hitOutset,
+        marginTop: cornerOutset - hitOutset,
+        width: hitSize,
+        height: hitSize,
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'flex-start',
-        paddingTop: 0,
-        paddingLeft: 0,
-        paddingRight: hitOutset,
-        paddingBottom: hitOutset,
+        paddingTop: hitOutset,
+        paddingLeft: hitOutset,
+        paddingRight: 0,
+        paddingBottom: 0,
         border: 'none',
         borderRadius: 0,
         background: 'transparent',

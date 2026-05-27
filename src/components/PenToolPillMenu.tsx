@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Eraser, Highlighter, Pen } from 'lucide-react'
+import { LassoIcon } from '../drawing/LassoIcon'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import type { PenToolMenuState } from '../drawing/usePenToolMenu'
@@ -17,6 +18,7 @@ const ICON_HALO_STROKE = 3
 const tools: { mode: ToolMode; Icon: typeof Pen; label: string }[] = [
   { mode: 'pen', Icon: Pen, label: 'Pen' },
   { mode: 'highlighter', Icon: Highlighter, label: 'Highlighter' },
+  { mode: 'lasso', Icon: LassoIcon, label: 'Lasso' },
   { mode: 'erase', Icon: Eraser, label: 'Eraser' },
 ]
 

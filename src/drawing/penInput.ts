@@ -54,7 +54,7 @@ export function isPenDrawMode(): boolean {
   if (isToolPaletteOpen()) return true
   if (hasStylusInput()) return true
   const mode = useToolStore.getState().mode
-  return mode === 'pen' || mode === 'highlighter' || mode === 'erase'
+  return mode === 'pen' || mode === 'highlighter' || mode === 'erase' || mode === 'lasso'
 }
 
 /** Pointer eligible for space-bar drawing (hover / move without click). */

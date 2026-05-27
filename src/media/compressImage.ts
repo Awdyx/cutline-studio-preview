@@ -12,23 +12,55 @@ export type CompressedImage = {
 }
 
 let webpSupported: boolean | null = null
+let webpSupportPromise: Promise<boolean> | null = null
+
+const WEBP_DETECT_TIMEOUT_MS = 2_000
+const WORKER_COMPRESS_TIMEOUT_MS = 20_000
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      globalThis.setTimeout(() => reject(new Error(message)), ms)
+    }),
+  ])
+}
 
 async function detectWebpSupport(): Promise<boolean> {
   if (typeof document === 'undefined') return false
 
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 1
-    canvas.height = 1
-    canvas.toBlob((blob) => resolve(blob?.type === 'image/webp'), 'image/webp', 0.85)
-  })
+  return withTimeout(
+    new Promise<boolean>((resolve) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 1
+      canvas.height = 1
+      canvas.toBlob(
+        (blob) => resolve(blob?.type === 'image/webp'),
+        'image/webp',
+        0.85,
+      )
+    }),
+    WEBP_DETECT_TIMEOUT_MS,
+    'WebP support detection timed out',
+  ).catch(() => false)
 }
 
 export async function getImportImageFormat(): Promise<CompressOutputFormat> {
-  if (webpSupported === null) {
-    webpSupported = await detectWebpSupport()
+  if (webpSupported !== null) {
+    return webpSupported ? 'webp' : 'jpeg'
   }
-  return webpSupported ? 'webp' : 'jpeg'
+  if (!webpSupportPromise) {
+    webpSupportPromise = detectWebpSupport().then((supported) => {
+      webpSupported = supported
+      return supported
+    })
+  }
+  const supported = await webpSupportPromise
+  return supported ? 'webp' : 'jpeg'
 }
 
 async function readImageDimensions(
@@ -83,9 +115,12 @@ const workerPending = new Map<
 >()
 
 function resetWorker() {
+  for (const pending of workerPending.values()) {
+    pending.reject(new Error('Image compression worker reset'))
+  }
+  workerPending.clear()
   worker?.terminate()
   worker = null
-  workerPending.clear()
 }
 
 function getCompressWorker(): Worker {
@@ -142,8 +177,25 @@ function compressViaWorker(
   const id = ++workerJobId
   const compressWorker = getCompressWorker()
 
-  return new Promise((resolve, reject) => {
-    workerPending.set(id, { resolve, reject })
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined
+
+  const job = new Promise<CompressedImage>((resolve, reject) => {
+    workerPending.set(id, {
+      resolve: (value) => {
+        if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId)
+        resolve(value)
+      },
+      reject: (reason) => {
+        if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId)
+        reject(reason)
+      },
+    })
+
+    timeoutId = globalThis.setTimeout(() => {
+      if (!workerPending.has(id)) return
+      resetWorker()
+    }, WORKER_COMPRESS_TIMEOUT_MS)
+
     compressWorker.postMessage({
       id,
       buffer,
@@ -152,9 +204,14 @@ function compressViaWorker(
       originalSize,
     })
   })
+
+  return job
 }
 
-export async function compressImageForImport(file: File): Promise<CompressedImage> {
+export async function compressImageForImport(
+  file: File,
+  options?: { preferMainThread?: boolean },
+): Promise<CompressedImage> {
   const buffer = await file.arrayBuffer()
   const mimeType = file.type || 'application/octet-stream'
 
@@ -179,7 +236,7 @@ export async function compressImageForImport(file: File): Promise<CompressedImag
     }
   }
 
-  if (typeof Worker !== 'undefined') {
+  if (!options?.preferMainThread && typeof Worker !== 'undefined') {
     try {
       return await compressViaWorker(buffer, mimeType, format, file.size)
     } catch (err) {

@@ -7,9 +7,19 @@ import { hitTestPenToolPill } from './penToolMenuLayout'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { useStrokesStore } from './strokesStore'
 import { useToolStore, type ToolMode } from './toolStore'
+import { useLassoStore } from './useLassoStore'
 
 /** Hold this long with no UI — pill swoops in once threshold is met. */
 export const HOLD_MS = 400
+
+// Lightweight hook for any drawing surface to cancel its in-progress stroke
+// when the pen tool pill menu opens.
+type CancelFn = () => void
+const cancelDrawRegistry: Set<CancelFn> = new Set()
+export function registerPenMenuCancelDraw(fn: CancelFn): () => void {
+  cancelDrawRegistry.add(fn)
+  return () => cancelDrawRegistry.delete(fn)
+}
 const MOVE_CANCEL_PX = 20
 const MOVE_GRACE_MS = 80
 
@@ -89,6 +99,9 @@ export function usePenToolMenu(
     const { cancelActiveStroke, cancelEraseSession } = useStrokesStore.getState()
     cancelActiveStroke()
     cancelEraseSession()
+    cancelDrawRegistry.forEach((fn) => fn())
+    // Also cancel any active lasso gesture
+    useLassoStore.getState().cancelLasso()
     playSound('menuOpen')
     phaseRef.current = 'open'
     const { x, y } = anchorRef.current

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { font, menuDividerStyle } from '../styles/tokens'
+import { font } from '../styles/tokens'
 import {
   HIGHLIGHTER_PRESETS,
   PEN_PRESETS,
@@ -272,13 +272,12 @@ export default function ToolColorPopover({ tool }: ToolColorPopoverProps) {
     <div
       data-tool-settings=""
       style={{
-        padding: '10px 12px 12px',
+        padding: '12px 12px 12px',
         fontFamily: font.family,
         width: '100%',
         boxSizing: 'border-box',
       }}
     >
-      <div style={{ ...menuDividerStyle, margin: '0 0 10px' }} />
       <SubmenuSoundScope>
         <div className="tool-settings-switch-host">
           <motion.div

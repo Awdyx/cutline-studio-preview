@@ -27,11 +27,15 @@ export const SOUND_LEVELS: Record<SoundId, number> = {
   undo: 0.24,
   redo: 0.24,
   modalOpen: 0.18,
-  themeToLight: 0.13,
-  themeToDark: 0.13,
+  themeToLight: 0.40,
+  themeToDark: 0.40,
   zOrderFront: 0.53,
   zOrderBack: 0.56,
+  aspectSnap: 0.88,
 }
 
-/** Trim for looping drag / resize noise (pre-compressor). Bed sits below one-shot blips. */
-export const CONTINUOUS_SFX_LEVEL = 0.28
+/** Trim for looping drag noise (pre-compressor). Bed sits below one-shot blips. */
+export const CONTINUOUS_SFX_LEVEL = 0.50
+
+/** Resize handle bed — louder than drag so the held-handle idle reads clearly. */
+export const RESIZE_SFX_LEVEL = 0.72

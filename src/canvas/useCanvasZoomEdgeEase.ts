@@ -11,6 +11,7 @@ import {
 } from './canvasZoomEdgeEase'
 import { usePanMotionStore } from '../panMotionStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 
 export function useCanvasZoomEdgeEase(minScale: number) {
   const prevScaleRef = useRef<number | null>(null)
@@ -71,7 +72,10 @@ export function useCanvasZoomEdgeEase(minScale: number) {
       fadeZoomVignette()
 
       clearSnapTimer()
-      if (needsZoomSnapBack(ref.state.scale, minScale)) {
+      if (
+        !useCanvasItemsStore.getState().menuFocusReturnCamera &&
+        needsZoomSnapBack(ref.state.scale, minScale)
+      ) {
         const snapMs = isBeyondHardZoomMin(ref.state.scale, minScale)
           ? ZOOM_SNAP_BACK_MIN_MS
           : ZOOM_SNAP_BACK_MS

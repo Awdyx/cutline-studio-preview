@@ -23,3 +23,4 @@ export type SoundId =
   | 'themeToDark'
   | 'zOrderFront'
   | 'zOrderBack'
+  | 'aspectSnap'

@@ -10,6 +10,7 @@ import {
   type CanvasSearchEntry,
 } from '../canvasSearch/canvasSearchEntries'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
+import { focusStudyHubOnCanvas } from '../canvasItems/studyHubMenuFocus'
 import {
   CHROME_CARD_CLASS,
   CHROME_GLASS_CLASS,
@@ -24,11 +25,14 @@ import { modKeyLabel } from '../shortcuts/modKey'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 import { prefersCoarsePointer } from '../platform/textFocus'
+import { STUDY_SUBJECTS } from './study/studyHubData'
 import { resolveStickyColor } from '../theme/paletteGenerator'
 import { useThemeStore } from '../theme/themeStore'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
 import { ShortcutKeycaps } from './ShortcutKeycaps'
 import CanvasEditToggleButton from './CanvasEditToggleButton'
+import UiPinHost from '../uiCustomization/UiPinHost'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 
 const islandBase: React.CSSProperties = {
   display: 'flex',
@@ -45,6 +49,7 @@ const KIND_LABELS = {
   sticky: 'Sticky',
   text: 'Text',
   space: 'Space',
+  study_hub: 'Study hub',
 } as const
 
 /** Inset inside the dropdown bubble so row highlights follow the outer curve. */
@@ -67,7 +72,19 @@ function rowHighlightBorderRadius(
   return `${mid}px`
 }
 
-function KindIcon({ kind }: { kind: CanvasSearchEntry['kind'] }) {
+function KindIcon({
+  kind,
+  studySubjectId,
+}: {
+  kind: CanvasSearchEntry['kind']
+  studySubjectId?: CanvasSearchEntry['studySubjectId']
+}) {
+  if (kind === 'study_hub' && studySubjectId) {
+    const SubjectIcon = STUDY_SUBJECTS.find((s) => s.id === studySubjectId)?.icon
+    if (SubjectIcon) {
+      return <SubjectIcon size={14} strokeWidth={1.8} color={font.colorMuted} />
+    }
+  }
   const Icon = kind === 'space' ? Layers : kind === 'text' ? Type : StickyNote
   return <Icon size={14} strokeWidth={1.8} color={font.colorMuted} />
 }
@@ -120,9 +137,13 @@ export default function CanvasSearchBar({
     lastResultActivateRef.current = now
 
     playSubmenuTap()
-    useCanvasNavigationStore.getState().suppressBackgroundSelectionClear(600)
-    selectItem(entry.id, false, { allowFrozen: true })
-    focusItemOnCanvas(transformRef.current, entry.item)
+    if (entry.kind === 'study_hub') {
+      focusStudyHubOnCanvas(transformRef.current, entry.id)
+    } else {
+      useCanvasNavigationStore.getState().suppressBackgroundSelectionClear(600)
+      selectItem(entry.id, false, { allowFrozen: true })
+      focusItemOnCanvas(transformRef.current, entry.item)
+    }
     setDropdownOpen(false)
     setValue('')
     inputRef.current?.blur()
@@ -183,9 +204,11 @@ export default function CanvasSearchBar({
       }}
     >
       <div
+        data-ui-anchor="search-bar"
         className={`canvas-search-island ${CHROME_TAP_SQUEEZE_TARGET_CLASS} theme-surface ${CHROME_GLASS_CLASS}`}
         style={{
           ...islandBase,
+          position: 'relative',
           background: showDropdown ? card.bg : glass.bg,
           gap: 8,
           padding: compact ? '8px 12px 8px 14px' : '8px 14px',
@@ -193,11 +216,16 @@ export default function CanvasSearchBar({
           cursor: 'text',
         }}
         onClick={() => {
+          if (useUiCustomizationStore.getState().editing) return
           setSearchInputReady(true)
           inputRef.current?.focus()
         }}
-        onPointerDown={() => setSearchInputReady(true)}
+        onPointerDown={() => {
+          if (useUiCustomizationStore.getState().editing) return
+          setSearchInputReady(true)
+        }}
       >
+        <UiPinHost anchorId="search-bar" />
         <span className="canvas-search-icon" aria-hidden>
           <Search
             size={15}
@@ -249,7 +277,7 @@ export default function CanvasSearchBar({
               else inputRef.current?.blur()
             }
           }}
-          placeholder="search stickies, text, and spaces…"
+          placeholder="search stickies, text, spaces, and study hubs…"
           className="theme-surface"
           style={{
             flex: 1,
@@ -366,7 +394,9 @@ export default function CanvasSearchBar({
                             ? stickyPreviewBg
                             : entry.kind === 'space'
                               ? card.bg
-                              : 'rgba(20, 30, 50, 0.06)',
+                              : entry.kind === 'study_hub'
+                                ? 'var(--study-hub-surface-bg, rgba(20, 30, 50, 0.06))'
+                                : 'rgba(20, 30, 50, 0.06)',
                         border:
                           entry.kind === 'text'
                             ? '1px solid rgba(20, 30, 50, 0.08)'
@@ -392,7 +422,7 @@ export default function CanvasSearchBar({
                           {entry.preview}
                         </span>
                       ) : (
-                        <KindIcon kind={entry.kind} />
+                        <KindIcon kind={entry.kind} studySubjectId={entry.studySubjectId} />
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>

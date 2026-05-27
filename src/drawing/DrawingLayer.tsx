@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useLassoStore } from './useLassoStore'
 import { effectiveCanvasLocked } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useCanvasLockFlattenStore } from '../canvasLock/canvasLockFlattenStore'
@@ -15,7 +16,9 @@ import {
   Z_ACTIVE_STROKE,
   committedStrokeZIndex,
   isStrokeAboveItems,
+  lassoLiftedStrokeZIndex,
 } from '../canvasItems/canvasZOrder'
+import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './canvasDimensions'
 
 const HIGHLIGHTER_GLOW_FILTER_ID = 'cutline-highlighter-glow'
@@ -62,8 +65,13 @@ function StrokeSvgLayer({
   const themeMode = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeMode)
   const isDark = effectiveMode === 'dark'
+  const dragOffset = useLassoStore((s) => s.dragOffset)
 
   if (strokes.length === 0 && !activeStroke) return null
+
+  const dragIds = dragOffset ? new Set(dragOffset.ids) : null
+  const dx = dragOffset?.canvasDx ?? 0
+  const dy = dragOffset?.canvasDy ?? 0
 
   const highlighters = strokes.filter((s) => s.tool === 'highlighter')
   const pens = strokes.filter((s) => s.tool === 'pen')
@@ -71,6 +79,42 @@ function StrokeSvgLayer({
   const highlighterBlend: React.CSSProperties['mixBlendMode'] = isDark
     ? 'plus-lighter'
     : 'multiply'
+
+  function renderStrokes(list: Stroke[]) {
+    if (!dragIds) {
+      return list.map((stroke) => (
+        <CompletedStrokePath
+          key={stroke.id}
+          stroke={stroke}
+          fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
+        />
+      ))
+    }
+    const staticStrokes = list.filter((s) => !dragIds.has(s.id))
+    const draggedStrokes = list.filter((s) => dragIds.has(s.id))
+    return (
+      <>
+        {staticStrokes.map((stroke) => (
+          <CompletedStrokePath
+            key={stroke.id}
+            stroke={stroke}
+            fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
+          />
+        ))}
+        {draggedStrokes.length > 0 && (
+          <g transform={`translate(${dx},${dy})`}>
+            {draggedStrokes.map((stroke) => (
+              <CompletedStrokePath
+                key={stroke.id}
+                stroke={stroke}
+                fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
+              />
+            ))}
+          </g>
+        )}
+      </>
+    )
+  }
 
   return (
     <svg
@@ -86,6 +130,7 @@ function StrokeSvgLayer({
         left: 0,
         zIndex,
         pointerEvents: 'none',
+        willChange: 'transform',
       }}
     >
       {isDark && highlighters.length + (activeStroke?.tool === 'highlighter' ? 1 : 0) > 0 && (
@@ -116,13 +161,7 @@ function StrokeSvgLayer({
           filter: isDark ? `url(#${glowFilterId})` : undefined,
         }}
       >
-        {highlighters.map((stroke) => (
-          <CompletedStrokePath
-            key={stroke.id}
-            stroke={stroke}
-            fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
-          />
-        ))}
+        {renderStrokes(highlighters)}
         {activeStroke?.tool === 'highlighter' && (
           <ActiveStrokePath
             stroke={activeStroke}
@@ -134,13 +173,7 @@ function StrokeSvgLayer({
           />
         )}
       </g>
-      {pens.map((stroke) => (
-        <CompletedStrokePath
-          key={stroke.id}
-          stroke={stroke}
-          fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
-        />
-      ))}
+      {renderStrokes(pens)}
       {activeStroke?.tool === 'pen' && (
         <ActiveStrokePath
           stroke={activeStroke}
@@ -167,11 +200,13 @@ export type DrawingLayerBand =
   | 'committed-above'
   | 'annotation'
   | 'active'
+  | 'lasso-lifted'
 
 function strokeMatchesBand(stroke: Stroke, band: 'committed-below' | 'committed-above'): boolean {
   const z = committedStrokeZIndex(stroke)
   return band === 'committed-above' ? isStrokeAboveItems(z) : !isStrokeAboveItems(z)
 }
+
 
 export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
   const activeCanvasId = useCanvasWorkspaceStore((s) => s.activeCanvasId)
@@ -183,6 +218,16 @@ export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
   const lockActive = effectiveCanvasLocked(isLocked)
   const hideCommittedStrokes =
     shouldFlattenCanvas(isLocked) && flattenReady && strokes.length > 0
+
+  // Mixed lasso selection: strokes + items both selected → lift above-items
+  // strokes above the blur at a z-index that respects their natural ordering.
+  const lassoStrokeIds = useLassoStore((s) => s.selectedStrokeIds)
+  const lassoItemIds = useLassoStore((s) => s.selectedItemIds)
+  const allItems = useCanvasItemsStore((s) => s.items)
+  const isMixedLasso = lassoStrokeIds.length > 0 && lassoItemIds.length > 0
+  // Lift ALL lasso-selected strokes so their z-ordering relative to items is
+  // preserved regardless of which plane (below/above items) they live in.
+  const liftedIdSet = isMixedLasso ? new Set(lassoStrokeIds) : null
 
   if (band === 'annotation') {
     if (annotationStrokes.length === 0) return null
@@ -220,8 +265,33 @@ export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
     )
   }
 
+  // Lasso-lifted: above-items strokes rendered at their correct interleaved
+  // z-index so they preserve their natural ordering relative to selected items.
+  if (band === 'lasso-lifted') {
+    if (!isMixedLasso || !liftedIdSet || liftedIdSet.size === 0) return null
+    const lifted = strokes.filter((s) => liftedIdSet.has(s.id))
+    if (lifted.length === 0) return null
+    return (
+      <div key={activeCanvasId} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        {groupCommittedStrokesByZ(lifted).map(([origZ, groupStrokes]) => (
+          <StrokeSvgLayer
+            key={origZ}
+            strokes={groupStrokes}
+            activeStroke={null}
+            zIndex={lassoLiftedStrokeZIndex(allItems, origZ)}
+            glowFilterId={`${HIGHLIGHTER_GLOW_FILTER_ID}-lasso-lifted-${origZ}`}
+            strokeLayer="committed"
+          />
+        ))}
+      </div>
+    )
+  }
+
   const committedBand = band
-  const filtered = strokes.filter((stroke) => strokeMatchesBand(stroke, committedBand))
+  // Exclude strokes that are lifted above the blur in a mixed lasso selection.
+  const filtered = strokes.filter(
+    (stroke) => strokeMatchesBand(stroke, committedBand) && (!liftedIdSet || !liftedIdSet.has(stroke.id)),
+  )
   if (hideCommittedStrokes || filtered.length === 0) return null
 
   return (

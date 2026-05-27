@@ -5,9 +5,9 @@ export const PILL_GAP = 10
 export const PILL_HEIGHT = 44
 export const PILL_PADDING = 4
 export const SEGMENT_WIDTH = 48
-export const PILL_WIDTH = PILL_PADDING * 2 + SEGMENT_WIDTH * 3
+export const PILL_WIDTH = PILL_PADDING * 2 + SEGMENT_WIDTH * 4
 
-export const PEN_TOOL_ORDER: ToolMode[] = ['pen', 'highlighter', 'erase']
+export const PEN_TOOL_ORDER: ToolMode[] = ['pen', 'highlighter', 'lasso', 'erase']
 
 export function pillScreenRect(anchorX: number, anchorY: number) {
   const right = anchorX - PILL_GAP

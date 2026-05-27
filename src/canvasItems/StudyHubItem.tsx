@@ -1,29 +1,24 @@
 import { memo, useRef, useState, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { X } from 'lucide-react'
-import { animateCameraToTarget } from '../canvas/canvasCamera'
-import StudyHubPanel from '../components/study/StudyHubPanel'
-import StudyHubPracticePicker, {
+import {
   DEFAULT_STUDY_PRACTICE,
 } from '../components/study/StudyHubPracticePicker'
-import { STUDY_SUBJECTS, STUDY_SUBJECT_CATALOG } from '../components/study/studyHubData'
-import { playSubmenuTap } from '../sound/submenuSound'
-import {
-  CHROME_PRESERVE_CASE_CLASS,
-  card,
-  chromeFrostedMenuStyle,
-  font,
-} from '../styles/tokens'
 import { useCanvasItemDragStore } from './canvasItemDragStore'
 import { useCanvasItemResizeStore } from './canvasItemResizeStore'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import CanvasItemShell from './CanvasItemShell'
+import StudyHubMenuFocusPortal from './StudyHubMenuFocusPortal'
+import StudyHubWidget from './StudyHubWidget'
+import {
+  dismissStudyHubMenuFocus,
+} from './studyHubMenuFocus'
 import { useCanvasItemScrollCapture } from './useCanvasItemScrollCapture'
-import { studyHubContentScaleForSize } from './studyHubSpawnScale'
+import {
+  studyHubBorderRadiusCss,
+  studyHubContentScaleForSize,
+} from './studyHubSpawnScale'
 import type { StudyHubCanvasItem } from './types'
 import { STUDY_HUB_HEIGHT, STUDY_HUB_WIDTH } from './types'
-
-const MemoStudyHubPanel = memo(StudyHubPanel)
 
 function StudyHubItem({
   item,
@@ -34,9 +29,8 @@ function StudyHubItem({
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
   onItemResizeStateChange?: (resizing: boolean) => void
 }) {
-  const catalog = STUDY_SUBJECT_CATALOG[item.subjectId]
-  const SubjectIcon = STUDY_SUBJECTS.find((s) => s.id === item.subjectId)?.icon
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const canvasScrollRef = useRef<HTMLDivElement>(null)
+  const focusScrollRef = useRef<HTMLDivElement>(null)
   const [practice, setPractice] = useState(DEFAULT_STUDY_PRACTICE)
   const isResizing = useCanvasItemResizeStore((s) => s.activeItemId === item.id)
   const isDragging = useCanvasItemDragStore((s) => s.activeItemId === item.id)
@@ -44,170 +38,92 @@ function StudyHubItem({
     s.snapBackItemId === item.id ? s.snapBackNonce : 0,
   )
   const perfDrag = isDragging || isResizing
-  const showMenuDismiss = useCanvasItemsStore(
-    (s) => s.zMenuSuppressedItemId === item.id && s.menuFocusReturnCamera != null,
+  const portalFocused = useCanvasItemsStore(
+    (s) => s.menuFocusReturnCamera != null && s.zMenuSuppressedItemId === item.id,
   )
-  useCanvasItemScrollCapture(scrollRef)
+  const menuFocusDismissing = useCanvasItemsStore(
+    (s) => s.menuFocusDismissing && s.menuFocusDismissItemId === item.id,
+  )
+  const showFocusPortal = portalFocused || menuFocusDismissing
+  const hideCanvasStudyHubContent = useCanvasItemsStore(
+    (s) => s.menuFocusReturnCamera != null && s.zMenuSuppressedItemId === item.id,
+  )
+  useCanvasItemScrollCapture(canvasScrollRef)
+
   const contentScale = studyHubContentScaleForSize(item.width)
+  const borderRadius = studyHubBorderRadiusCss(item.width)
 
   function handleDismissMenuFocus(e: React.MouseEvent | React.PointerEvent) {
     e.stopPropagation()
     e.preventDefault()
-    playSubmenuTap()
-    const returnCamera = useCanvasItemsStore.getState().takeMenuFocusReturnCamera()
-    if (returnCamera) {
-      animateCameraToTarget(transformRef.current, returnCamera, { curved: true })
-    }
+    dismissStudyHubMenuFocus(transformRef.current)
   }
 
   return (
-    <CanvasItemShell
-      item={item}
-      transformRef={transformRef}
-      onItemResizeStateChange={onItemResizeStateChange}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: card.radius,
-          overflow: 'hidden',
-          contain: perfDrag ? 'layout style paint' : undefined,
-        }}
+    <>
+      <CanvasItemShell
+        item={item}
+        transformRef={transformRef}
+        onItemResizeStateChange={onItemResizeStateChange}
       >
         <div
-          key={snapBackNonce || undefined}
-          className={snapBackNonce ? 'study-hub-resize-snap-pulse' : undefined}
           style={{
             position: 'absolute',
             inset: 0,
-            transformOrigin: 'center center',
-            borderRadius: card.radius,
+            borderRadius,
             overflow: 'hidden',
+            contain: perfDrag ? 'layout style paint' : undefined,
           }}
         >
           <div
+            key={snapBackNonce || undefined}
+            className={snapBackNonce ? 'study-hub-resize-snap-pulse' : undefined}
             style={{
               position: 'absolute',
-              left: '50%',
-              top: '50%',
-              width: STUDY_HUB_WIDTH,
-              height: STUDY_HUB_HEIGHT,
-              transform: `translate(-50%, -50%) scale(${contentScale})`,
+              inset: 0,
               transformOrigin: 'center center',
-              willChange: perfDrag ? 'transform' : undefined,
+              borderRadius,
+              overflow: 'hidden',
+              opacity: hideCanvasStudyHubContent ? 0 : 1,
+              pointerEvents: showFocusPortal ? 'none' : undefined,
             }}
           >
             <div
-              className={`study-hub-widget theme-surface plus-fab-menu-glass ${CHROME_PRESERVE_CASE_CLASS}${perfDrag ? ' study-hub-widget--perf-drag' : ''}`}
               style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                ...chromeFrostedMenuStyle,
-                background: 'var(--study-hub-surface-bg, var(--glass-bg))',
-                fontFamily: font.family,
-                color: font.colorPrimary,
-                overflow: 'hidden',
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                width: STUDY_HUB_WIDTH,
+                height: STUDY_HUB_HEIGHT,
+                transform: `translate(-50%, -50%) scale(${contentScale})`,
+                transformOrigin: 'center center',
+                willChange: perfDrag ? 'transform' : undefined,
               }}
             >
-              {showMenuDismiss && (
-                <button
-                  type="button"
-                  className="study-hub-menu-dismiss"
-                  aria-label="Return to previous canvas view"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={handleDismissMenuFocus}
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    right: 12,
-                    zIndex: 3,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 28,
-                    height: 28,
-                    padding: 0,
-                    border: 'none',
-                    borderRadius: 999,
-                    background: 'var(--glass-bg)',
-                    boxShadow: 'var(--glass-shadow)',
-                    color: 'var(--ui-text-muted)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <X size={14} strokeWidth={2} />
-                </button>
-              )}
-              <header
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '18px 22px 14px',
-                  flexShrink: 0,
-                }}
-              >
-                {SubjectIcon && (
-                  <SubjectIcon
-                    size={20}
-                    strokeWidth={1.8}
-                    color={font.colorMuted}
-                    style={{ flexShrink: 0 }}
-                  />
-                )}
-                <div style={{ minWidth: 0 }}>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      letterSpacing: '0.04em',
-                      color: font.colorMuted,
-                    }}
-                  >
-                    {catalog.paperCode}
-                  </p>
-                  <h2
-                    style={{
-                      margin: '2px 0 0',
-                      fontSize: 18,
-                      fontWeight: 600,
-                      lineHeight: 1.25,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {catalog.fullName}
-                  </h2>
-                </div>
-              </header>
-
-              <StudyHubPracticePicker value={practice} onChange={setPractice} />
-
-              <div
-                ref={scrollRef}
-                className="study-hub-scroll"
-                style={{
-                  flex: 1,
-                  overflowY: perfDrag ? 'hidden' : 'auto',
-                  padding: '10px 22px 22px',
-                  minHeight: 0,
-                  touchAction: 'pan-y',
-                  overscrollBehavior: 'contain',
-                  pointerEvents: perfDrag ? 'none' : undefined,
-                }}
-              >
-                <MemoStudyHubPanel subjectId={item.subjectId} practice={practice} />
-              </div>
+              <StudyHubWidget
+                subjectId={item.subjectId}
+                practice={practice}
+                onPracticeChange={setPractice}
+                scrollRef={canvasScrollRef}
+                perfDrag={perfDrag}
+              />
             </div>
           </div>
         </div>
-      </div>
-    </CanvasItemShell>
+      </CanvasItemShell>
+
+      <StudyHubMenuFocusPortal
+        item={item}
+        transformRef={transformRef}
+        active={showFocusPortal}
+        focused={portalFocused}
+        dismissing={menuFocusDismissing}
+        practice={practice}
+        onPracticeChange={setPractice}
+        scrollRef={focusScrollRef}
+        onDismiss={handleDismissMenuFocus}
+      />
+    </>
   )
 }
 
@@ -219,6 +135,7 @@ export default memo(StudyHubItem, (prev, next) => {
     (a.id === b.id &&
       a.x === b.x &&
       a.y === b.y &&
+      a.zIndex === b.zIndex &&
       a.width === b.width &&
       a.height === b.height &&
       a.subjectId === b.subjectId)

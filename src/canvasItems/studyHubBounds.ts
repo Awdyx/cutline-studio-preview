@@ -4,6 +4,7 @@ import {
   CANVAS_WIDTH,
   getCanvasMinScale,
 } from '../drawing/canvasDimensions'
+import { STUDY_HUB_SPAWN_SIZE_FACTOR } from './studyHubSpawnScale'
 import { STUDY_HUB_ASPECT, STUDY_HUB_WIDTH } from './types'
 
 /** Typical desktop viewport for zoom-out limit estimates. */
@@ -78,6 +79,6 @@ export function studyHubSpawnDimensions(spawnScale: number): {
   width: number
   height: number
 } {
-  const rawWidth = STUDY_HUB_WIDTH / spawnScale
+  const rawWidth = (STUDY_HUB_WIDTH / spawnScale) * STUDY_HUB_SPAWN_SIZE_FACTOR
   return studyHubDimensionsForWidth(rawWidth)
 }

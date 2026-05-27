@@ -1,7 +1,11 @@
 /** Bottom-right corner bracket (┘): arms along bottom + right, opening toward the item. */
-export default function ResizeCornerBracket() {
-  const arm = 11
-  const stroke = 2
+export default function ResizeCornerBracket({
+  arm = 11,
+  stroke = 2,
+}: {
+  arm?: number
+  stroke?: number
+}) {
   const size = arm + stroke
 
   return (

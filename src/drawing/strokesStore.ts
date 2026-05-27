@@ -36,9 +36,13 @@ type StrokesState = {
   cancelEraseSession: () => void
   beginDragErase: () => void
   applyDragErase: (pos: { x: number; y: number }) => void
-  undo: () => void
-  redo: () => void
+  undo: () => boolean
+  redo: () => boolean
   hydrate: () => void
+  moveStrokes: (ids: string[], dx: number, dy: number) => void
+  deleteStrokes: (ids: string[], opts?: { skipSnapshot?: boolean }) => void
+  recolorStrokes: (ids: string[], color: string) => void
+  duplicateStrokes: (ids: string[]) => string[]
 }
 
 function createStroke(point: StrokePoint, config: StrokeConfig): Stroke {
@@ -166,10 +170,65 @@ export const useStrokesStore = create<StrokesState>((set, get) => ({
   },
 
   undo: () => {
-    if (historyUndo()) playSound('undo')
+    const changed = historyUndo()
+    if (changed) playSound('undo')
+    return changed
   },
 
   redo: () => {
-    if (historyRedo()) playSound('redo')
+    const changed = historyRedo()
+    if (changed) playSound('redo')
+    return changed
+  },
+
+  moveStrokes: (ids, dx, dy) => {
+    const idSet = new Set(ids)
+    set((s) => ({
+      strokes: s.strokes.map((st) =>
+        idSet.has(st.id)
+          ? { ...st, path: undefined, points: st.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy })) }
+          : st,
+      ),
+    }))
+    persist()
+  },
+
+  deleteStrokes: (ids, opts) => {
+    if (!opts?.skipSnapshot) pushUndoSnapshot()
+    const idSet = new Set(ids)
+    set((s) => ({ strokes: s.strokes.filter((st) => !idSet.has(st.id)) }))
+    persist()
+  },
+
+  recolorStrokes: (ids, color) => {
+    pushUndoSnapshot()
+    const idSet = new Set(ids)
+    set((s) => ({
+      strokes: s.strokes.map((st) =>
+        idSet.has(st.id) ? { ...st, color, path: undefined } : st,
+      ),
+    }))
+    persist()
+  },
+
+  duplicateStrokes: (ids) => {
+    pushUndoSnapshot()
+    const idSet = new Set(ids)
+    const { strokes } = get()
+    const OFFSET = 20
+    const newStrokes: Stroke[] = []
+    for (const st of strokes) {
+      if (!idSet.has(st.id)) continue
+      const newId = generateStrokeId()
+      newStrokes.push({
+        ...st,
+        id: newId,
+        path: undefined,
+        points: st.points.map((p) => ({ ...p, x: p.x + OFFSET, y: p.y + OFFSET })),
+      })
+    }
+    set((s) => ({ strokes: [...s.strokes, ...newStrokes] }))
+    persist()
+    return newStrokes.map((s) => s.id)
   },
 }))

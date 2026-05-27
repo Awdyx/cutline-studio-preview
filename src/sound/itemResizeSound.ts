@@ -5,14 +5,14 @@ import {
   setMasterOutputGain,
 } from './soundEngine'
 import { SFX_ON_GAIN } from './soundLevels'
-import { CONTINUOUS_SFX_LEVEL } from './soundGains'
+import { RESIZE_SFX_LEVEL } from './soundGains'
 import { useSoundStore } from './soundStore'
 
 const SPEED_MAX_PX = 1200
 const MIN_SPEED_PX = 8
 /** Audible idle floor while the handle is held — distinct from drag's near-silent idle. */
-const GAIN_IDLE = 0.008 * CONTINUOUS_SFX_LEVEL
-const GAIN_MAX = 0.043 * CONTINUOUS_SFX_LEVEL
+const GAIN_IDLE = 0.008 * RESIZE_SFX_LEVEL
+const GAIN_MAX = 0.043 * RESIZE_SFX_LEVEL
 const FREQ_MIN = 220
 const FREQ_MAX = 580
 const RAMP_SEC = 0.055

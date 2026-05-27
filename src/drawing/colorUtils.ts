@@ -106,3 +106,40 @@ export function resolveStrokeFill(
   if (tool === 'pen') return resolvePenColor(color, mode)
   return resolveHighlighterColor(color, mode)
 }
+
+function parseHexColor(hex: string): { r: number; g: number; b: number } | null {
+  const match = hex.match(/^#?([0-9a-f]{6})$/i)
+  if (!match) return null
+  const value = match[1]
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  }
+}
+
+/** Resolve fill for UI customize tray / pin drawings (hex swatches + canvas-style highlighter). */
+export function resolveTrayStrokeFill(
+  color: string,
+  tool: 'pen' | 'highlighter',
+  mode: 'light' | 'dark',
+): string {
+  if (tool === 'pen') return resolvePenColor(color, mode)
+  if (color.startsWith('rgba')) return resolveHighlighterColor(color, mode)
+  const rgb = parseHexColor(color)
+  if (rgb) {
+    const alpha = mode === 'light' ? 0.35 : 0.38
+    const rgba = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
+    return mode === 'dark' ? boostRgbaForDarkGlow(rgba) : rgba
+  }
+  return resolveHighlighterColor(color, mode)
+}
+
+export function inferTrayStrokeTool(stroke: {
+  tool?: 'pen' | 'highlighter'
+  opacity?: number
+}): 'pen' | 'highlighter' {
+  if (stroke.tool === 'highlighter' || stroke.tool === 'pen') return stroke.tool
+  if (stroke.opacity != null && stroke.opacity < 1) return 'highlighter'
+  return 'pen'
+}

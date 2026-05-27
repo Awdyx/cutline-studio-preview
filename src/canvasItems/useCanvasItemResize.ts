@@ -12,6 +12,7 @@ import {
   stopItemResizeSound,
   updateItemResizeSound,
 } from '../sound/itemResizeSound'
+import { playSound } from '../sound/playSound'
 import { MIN_ITEM_HEIGHT, MIN_ITEM_WIDTH } from './grabZone'
 import { canvasEditingAllowed } from '../canvasEdit/layer'
 import { primaryPointerReleased } from './canvasPointerSession'
@@ -24,6 +25,7 @@ import {
 
 const RESIZE_THRESHOLD_PX = 8
 const RUBBER_BAND = 0.22
+const ASPECT_SNAP_HOLD_MS = 600
 
 type ResizePhase = 'idle' | 'pending' | 'active'
 
@@ -39,6 +41,9 @@ export type ResizeOptions = ResizeLimits & {
   mode?: 'corner' | 'center-uniform'
   /** Width / height — required when mode is `center-uniform`. */
   aspectRatio?: number
+  /** Original import dimensions — enables aspect-ratio proximity snap on hold. */
+  importWidth?: number
+  importHeight?: number
 }
 
 type ResizeSession = {
@@ -57,11 +62,38 @@ type ResizeSession = {
   lastClientX: number
   lastClientY: number
   beyondBounds: boolean
+  hasMoved: boolean
+  onReleaseWithoutResize?: () => void
+  holdStillTimerId: number | null
+  threshold: number
 }
 
 let resizeSession: ResizeSession | null = null
 let detachResizeListeners: (() => void) | null = null
 let resizeRafId: number | null = null
+
+function clearHoldStillTimer() {
+  if (resizeSession?.holdStillTimerId != null) {
+    clearTimeout(resizeSession.holdStillTimerId)
+    resizeSession.holdStillTimerId = null
+  }
+}
+
+function checkAspectRatioSnap(session: ResizeSession) {
+  const { importWidth, importHeight } = session.options ?? {}
+  if (!importWidth || !importHeight) return
+
+  // Clean up resize and animate snap to original aspect ratio
+  const itemId = session.itemId
+  cancelResizeRaf()
+  removeResizeListeners()
+  stopItemResizeSound()
+  resizeSession = null
+  setActiveResizeItem(null)
+
+  playSound('aspectSnap')
+  useCanvasItemsStore.getState().snapToOriginalAspectRatio(itemId)
+}
 
 function screenDist(x1: number, y1: number, x2: number, y2: number): number {
   return Math.hypot(x2 - x1, y2 - y1)
@@ -86,6 +118,8 @@ function cancelResizeRaf() {
 }
 
 function finishResizeSession() {
+  clearHoldStillTimer()
+
   if (resizeSession && resizeRafId != null) {
     cancelResizeRaf()
     applyResizeMove(resizeSession.lastClientX, resizeSession.lastClientY)
@@ -99,6 +133,10 @@ function finishResizeSession() {
   if (!ended) {
     setActiveResizeItem(null)
     return
+  }
+
+  if (!ended.hasMoved) {
+    ended.onReleaseWithoutResize?.()
   }
 
   if (ended.resizeActivated) {
@@ -273,8 +311,16 @@ function applyResizeMove(clientX: number, clientY: number) {
 
 function scheduleResizeMove(clientX: number, clientY: number) {
   if (!resizeSession) return
+  resizeSession.hasMoved = true
   resizeSession.lastClientX = clientX
   resizeSession.lastClientY = clientY
+
+  // Reset hold-still timer for aspect-ratio snap
+  clearHoldStillTimer()
+  const session = resizeSession
+  resizeSession.holdStillTimerId = window.setTimeout(() => {
+    if (resizeSession === session) checkAspectRatioSnap(session)
+  }, ASPECT_SNAP_HOLD_MS)
 
   if (resizeRafId != null) return
   resizeRafId = requestAnimationFrame(() => {
@@ -292,6 +338,7 @@ function attachResizePointerSession(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
   touchDeferred: boolean,
   options?: ResizeOptions,
+  onReleaseWithoutResize?: () => void,
 ) {
   if (!canvasEditingAllowed()) return
 
@@ -303,6 +350,29 @@ function attachResizePointerSession(
   const pointerId = event.pointerId
   const item = useCanvasItemsStore.getState().items.find((entry) => entry.id === itemId)
   const touchDeferredActive = touchDeferred
+
+  // For text items, measure the editor's natural content size and use it as
+  // the resize minimum so the box can never be dragged narrower than text+padding.
+  let resolvedOptions = options
+  if (item?.type === 'text') {
+    const editorEl = document.querySelector<HTMLElement>(
+      `[data-item-id="${itemId}"] .canvas-text-editor`,
+    )
+    if (editorEl) {
+      const s = editorEl.style
+      const [prevWS, prevW, prevMW, prevH] = [s.whiteSpace, s.width, s.maxWidth, s.height]
+      s.whiteSpace = 'nowrap'; s.width = 'max-content'; s.maxWidth = 'none'
+      const minW = Math.ceil(editorEl.offsetWidth)
+      s.width = `${minW}px`; s.height = 'auto'
+      const minH = Math.ceil(editorEl.offsetHeight)
+      s.whiteSpace = prevWS; s.width = prevW; s.maxWidth = prevMW; s.height = prevH
+      resolvedOptions = {
+        ...options,
+        minWidth: Math.max(options?.minWidth ?? 0, minW),
+        minHeight: Math.max(options?.minHeight ?? 0, minH),
+      }
+    }
+  }
 
   resizeSession = {
     itemId,
@@ -317,9 +387,13 @@ function attachResizePointerSession(
     startWidth: width,
     startHeight: height,
     transformRef,
-    options,
+    options: resolvedOptions,
     resizeActivated: !touchDeferredActive,
     beyondBounds: false,
+    hasMoved: false,
+    onReleaseWithoutResize,
+    holdStillTimerId: null,
+    threshold: RESIZE_THRESHOLD_PX,
   }
 
   if (!touchDeferredActive) {
@@ -357,7 +431,7 @@ function attachResizePointerSession(
           e.clientY,
           resizeSession.startClientX,
           resizeSession.startClientY,
-        ) < RESIZE_THRESHOLD_PX
+        ) < resizeSession.threshold
       ) {
         return
       }
@@ -403,11 +477,14 @@ export function useCanvasItemResize(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
   _onResizeStateChange?: (resizing: boolean) => void,
   options?: ResizeOptions,
+  onReleaseWithoutResize?: () => void,
 ) {
   const isResizing = useCanvasItemResizeStore((s) => s.activeItemId === itemId)
   const snapBack = useCanvasItemResizeStore((s) => s.snapBackItemId === itemId)
   const optionsRef = useRef(options)
   optionsRef.current = options
+  const onReleaseWithoutResizeRef = useRef(onReleaseWithoutResize)
+  onReleaseWithoutResizeRef.current = onReleaseWithoutResize
 
   useEffect(
     () => () => {
@@ -437,6 +514,7 @@ export function useCanvasItemResize(
         transformRef,
         event.pointerType === 'touch',
         optionsRef.current,
+        onReleaseWithoutResizeRef.current,
       )
     },
     [height, itemId, transformRef, width],

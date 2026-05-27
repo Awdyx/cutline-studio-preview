@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react'
+import { usePanMotionStore } from '../panMotionStore'
 
 function isElementInteractive(el: Element): boolean {
   if (!(el instanceof HTMLElement)) return false
@@ -11,6 +12,7 @@ function isElementInteractive(el: Element): boolean {
 function isIgnorableOccluder(el: Element): boolean {
   if (el.closest('[data-canvas-item-z-menu]')) return true
   if (el.closest('.ui-selection-depth')) return true
+  if (el.closest('[data-study-hub-menu-focus-blocker]')) return true
   return false
 }
 
@@ -62,18 +64,25 @@ export function useCanvasHandleOccluded(
       raf = requestAnimationFrame(check)
     }
 
+    const guardedSchedule = () => {
+      if (usePanMotionStore.getState().active) return
+      scheduleCheck()
+    }
+
     check()
-    const interval = window.setInterval(check, 280)
-    window.addEventListener('scroll', scheduleCheck, true)
-    window.addEventListener('resize', scheduleCheck)
-    window.addEventListener('pointermove', scheduleCheck, { passive: true })
+    const interval = window.setInterval(() => {
+      if (!usePanMotionStore.getState().active) check()
+    }, 280)
+    window.addEventListener('scroll', guardedSchedule, true)
+    window.addEventListener('resize', guardedSchedule)
+    window.addEventListener('pointermove', guardedSchedule, { passive: true })
 
     return () => {
       cancelAnimationFrame(raf)
       clearInterval(interval)
-      window.removeEventListener('scroll', scheduleCheck, true)
-      window.removeEventListener('resize', scheduleCheck)
-      window.removeEventListener('pointermove', scheduleCheck)
+      window.removeEventListener('scroll', guardedSchedule, true)
+      window.removeEventListener('resize', guardedSchedule)
+      window.removeEventListener('pointermove', guardedSchedule)
     }
   }, [active, handleRef, revisionKey])
 

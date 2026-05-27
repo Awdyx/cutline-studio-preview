@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { animate } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
@@ -27,7 +28,13 @@ import { dismissSelectionForOutsideItemTap } from '../canvas/canvasSelectionDism
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { useCanvasItemDrag } from './useCanvasItemDrag'
-import type { TextCanvasItem } from './types'
+import {
+  fitTextItemRectAroundCenter,
+  measureTextItemContentBounds,
+  measureTextItemShrinkBounds,
+} from './textItemAutoSize'
+import { useCanvasItemResizeStore } from './canvasItemResizeStore'
+import { TEXT_BOX_PADDING, type TextCanvasItem } from './types'
 
 const textSaveDelayMs = 400
 
@@ -43,11 +50,14 @@ export default function TextItem({
   const isLocked = useCanvasLockStore((s) => s.isLocked)
   const frozen = isItemFrozen(item, isLocked)
   const editorRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const shouldFocusRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editorEmpty, setEditorEmpty] = useState(item.text.length === 0)
   const [isEditing, setIsEditing] = useState(false)
   const isSelected = useItemSelected(item.id)
+  const isResizing = useCanvasItemResizeStore((s) => s.activeItemId === item.id)
+  const wasResizingRef = useRef(false)
   const { onGrabPointerDown } = useCanvasItemDrag(item.id)
   const isPhone = useIsPhoneLayout()
   const canvasEditEnabled = useCanvasEditStore((s) => s.enabled)
@@ -84,6 +94,34 @@ export default function TextItem({
     }
     commitTextEdit()
   }, [commitTextEdit])
+
+  const syncAutoSize = useCallback(() => {
+    const el = editorRef.current
+    if (!el || !isEditing) return
+
+    const store = useCanvasItemsStore.getState()
+    const current = store.items.find((entry) => entry.id === item.id)
+    if (!current || current.type !== 'text') return
+
+    const { width, height } = measureTextItemContentBounds(
+      el,
+      current.width,
+      current.height,
+    )
+    if (current.width === width && current.height === height) return
+
+    const next = fitTextItemRectAroundCenter(
+      current.x,
+      current.y,
+      current.width,
+      current.height,
+      width,
+      height,
+    )
+    store.updateItemRect(item.id, next.x, next.y, next.width, next.height, {
+      persist: false,
+    })
+  }, [isEditing, item.id])
 
   const syncFromStore = useCallback(() => {
     const el = editorRef.current
@@ -144,10 +182,11 @@ export default function TextItem({
       if (el) {
         scheduleSave(readEditorHtml(el))
         setEditorEmpty(isEditorEmpty(el))
+        syncAutoSize()
       }
       return true
     },
-    [scheduleSave],
+    [scheduleSave, syncAutoSize],
   )
 
   useEffect(() => {
@@ -160,15 +199,70 @@ export default function TextItem({
     syncFromStore()
   }, [item.id])
 
+  // Snap to fit only if text has escaped the box (box is too small for content)
   useEffect(() => {
-    if (!isSelected) setIsEditing(false)
-  }, [isSelected])
+    if (isResizing) {
+      wasResizingRef.current = true
+      return
+    }
+    if (!wasResizingRef.current) return
+    wasResizingRef.current = false
+
+    const el = editorRef.current
+    if (!el) return
+    const store = useCanvasItemsStore.getState()
+    const current = store.items.find((entry) => entry.id === item.id)
+    if (!current || current.type !== 'text') return
+
+    const { width, height } = measureTextItemShrinkBounds(el)
+    // Only snap if content overflows — box is already big enough, leave it alone
+    if (current.width >= width && current.height >= height) return
+
+    const next = fitTextItemRectAroundCenter(
+      current.x,
+      current.y,
+      current.width,
+      current.height,
+      Math.max(width, current.width),
+      Math.max(height, current.height),
+    )
+    store.updateItemRect(item.id, next.x, next.y, next.width, next.height)
+  }, [isResizing, item.id])
+
+  useEffect(() => {
+    if (isSelected) return
+    setIsEditing(false)
+
+    // Shrink box to fit content when deselecting (only shrinks, never grows)
+    const el = editorRef.current
+    if (!el) return
+    const store = useCanvasItemsStore.getState()
+    const current = store.items.find((entry) => entry.id === item.id)
+    if (!current || current.type !== 'text') return
+
+    const { width, height } = measureTextItemShrinkBounds(el)
+    if (width >= current.width && height >= current.height) return
+
+    const next = fitTextItemRectAroundCenter(
+      current.x,
+      current.y,
+      current.width,
+      current.height,
+      Math.min(width, current.width),
+      Math.min(height, current.height),
+    )
+    store.updateItemRect(item.id, next.x, next.y, next.width, next.height)
+  }, [isSelected, item.id])
 
   useLayoutEffect(() => {
     if (!isEditing || !shouldFocusRef.current) return
     shouldFocusRef.current = false
     focusEditor()
   }, [focusEditor, isEditing])
+
+  useLayoutEffect(() => {
+    syncAutoSize()
+  }, [editorEmpty, isEditing, syncAutoSize])
 
   useEffect(() => {
     if (frozen) return
@@ -202,6 +296,7 @@ export default function TextItem({
       onItemResizeStateChange={onItemResizeStateChange}
     >
         <div
+          ref={containerRef}
           style={{
             position: 'absolute',
             inset: 0,
@@ -259,8 +354,10 @@ export default function TextItem({
             if (!el) return
             scheduleSave(readEditorHtml(el))
             setEditorEmpty(isEditorEmpty(el))
+            syncAutoSize()
           }}
           onBlur={() => {
+            syncAutoSize()
             setIsEditing(false)
             flushSaveAndCommit()
           }}
@@ -271,15 +368,27 @@ export default function TextItem({
               flushSaveAndCommit()
               stopEditing()
             }
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              flushSaveAndCommit()
+              const el = containerRef.current
+              if (el) {
+                animate(el, { scale: [1, 0.96, 1], opacity: [1, 0.55, 1] }, { duration: 0.22, ease: 'easeOut' })
+                  .then(() => stopEditing())
+              } else {
+                stopEditing()
+              }
+            }
           }}
             style={{
-              padding: '0 2px',
+              padding: TEXT_BOX_PADDING,
               fontSize: 16,
               lineHeight: 1.45,
               fontFamily: font.family,
               color: font.colorPrimary,
               overflow: 'visible',
-              wordBreak: 'break-word',
+              wordBreak: 'normal',
+              overflowWrap: 'break-word',
               outline: 'none',
               background: 'transparent',
               boxSizing: 'border-box',
@@ -287,7 +396,6 @@ export default function TextItem({
               pointerEvents: frozen ? 'none' : 'auto',
               ...textAlignmentEditorStyle(item.textAlign),
               maxWidth: '100%',
-              width: 'fit-content',
             }}
             className={`canvas-text-editor${editorEmpty ? ' canvas-text-editor--empty' : ''}`}
           />

@@ -13,6 +13,8 @@ import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { ERASE_HIT_RADIUS, hitTestStroke } from '../drawing/eraseUtils'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
 import { useStrokesStore } from '../drawing/strokesStore'
+import { isLassoMode, useToolStore } from '../drawing/toolStore'
+import { useLassoStore } from '../drawing/useLassoStore'
 import { generateStrokeId } from '../drawing/strokeId'
 import { strokeToSvgPath, ensureMinimumStrokePoints } from '../drawing/strokePath'
 import type { DrawTool, Stroke, StrokePoint } from '../drawing/types'
@@ -128,6 +130,10 @@ type CanvasItemsState = {
   zMenuSuppressedItemId: string | null
   /** Camera to restore when dismissing a menu-driven study hub focus. */
   menuFocusReturnCamera: SpaceCamera | null
+  /** Portal stays mounted while the return zoom animation plays. */
+  menuFocusDismissing: boolean
+  /** Study hub that owns the dismissing portal (set before focus chrome clears). */
+  menuFocusDismissItemId: string | null
   /** Set when user spawns text; consumed on mount to focus editor once. */
   pendingEditorFocusId: string | null
   activeStickyStroke: { stickyId: string; stroke: Stroke } | null
@@ -180,6 +186,7 @@ type CanvasItemsState = {
     opts?: { persist?: boolean; clampStudyHub?: boolean },
   ) => void
   restoreImportSizing: (id: string) => void
+  snapToOriginalAspectRatio: (id: string) => void
   bringToFront: (id: string) => void
   sendToBack: (id: string) => void
   raiseInPlane: (id: string) => void
@@ -335,6 +342,8 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   zOrderPulse: null,
   zMenuSuppressedItemId: null,
   menuFocusReturnCamera: null,
+  menuFocusDismissing: false,
+  menuFocusDismissItemId: null,
   pendingEditorFocusId: null,
   activeStickyStroke: null,
 
@@ -354,6 +363,11 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const item = findItem(get().items, id)
     if (!item) return
     if (!options?.allowFrozen && !itemIsMutable(item)) return
+
+    // Tap-select while lasso is active uses normal selection chrome, not lasso chrome.
+    if (isLassoMode(useToolStore.getState().mode)) {
+      useLassoStore.getState().clearSelection()
+    }
 
     useShortcutUiStore.getState().dismissChromeForCanvasInteraction()
 
@@ -418,7 +432,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   },
 
   clearMenuFocusChrome: () => {
-    set({ zMenuSuppressedItemId: null, menuFocusReturnCamera: null })
+    set({ zMenuSuppressedItemId: null, menuFocusReturnCamera: null, menuFocusDismissing: false, menuFocusDismissItemId: null })
   },
 
   takeMenuFocusReturnCamera: () => {
@@ -447,6 +461,8 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       previewAdjustSpaceId: null,
       zMenuSuppressedItemId: null,
       menuFocusReturnCamera: null,
+      menuFocusDismissing: false,
+      menuFocusDismissItemId: null,
     })
     flushActiveTextEditor()
     dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
@@ -872,6 +888,73 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       y: centerY - item.importHeight / 2,
       width: item.importWidth,
       height: item.importHeight,
+    }
+
+    restoreSizingItemId = id
+    set({ restoreSizingAnimatingId: id })
+
+    const started = performance.now()
+
+    const tick = (now: number) => {
+      if (restoreSizingItemId !== id) return
+
+      const t = Math.min(1, (now - started) / RESTORE_SIZING_MS)
+      const eased = easeOutCubic(t)
+      const x = from.x + (to.x - from.x) * eased
+      const y = from.y + (to.y - from.y) * eased
+      const width = from.width + (to.width - from.width) * eased
+      const height = from.height + (to.height - from.height) * eased
+
+      set((state) => ({
+        restoreSizingAnimatingId: t < 1 ? id : null,
+        items: state.items.map((entry) =>
+          entry.id === id ? { ...entry, x, y, width, height } : entry,
+        ),
+      }))
+
+      if (t < 1) {
+        restoreSizingFrameId = requestAnimationFrame(tick)
+      } else {
+        restoreSizingFrameId = null
+        restoreSizingItemId = null
+        persistItems({ immediate: true })
+      }
+    }
+
+    restoreSizingFrameId = requestAnimationFrame(tick)
+  },
+
+  snapToOriginalAspectRatio: (id) => {
+    const item = findItem(get().items, id)
+    if (!item || (item.type !== 'image' && item.type !== 'video')) return
+    if (!itemIsMutable(item)) return
+    if (item.importWidth == null || item.importHeight == null) return
+
+    const originalAR = item.importWidth / item.importHeight
+    const area = item.width * item.height
+    const newWidth = Math.sqrt(area * originalAR)
+    const newHeight = Math.sqrt(area / originalAR)
+    const centerX = item.x + item.width / 2
+    const centerY = item.y + item.height / 2
+
+    if (
+      Math.abs(item.width - newWidth) < 0.5 &&
+      Math.abs(item.height - newHeight) < 0.5
+    ) return
+
+    if (restoreSizingFrameId != null) {
+      cancelAnimationFrame(restoreSizingFrameId)
+      restoreSizingFrameId = null
+    }
+
+    pushUndoSnapshot()
+
+    const from = { x: item.x, y: item.y, width: item.width, height: item.height }
+    const to = {
+      x: centerX - newWidth / 2,
+      y: centerY - newHeight / 2,
+      width: newWidth,
+      height: newHeight,
     }
 
     restoreSizingItemId = id

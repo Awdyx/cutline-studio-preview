@@ -283,20 +283,18 @@ export default function NewsPanel({
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: 16, fontWeight: 600, color: panelTone.title }}>
-          {chromeLabel('News')}
-        </span>
-        <p
+        <div
           style={{
-            margin: '4px 0 0',
-            fontSize: 12,
-            color: font.colorMuted,
-            lineHeight: 1.4,
-            opacity: opacity.subtitle,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
           }}
         >
-          {chromeLabel('Blogs, release notes, and product updates')}
-        </p>
+          <Newspaper size={16} color={panelTone.title} strokeWidth={1.8} aria-hidden />
+          <span style={{ fontSize: 16, fontWeight: 600, color: panelTone.title }}>
+            {chromeLabel('News')}
+          </span>
+        </div>
       </div>
 
       <div

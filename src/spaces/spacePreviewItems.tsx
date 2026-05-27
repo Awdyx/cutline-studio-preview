@@ -16,6 +16,8 @@ import type {
   StudyHubCanvasItem,
   TextCanvasItem,
 } from '../canvasItems/types'
+import { TEXT_BOX_PADDING } from '../canvasItems/types'
+import { studyHubBorderRadiusForWidth } from '../canvasItems/studyHubSpawnScale'
 import { font } from '../styles/tokens'
 import { resolveStickyColor, resolveStickyTextColor } from '../theme/paletteGenerator'
 
@@ -192,16 +194,16 @@ export function PreviewTextItem({
         <div
           className={`canvas-text-editor${empty ? ' canvas-text-editor--empty' : ''}`}
           style={{
-            padding: '0 2px',
+            padding: TEXT_BOX_PADDING,
             fontSize: 16,
             lineHeight: 1.45,
             fontFamily: font.family,
             color: font.colorPrimary,
             overflow: 'hidden',
-            wordBreak: 'break-word',
+            wordBreak: 'normal',
+            overflowWrap: 'break-word',
             boxSizing: 'border-box',
             maxWidth: '100%',
-            width: 'fit-content',
             ...textAlignmentEditorStyle(alignment),
           }}
           dangerouslySetInnerHTML={{ __html: html }}
@@ -237,7 +239,7 @@ export function PreviewStudyHubItem({
         y={item.y}
         width={item.width}
         height={item.height}
-        rx={16}
+        rx={studyHubBorderRadiusForWidth(item.width)}
         fill={cardBg}
         opacity={opacity}
       />
@@ -264,28 +266,15 @@ export function PreviewStudyHubItem({
           <p
             style={{
               margin: 0,
-              fontSize: 13,
+              fontSize: 18,
               fontWeight: 600,
+              lineHeight: 1.25,
               letterSpacing: '0.04em',
-              color: muted,
+              color: primary,
             }}
           >
             {catalog.paperCode}
           </p>
-          <h2
-            style={{
-              margin: '2px 0 0',
-              fontSize: 18,
-              fontWeight: 600,
-              lineHeight: 1.25,
-              color: primary,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {catalog.fullName}
-          </h2>
         </div>
       </PreviewHtmlForeignObject>
     </g>

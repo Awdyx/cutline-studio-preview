@@ -22,6 +22,7 @@ export const Z_ANNOTATION_MIN = 2000
 /** Blurs the canvas behind selected items (pointer-events: none). */
 export const Z_SELECTION_DIM = 2900
 
+
 /**
  * Force-lifted items (e.g. a space widget being hovered as a drop target during
  * a drag) sit just above the dim — visible/unblurred — but stay below the
@@ -31,6 +32,9 @@ export const Z_SELECTION_LIFT_HOVER = 2901
 
 /** Selected items render above the blur overlay (and above force-lifted items). */
 export const Z_SELECTION_ABOVE_DIM = 3000
+
+/** Blocks canvas pointer events during study-hub menu focus (above all canvas layers). */
+export const Z_MENU_FOCUS_BLOCKER = 5000
 
 export function committedItemZRank(items: CanvasItem[], id: string): number {
   const sorted = [...committedItems(items)].sort(
@@ -57,7 +61,9 @@ export function displayZIndexForCanvasItem(
   options?: { forceLift?: boolean; isActiveDrag?: boolean },
 ): number {
   if (selectedIds.includes(item.id) || options?.isActiveDrag === true) {
-    return Z_SELECTION_ABOVE_DIM + committedItemZRank(items, item.id)
+    // Use rank * 2 (even slots) so lasso-lifted strokes can occupy the odd
+    // slots in between and maintain their natural z-ordering relative to items.
+    return Z_SELECTION_ABOVE_DIM + committedItemZRank(items, item.id) * 2
   }
   if (options?.forceLift === true) return Z_SELECTION_LIFT_HOVER
   return item.zIndex
@@ -261,6 +267,24 @@ export function zIndexForRaiseInAnnotationPlane(
   const ann = annotationItems(items)
   if (ann.length === 0) return Z_ANNOTATION_MIN
   return Math.max(...ann.map((i) => i.zIndex)) + 1
+}
+
+/**
+ * Compute the display z-index for a lasso-lifted stroke in a mixed lasso
+ * selection (strokes + items both selected).
+ *
+ * Items are lifted to Z_SELECTION_ABOVE_DIM + rank * 2 (even slots: 3000, 3002, …).
+ * A stroke that naturally sits between two items occupies the odd slot between
+ * their even slots, preserving the original z-ordering exactly.
+ *
+ * Formula: Z_SELECTION_ABOVE_DIM + itemsBelow * 2 - 1
+ *   e.g. 0 items below → 2999 (below all lifted items, above blur at 2900)
+ *        1 item below  → 3001 (between rank-0 item at 3000 and rank-1 at 3002)
+ *        2 items below → 3003 (between rank-1 and rank-2) … and so on.
+ */
+export function lassoLiftedStrokeZIndex(items: CanvasItem[], strokeOrigZ: number): number {
+  const itemsBelow = committedItems(items).filter((i) => i.zIndex < strokeOrigZ).length
+  return Z_SELECTION_ABOVE_DIM + itemsBelow * 2 - 1
 }
 
 /** Bump legacy annotation items into the annotation z band after load. */

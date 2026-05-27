@@ -17,6 +17,9 @@ export function usePanMotionHandler() {
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fadeRaf = useRef<number | null>(null)
   const fadeRef = useRef<ReactZoomPanPinchRef | null>(null)
+  // Pending RAF for throttling pan-frame updates
+  const panRaf = useRef<number | null>(null)
+  const pendingSync = useRef<{ ref: ReactZoomPanPinchRef; dx: number; dy: number } | null>(null)
 
   const setPanFrame = usePanMotionStore((s) => s.setPanFrame)
   const setEdges = usePanMotionStore((s) => s.setEdges)
@@ -58,7 +61,7 @@ export function usePanMotionHandler() {
     [setEdges],
   )
 
-  const syncPanMotion = useCallback(
+  const flushPanSync = useCallback(
     (ref: ReactZoomPanPinchRef, vx: number, vy: number) => {
       const edges = computePanVignetteEdges(ref, vx, vy)
       setPanFrame(vx, vy, edges)
@@ -76,6 +79,22 @@ export function usePanMotionHandler() {
       }
     },
     [setPanFrame, runHoldFadeLoop, stopHoldFadeLoop],
+  )
+
+  const syncPanMotion = useCallback(
+    (ref: ReactZoomPanPinchRef, vx: number, vy: number) => {
+      // Accumulate the latest values; a single RAF flush applies them once per frame.
+      pendingSync.current = { ref, dx: vx, dy: vy }
+      if (panRaf.current !== null) return
+      panRaf.current = requestAnimationFrame(() => {
+        panRaf.current = null
+        if (!pendingSync.current) return
+        const { ref: r, dx, dy } = pendingSync.current
+        pendingSync.current = null
+        flushPanSync(r, dx, dy)
+      })
+    },
+    [flushPanSync],
   )
 
   const onPanning = useCallback(
@@ -104,14 +123,26 @@ export function usePanMotionHandler() {
 
   const onPanningStop = useCallback(
     (ref: ReactZoomPanPinchRef) => {
+      // Cancel any pending RAF and flush immediately with zero velocity.
+      if (panRaf.current !== null) {
+        cancelAnimationFrame(panRaf.current)
+        panRaf.current = null
+        pendingSync.current = null
+      }
       if (stopTimer.current) clearTimeout(stopTimer.current)
-      syncPanMotion(ref, 0, 0)
+      flushPanSync(ref, 0, 0)
       setPanStopped()
     },
-    [syncPanMotion, setPanStopped],
+    [flushPanSync, setPanStopped],
   )
 
-  useEffect(() => () => stopHoldFadeLoop(), [stopHoldFadeLoop])
+  useEffect(
+    () => () => {
+      stopHoldFadeLoop()
+      if (panRaf.current !== null) cancelAnimationFrame(panRaf.current)
+    },
+    [stopHoldFadeLoop],
+  )
 
   return { onPanning, onPanningStop }
 }

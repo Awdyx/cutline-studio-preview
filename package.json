@@ -14,6 +14,7 @@
   "dependencies": {
     "culori": "^4.0.2",
     "framer-motion": "^12.40.0",
+    "frimousse": "^0.3.0",
     "html2canvas": "^1.4.1",
     "idb-keyval": "^6.2.4",
     "lucide-react": "^1.16.0",

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, chromeLabel, font } from '../styles/tokens'
 import { phoneSubmenuSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
@@ -16,12 +16,14 @@ import { useSubmenuPosition } from './useSubmenuPosition'
 import PhoneStackHeader from './PhoneStackHeader'
 import ChromeScrollFade from './ChromeScrollFade'
 
-const DESKTOP_WIDTH = 488
+const DESKTOP_WIDTH = 800
 
-/** Split categories across two columns so the panel fits without scrolling. */
+/** Four columns — Study shortcuts fills the rightmost dead space, reducing height. */
 const DESKTOP_COLUMNS: readonly (readonly string[])[] = [
-  ['Edit', 'Drawing'],
-  ['Canvas', 'Navigation'],
+  ['Edit', 'Canvas'],
+  ['Navigation', 'Drawing'],
+  ['Create', 'Panels'],
+  ['Study shortcuts'],
 ]
 
 const categoryHeadingStyle: React.CSSProperties = {
@@ -41,6 +43,38 @@ const shortcutRowStyle: React.CSSProperties = {
   padding: '7px 10px',
   borderRadius: 8,
   cursor: 'var(--cursor-default)',
+}
+
+function ShortcutRow({ shortcut }: { shortcut: ShortcutDef }) {
+  const [hovered, setHovered] = useState(false)
+  const reduceMotion = useReducedMotion()
+
+  return (
+    <li
+      onMouseEnter={() => { setHovered(true); submenuRowHoverProps().onMouseEnter() }}
+      onMouseLeave={() => setHovered(false)}
+      style={shortcutRowStyle}
+    >
+      <motion.span
+        animate={{ scale: hovered && !reduceMotion ? 1.045 : 1 }}
+        transition={
+          reduceMotion
+            ? { duration: 0 }
+            : { type: 'spring', stiffness: 420, damping: 32, mass: 0.5 }
+        }
+        style={{
+          fontSize: 12,
+          color: font.colorPrimary,
+          minWidth: 0,
+          display: 'inline-block',
+          transformOrigin: 'left center',
+        }}
+      >
+        {chromeLabel(shortcut.label)}
+      </motion.span>
+      <ShortcutKeycaps keys={shortcut.keys} size="sm" />
+    </li>
+  )
 }
 
 function ShortcutCategorySection({
@@ -66,12 +100,7 @@ function ShortcutCategorySection({
         }}
       >
         {items.map((shortcut) => (
-          <li key={shortcut.id} {...submenuRowHoverProps()} style={shortcutRowStyle}>
-            <span style={{ fontSize: 12, color: font.colorPrimary, minWidth: 0 }}>
-              {chromeLabel(shortcut.label)}
-            </span>
-            <ShortcutKeycaps keys={shortcut.keys} size="sm" />
-          </li>
+          <ShortcutRow key={shortcut.id} shortcut={shortcut} />
         ))}
       </ul>
     </section>
@@ -160,7 +189,7 @@ export default function ShortcutsSubmenu({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
+              gridTemplateColumns: '1fr 1fr 1fr 1fr',
               gap: '4px 16px',
               alignItems: 'start',
               paddingTop: 7,

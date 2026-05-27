@@ -154,11 +154,9 @@ export function useTouchUndoRedoGestures(
       event.preventDefault()
 
       if (ended.maxFingerCount === 2) {
-        useStrokesStore.getState().undo()
-        fireToast('undo')
+        if (useStrokesStore.getState().undo()) fireToast('undo')
       } else {
-        useStrokesStore.getState().redo()
-        fireToast('redo')
+        if (useStrokesStore.getState().redo()) fireToast('redo')
       }
     }
 

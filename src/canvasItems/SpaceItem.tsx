@@ -1,19 +1,31 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { motion } from 'framer-motion'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
 import { playSound } from '../sound/playSound'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
-import { DEFAULT_SPACE_NAME } from '../spaces/types'
+import {
+  DEFAULT_SPACE_NAME,
+  SPACE_NAME_MAX_LENGTH,
+  clampSpaceName,
+} from '../spaces/types'
 import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import { useCanvasItemAreaPointer } from '../canvas/useCanvasItemAreaPointer'
+import {
+  dismissSelectionForOutsideItemTap,
+  shouldSkipItemSelectForOutsideDismiss,
+} from '../canvas/canvasSelectionDismiss'
 import { useCanvasEditingAllowed } from '../canvasEdit/layer'
 import DragHandle from './DragHandle'
 import ResizeHandle from './ResizeHandle'
 import { displayZIndexForCanvasItem } from './canvasZOrder'
-import { getGrabHandlePlacement, SPACE_RESIZE_CORNER_OUTSET } from './grabZone'
+import {
+  getGrabHandlePlacement,
+  resolveCanvasHandleHitSize,
+  SPACE_RESIZE_CORNER_OUTSET,
+} from './grabZone'
 import { useCanvasItemDrag } from './useCanvasItemDrag'
 import { useCanvasItemDragStore } from './canvasItemDragStore'
 import { useCanvasItemResize } from './useCanvasItemResize'
@@ -73,12 +85,18 @@ export default function SpaceItem({
   const isPreviewAdjusting = previewAdjustSpaceId === item.id
 
   const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id)
+  const selectSelf = useCallback(
+    () => useCanvasItemsStore.getState().selectItem(item.id),
+    [item.id],
+  )
   const { isResizing, handlePointerDown: onResizeDown } = useCanvasItemResize(
     item.id,
     item.width,
     item.height,
     transformRef,
     onItemResizeStateChange,
+    undefined,
+    selectSelf,
   )
   const {
     isPanDragging,
@@ -149,9 +167,9 @@ export default function SpaceItem({
     () =>
       displayZIndexForCanvasItem(allItems, item, selectedIds, {
         forceLift: isDropHoverTarget || dragLift,
-        isActiveDrag: isDragging,
+        isActiveDrag: isDragging && isSelected,
       }),
-    [allItems, item, selectedIds, isDropHoverTarget, dragLift, isDragging],
+    [allItems, item, selectedIds, isDropHoverTarget, dragLift, isDragging, isSelected],
   )
 
   const enterSpace = useCallback(() => {
@@ -161,6 +179,45 @@ export default function SpaceItem({
       .getState()
       .enterSpace(item.id, transformRef.current)
   }, [item.id, transformRef])
+
+  const updateSpaceName = useCanvasWorkspaceStore((s) => s.updateSpaceName)
+  const [titleEditing, setTitleEditing] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const titleInputRef = useRef<HTMLInputElement>(null)
+  const titleEditAllowed = editingAllowed && !frozen && isSelected
+
+  useEffect(() => {
+    if (titleEditing) titleInputRef.current?.focus()
+  }, [titleEditing])
+
+  const beginTitleEdit = useCallback(() => {
+    if (!titleEditAllowed) return
+    setTitleDraft(isDefaultName ? '' : clampSpaceName(displayName))
+    setTitleEditing(true)
+  }, [titleEditAllowed, isDefaultName, displayName])
+
+  /** Live-save: every keystroke pushes through to the store so the name reflects
+   * across the workspace immediately — the user never has to press Enter or
+   * blur the field for the rename to "take". Empty drafts persist as the
+   * default placeholder name. */
+  const handleTitleChange = useCallback(
+    (raw: string) => {
+      const clamped = clampSpaceName(raw)
+      setTitleDraft(clamped)
+      const next = clamped.trim() || DEFAULT_SPACE_NAME
+      updateSpaceName(item.id, next)
+    },
+    [item.id, updateSpaceName],
+  )
+
+  const closeTitleEdit = useCallback(() => {
+    setTitleEditing(false)
+  }, [])
+
+  /** Cancel any in-flight rename if the space becomes immutable (locked / etc). */
+  useEffect(() => {
+    if (!titleEditAllowed && titleEditing) setTitleEditing(false)
+  }, [titleEditAllowed, titleEditing])
 
   const areaPointer = useCanvasItemAreaPointer({
     itemId: item.id,
@@ -174,8 +231,14 @@ export default function SpaceItem({
     (e: React.PointerEvent) => {
       if (e.pointerType === 'pen') return
       e.stopPropagation()
+      if (shouldSkipItemSelectForOutsideDismiss(item.id)) {
+        if (e.pointerType === 'mouse') {
+          dismissSelectionForOutsideItemTap(item.id)
+        }
+        return
+      }
       if (e.pointerType === 'mouse' && e.button === 2) {
-        areaPointer.onPointerDown(e)
+        areaPointer.onPointerDown(e as ReactPointerEvent<HTMLElement>)
         return
       }
       if (isPreviewAdjusting) {
@@ -219,7 +282,11 @@ export default function SpaceItem({
         previewPhaseRef.current === 'pending' &&
         !useCanvasNavigationStore.getState().shouldSuppressItemTap()
       ) {
-        enterSpace()
+        if (shouldSkipItemSelectForOutsideDismiss(item.id)) {
+          dismissSelectionForOutsideItemTap(item.id)
+        } else {
+          enterSpace()
+        }
       }
       previewPhaseRef.current = 'idle'
       try {
@@ -245,6 +312,7 @@ export default function SpaceItem({
   const [hovered, setHovered] = useState(false)
   const lifted = isDragging || isResizing
   const canHover = !frozen && !isLocked
+  const handleHitSize = resolveCanvasHandleHitSize()
   const grabHandlePlacement = useMemo(
     () =>
       getGrabHandlePlacement(
@@ -254,8 +322,9 @@ export default function SpaceItem({
         item.height,
         CANVAS_WIDTH,
         CANVAS_HEIGHT,
+        handleHitSize,
       ),
-    [item.x, item.y, item.width, item.height],
+    [item.x, item.y, item.width, item.height, handleHitSize],
   )
   const handleOcclusionKey = `${item.x},${item.y},${item.width},${item.height},${item.zIndex},${displayZIndex}`
 
@@ -297,9 +366,10 @@ export default function SpaceItem({
           {!hideDragHandle && (
             <DragHandle
               placement={grabHandlePlacement}
-              onPointerDown={onGrabPointerDown}
+              onPointerDown={(e) => onGrabPointerDown(e, { onReleaseWithoutDrag: selectSelf })}
               occlusionRevisionKey={handleOcclusionKey}
               occlusionActive={isSelected}
+              hitSize={handleHitSize}
             />
           )}
           <ResizeHandle
@@ -307,6 +377,7 @@ export default function SpaceItem({
             cornerOutset={SPACE_RESIZE_CORNER_OUTSET}
             occlusionRevisionKey={handleOcclusionKey}
             occlusionActive={isSelected}
+            hitSize={handleHitSize}
           />
         </div>
       )}
@@ -355,15 +426,103 @@ export default function SpaceItem({
             padding: '10px 12px 12px',
             fontSize: 16,
             fontWeight: 500,
-            color: isDefaultName ? font.colorFaint : font.colorMuted,
-            opacity: isDefaultName ? 0.55 : 1,
             lineHeight: 1.2,
             flexShrink: 0,
-            userSelect: 'none',
+            position: 'relative',
             ...textAlignmentEditorStyle(resolveItemTextAlignment(item)),
           }}
         >
-          {titleLabel}
+          <AnimatePresence initial={false} mode="popLayout">
+            {titleEditing ? (
+              <motion.input
+                key="title-input"
+                ref={titleInputRef}
+                value={titleDraft}
+                maxLength={SPACE_NAME_MAX_LENGTH}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                onBlur={closeTitleEdit}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === 'Enter' || e.key === 'Escape') {
+                    e.preventDefault()
+                    closeTitleEdit()
+                  }
+                }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                aria-label={`Rename space: ${displayName}`}
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  padding: 0,
+                  margin: 0,
+                  font: 'inherit',
+                  color: font.colorPrimary,
+                  textAlign: 'inherit',
+                  cursor: 'text',
+                }}
+              />
+            ) : (
+              /* Single keyed view-mode wrapper — the button↔span swap inside
+                 it is a regular React conditional so it doesn't pulse during
+                 selection state changes. Only the view→edit transition is
+                 animated (placeholder fades out as the input fades in). */
+              <motion.div
+                key="title-view"
+                initial={{ opacity: 1 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.24, ease: 'easeOut' }}
+                style={{ display: 'inline-block' }}
+              >
+                {titleEditAllowed ? (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      beginTitleEdit()
+                    }}
+                    aria-label={`Rename space: ${displayName}`}
+                    style={{
+                      display: 'inline-block',
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      margin: 0,
+                      font: 'inherit',
+                      color: isDefaultName ? font.colorFaint : font.colorMuted,
+                      opacity: isDefaultName ? 0.55 : 1,
+                      cursor: 'text',
+                      textAlign: 'inherit',
+                      userSelect: 'none',
+                    }}
+                  >
+                    {titleLabel}
+                  </button>
+                ) : (
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      color: isDefaultName ? font.colorFaint : font.colorMuted,
+                      opacity: isDefaultName ? 0.55 : 1,
+                      userSelect: 'none',
+                    }}
+                  >
+                    {titleLabel}
+                  </span>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
         <div
           ref={previewRef}

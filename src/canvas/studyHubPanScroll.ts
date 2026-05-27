@@ -5,7 +5,10 @@ export const TRACKPAD_PAN_SESSION_GAP_MS = CANVAS_PAN_SESSION_GAP_MS
 
 export function isStudyHubWidgetTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
-  return target.closest('[data-canvas-item="study_hub"]') != null
+  return (
+    target.closest('[data-canvas-item="study_hub"]') != null ||
+    target.closest('.study-hub-menu-focus-portal') != null
+  )
 }
 
 /** Point under a single-finger touch — used when the touch target is the canvas wrapper. */

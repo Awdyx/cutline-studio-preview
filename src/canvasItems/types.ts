@@ -106,10 +106,18 @@ export const STICKY_HEIGHT = 200
 export const SPACE_WIDTH = 240
 export const SPACE_HEIGHT = 240
 export const MAX_SPACE_WIDGETS = 3
+/** Initial spawn size — grows to fit content while editing. */
+export const TEXT_BOX_INSET_X = 15
+export const TEXT_BOX_INSET_Y = 15
+/** Minimum outer box — 30px inset plus empty caret / one text line. */
+export const TEXT_MIN_WIDTH = TEXT_BOX_INSET_X * 2 + 2
+export const TEXT_MIN_HEIGHT = TEXT_BOX_INSET_Y * 2 + 24
+/** Comfortable starting rectangle when spawning new text from the menu. */
 export const TEXT_WIDTH = 320
-export const TEXT_HEIGHT = 72
-export const TEXT_MIN_WIDTH = 120
-export const TEXT_MIN_HEIGHT = 48
+export const TEXT_HEIGHT = 120
+/** Max width while auto-fitting content during the first edit. */
+export const TEXT_MAX_AUTO_WIDTH = 320
+export const TEXT_BOX_PADDING = `${TEXT_BOX_INSET_Y}px ${TEXT_BOX_INSET_X}px`
 export const STUDY_HUB_WIDTH = 460
 export const STUDY_HUB_HEIGHT = 580
 export const STUDY_HUB_ASPECT = STUDY_HUB_WIDTH / STUDY_HUB_HEIGHT

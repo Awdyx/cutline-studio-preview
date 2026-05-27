@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { playSound } from '../sound/playSound'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Keyboard, Settings, ChevronRight } from 'lucide-react'
+import { Keyboard, Settings, ChevronRight, Sparkles } from 'lucide-react'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, font, menuDividerStyle } from '../styles/tokens'
 import { phonePanelSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
@@ -12,10 +13,11 @@ import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 
 interface CutlineMenuProps {
   isOpen: boolean
-  onClose: () => void
+  onClose: (opts?: { silent?: boolean }) => void
   mode: ThemeMode
   onModeChange: (mode: ThemeMode) => void
   isCanvasLocked: boolean
@@ -115,9 +117,41 @@ export default function CutlineMenu({
         }}
         className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
       >
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 14,
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: '0.02em',
+            color: font.colorMuted,
+            opacity: 0.45,
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        >
+          2.0
+        </span>
         <SubmenuSoundScope>
         <CutlineAppNavSection onNavigate={onClose} />
         <div style={menuDividerStyle} />
+          <MenuRow
+          icon={Sparkles}
+          label="Customize Menu"
+          inset
+          submenuClickSound={false}
+          right={<ChevronRight size={14} strokeWidth={2} color={font.colorMuted} />}
+            onClick={() => {
+            closeAllSubmenus()
+            onClose({ silent: true })
+            window.setTimeout(() => {
+              useUiCustomizationStore.getState().setEditing(true)
+              playSound('menuOpen')
+            }, 40)
+          }}
+        />
         {!isPhone && (
           <div ref={shortcutsAnchorRef} data-cutline-submenu-anchor="shortcuts">
             <MenuRow

@@ -26,7 +26,7 @@ export const NOTIFICATION_ACTOR_PROFILES: Record<string, NotificationActorProfil
   '@sofiacodes': {
     handle: '@sofiacodes',
     displayName: 'Sofia Chen',
-    bio: 'Med student · HU notes & ethics essays. Building shared canvases for our cohort.',
+    bio: 'i loveeeee @ais he\'s just sooooo cool',
     avatarColor: '#9484b8',
     avatarInitial: 'S',
     avatarImageUrl: sofiacodesAvatar,

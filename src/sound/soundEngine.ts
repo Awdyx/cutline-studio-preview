@@ -576,6 +576,19 @@ function profileCloseTick(context: AudioContext, t0: number): void {
   noiseBurst(context, 0.016, 0.0015, t0 + 0.018, 680, 0.22)
 }
 
+/**
+ * Aspect ratio snap — soft settle after a resize hold.
+ * Bridges the resize noise texture with a warm landing tone + spring pluck.
+ */
+function aspectSnapTick(context: AudioContext, t0: number): void {
+  // Brief filtered noise click — matches resize noise character
+  noiseBurst(context, 0.038, 0.016, t0, 370, 0.48)
+  // Warm sine settling slightly downward — "landing" feel
+  tone(context, 432, 0.013, 0.004, 0.088, t0 + 0.006, 'sine')
+  // Tiny spring pluck — locking into place
+  bubblyPluck(context, 540, 0.01, t0 + 0.03, 0.068, { startMul: 1.04, endMul: 0.98 })
+}
+
 /** New canvas element placed — single soft warm knock. */
 function spawnTick(context: AudioContext, t0: number): void {
   canvasObjectTap(context, t0, 318, 0.016, 0.095, {
@@ -687,6 +700,10 @@ const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
 
   zOrderBack(context, t0) {
     zOrderBackTick(context, t0)
+  },
+
+  aspectSnap(context, t0) {
+    aspectSnapTick(context, t0)
   },
 }
 

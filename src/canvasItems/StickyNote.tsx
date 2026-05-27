@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { animate } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
@@ -38,6 +39,7 @@ export default function StickyNote({
   const isLocked = useCanvasLockStore((s) => s.isLocked)
   const frozen = isItemFrozen(item, isLocked)
   const editableRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const shouldFocusRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -169,6 +171,7 @@ export default function StickyNote({
           height={item.height}
         />
         <div
+          ref={containerRef}
           style={{
             position: 'absolute',
             inset: 0,
@@ -227,6 +230,17 @@ export default function StickyNote({
               e.preventDefault()
               flushSaveAndCommit()
               stopEditing()
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              flushSaveAndCommit()
+              const el = containerRef.current
+              if (el) {
+                animate(el, { scale: [1, 0.96, 1], opacity: [1, 0.55, 1] }, { duration: 0.22, ease: 'easeOut' })
+                  .then(() => stopEditing())
+              } else {
+                stopEditing()
+              }
             }
           }}
             style={{

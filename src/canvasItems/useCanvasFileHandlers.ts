@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { focusItemOnCanvas, readCameraFromRef } from '../canvas/canvasCamera'
-import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
+import { focusStudyHubOnCanvas } from './studyHubMenuFocus'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
 import { clientToCanvas } from '../drawing/canvasCoords'
@@ -11,7 +10,14 @@ import { generateItemId } from './itemId'
 import { findStudyHubForSubject, useCanvasItemsStore } from './canvasItemsStore'
 import { showMediaImportToast } from './mediaImportFeedback'
 import { readCanvasTransformScale } from './studyHubSpawnScale'
-import { isAcceptedMediaFile, prepareMediaFromFile } from './mediaUtils'
+import {
+  isAcceptedMediaFile,
+  isMediaFileTooLarge,
+  prepareImageForImmediateDisplay,
+  prepareMediaFromFile,
+  scheduleImageImportCompression,
+  shouldCompressImageAfterImport,
+} from './mediaUtils'
 import { TEXT_HEIGHT, type StudySubjectId } from './types'
 import { viewportCenterCanvas, viewportItemSpawnCanvas } from './viewportCenter'
 import type { CanvasAddType } from '../components/PlusFab'
@@ -39,28 +45,60 @@ export function useCanvasFileHandlers(
 
   const placeMediaAt = useCallback(
     async (file: File, canvasX: number, canvasY: number) => {
+      if (!isAcceptedMediaFile(file)) {
+        showMediaImportToast('unsupported')
+        return
+      }
+      if (isMediaFileTooLarge(file)) {
+        showMediaImportToast('too_large', file.size)
+        return
+      }
+
+      const mediaId = generateItemId()
+      const { addImage, addVideo } = useCanvasItemsStore.getState()
+
+      if (file.type.startsWith('image/')) {
+        let image: Awaited<ReturnType<typeof prepareImageForImmediateDisplay>>
+        try {
+          image = await prepareImageForImmediateDisplay(file)
+        } catch (err) {
+          console.warn('[canvas] failed to prepare image import', err)
+          showMediaImportToast('processing_failed')
+          return
+        }
+        if (!image) {
+          showMediaImportToast('processing_failed')
+          return
+        }
+
+        const saved = await putMediaBlob(mediaId, image.blob)
+        if (!saved) {
+          showMediaImportToast('save_failed')
+          return
+        }
+
+        addImage(canvasX, canvasY, mediaId, image.width, image.height)
+
+        if (shouldCompressImageAfterImport(file.type)) {
+          scheduleImageImportCompression(mediaId, file)
+        }
+        return
+      }
+
       const prepared = await prepareMediaFromFile(file)
       if (!prepared.ok) {
         showMediaImportToast(prepared.reason, prepared.fileSize)
         return
       }
 
-      const mediaId = generateItemId()
-      const { addImage, addVideo } = useCanvasItemsStore.getState()
       const { media } = prepared
-      if (media.kind === 'image') {
-        addImage(canvasX, canvasY, mediaId, media.width, media.height)
-      } else {
-        addVideo(canvasX, canvasY, mediaId, media.width, media.height)
-      }
-
       const saved = await putMediaBlob(mediaId, media.blob)
       if (!saved) {
-        useCanvasItemsStore.setState((state) => ({
-          items: state.items.filter((item) => item.id !== mediaId),
-        }))
         showMediaImportToast('save_failed')
+        return
       }
+
+      addVideo(canvasX, canvasY, mediaId, media.width, media.height)
     },
     [],
   )
@@ -101,23 +139,13 @@ export function useCanvasFileHandlers(
     useCanvasItemsStore.getState().addSpace(center.x, center.y)
   }, [transformRef, viewportRef, canvasRef])
 
-  const spawnStudyHubAtViewportCenter = useCallback(
-    (subjectId: StudySubjectId) => {
+  const spawnOrFocusStudyHub = useCallback(
+    (canvasX: number, canvasY: number, subjectId: StudySubjectId) => {
       const items = useCanvasItemsStore.getState().items
       const existing = findStudyHubForSubject(items, subjectId)
 
       if (existing) {
-        const returnCamera = readCameraFromRef(transformRef.current)
-        useCanvasNavigationStore.getState().suppressBackgroundSelectionClear(600)
-        useCanvasItemsStore.getState().selectItem(existing.id, false, {
-          allowFrozen: true,
-          suppressZMenu: true,
-          menuFocusReturnCamera: returnCamera,
-        })
-        focusItemOnCanvas(transformRef.current, existing, {
-          fit: true,
-          curved: true,
-        })
+        focusStudyHubOnCanvas(transformRef.current, existing.id)
         return
       }
 
@@ -125,6 +153,16 @@ export function useCanvasFileHandlers(
         useCanvasEditStore.getState().setEnabled(true)
       }
 
+      const spawnScale = readCanvasTransformScale(transformRef)
+      useCanvasItemsStore
+        .getState()
+        .addStudyHub(canvasX, canvasY, subjectId, spawnScale)
+    },
+    [transformRef],
+  )
+
+  const spawnStudyHubAtViewportCenter = useCallback(
+    (subjectId: StudySubjectId) => {
       const center =
         viewportItemSpawnCanvas(
           transformRef,
@@ -136,12 +174,16 @@ export function useCanvasFileHandlers(
           viewportRef.current,
           canvasRef.current,
         ) ?? { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }
-      const spawnScale = readCanvasTransformScale(transformRef)
-      useCanvasItemsStore
-        .getState()
-        .addStudyHub(center.x, center.y, subjectId, spawnScale)
+      spawnOrFocusStudyHub(center.x, center.y, subjectId)
     },
-    [transformRef, viewportRef, canvasRef],
+    [spawnOrFocusStudyHub, transformRef, viewportRef, canvasRef],
+  )
+
+  const spawnStudyHubAtCanvasPoint = useCallback(
+    (canvasX: number, canvasY: number, subjectId: StudySubjectId) => {
+      spawnOrFocusStudyHub(canvasX, canvasY, subjectId)
+    },
+    [spawnOrFocusStudyHub],
   )
 
   const spawnAtCanvasPoint = useCallback(
@@ -245,6 +287,7 @@ export function useCanvasFileHandlers(
     spawnTextAtViewportCenter,
     spawnSpaceAtViewportCenter,
     spawnStudyHubAtViewportCenter,
+    spawnStudyHubAtCanvasPoint,
     spawnAtCanvasPoint,
   }
 }

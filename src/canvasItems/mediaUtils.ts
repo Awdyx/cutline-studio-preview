@@ -1,6 +1,8 @@
 import {
   compressImageForImport,
 } from '../media/compressImage'
+import { shouldSkipImageCompression } from '../media/imageCompressCore'
+import { putMediaBlob } from '../media/mediaBlobStore'
 
 export const MAX_MEDIA_BYTES = 5 * 1024 * 1024
 export const MAX_MEDIA_DIMENSION = 400
@@ -67,12 +69,53 @@ function loadVideoMeta(src: string): Promise<HTMLVideoElement> {
   })
 }
 
-async function prepareImageFromFile(
+/** Read dimensions and return the original bytes — no re-encode (matches GIF import speed). */
+export async function prepareImageForImmediateDisplay(
   file: File,
 ): Promise<{ blob: Blob; width: number; height: number } | null> {
   if (!file.type.startsWith('image/')) return null
 
-  const compressed = await compressImageForImport(file)
+  const buffer = await file.arrayBuffer()
+  const mimeType = file.type || 'application/octet-stream'
+  const bitmap = await createImageBitmap(new Blob([buffer], { type: mimeType }))
+
+  try {
+    const { width, height } = fitDimensions(bitmap.width, bitmap.height)
+    return {
+      blob: new Blob([buffer], { type: mimeType }),
+      width,
+      height,
+    }
+  } finally {
+    bitmap.close()
+  }
+}
+
+export function shouldCompressImageAfterImport(mimeType: string): boolean {
+  return !shouldSkipImageCompression(mimeType)
+}
+
+export function scheduleImageImportCompression(
+  mediaId: string,
+  file: File,
+): void {
+  void (async () => {
+    try {
+      const compressed = await compressImageForImport(file)
+      await putMediaBlob(mediaId, compressed.blob)
+    } catch (err) {
+      console.warn('[canvas] background image compression failed', err)
+    }
+  })()
+}
+
+async function prepareImageFromFile(
+  file: File,
+  options?: { preferMainThread?: boolean },
+): Promise<{ blob: Blob; width: number; height: number } | null> {
+  if (!file.type.startsWith('image/')) return null
+
+  const compressed = await compressImageForImport(file, options)
   const { width, height } = fitDimensions(
     compressed.naturalWidth,
     compressed.naturalHeight,
@@ -97,6 +140,7 @@ async function prepareVideoFromFile(
 
 export async function prepareMediaFromFile(
   file: File,
+  options?: { preferMainThread?: boolean },
 ): Promise<PrepareMediaResult> {
   if (!isAcceptedMediaFile(file)) {
     return { ok: false, reason: 'unsupported' }
@@ -113,7 +157,7 @@ export async function prepareMediaFromFile(
       return { ok: true, media: { kind: 'video', ...video } }
     }
 
-    const image = await prepareImageFromFile(file)
+    const image = await prepareImageFromFile(file, options)
     if (!image) return { ok: false, reason: 'processing_failed' }
     return { ok: true, media: { kind: 'image', ...image } }
   } catch (err) {

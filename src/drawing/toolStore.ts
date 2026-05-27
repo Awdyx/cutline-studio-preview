@@ -4,8 +4,9 @@ import {
   DEFAULT_PEN_COLOR,
   normalizeStoredPenInk,
 } from './colorUtils'
+import { useLassoStore } from './useLassoStore'
 
-export type ToolMode = 'pen' | 'highlighter' | 'erase'
+export type ToolMode = 'pen' | 'highlighter' | 'erase' | 'lasso'
 
 const STORAGE_KEY = 'cutline-tools-v1'
 
@@ -66,13 +67,14 @@ function persistTools(state: ToolState): void {
 function normalizeMode(mode?: string): ToolMode {
   if (mode === 'highlighter') return 'highlighter'
   if (mode === 'erase' || mode === 'erase-tap' || mode === 'erase-drag') return 'erase'
+  if (mode === 'lasso') return 'lasso'
   return 'pen'
 }
 
 const persisted = loadPersisted()
 
 export const useToolStore = create<ToolState>((set, get) => ({
-  mode: normalizeMode(persisted.mode),
+  mode: 'pen' as ToolMode,
   penColor: normalizeStoredPenInk(persisted.penColor ?? defaults.penColor),
   penSize: persisted.penSize ?? defaults.penSize,
   highlighterColor: persisted.highlighterColor ?? defaults.highlighterColor,
@@ -81,6 +83,9 @@ export const useToolStore = create<ToolState>((set, get) => ({
   setMode: (mode) => {
     set({ mode })
     persistTools(get())
+    if (mode !== 'lasso') {
+      useLassoStore.getState().clearSelection()
+    }
   },
   setPenColor: (penColor) => {
     set({ penColor })
@@ -106,4 +111,8 @@ export function isDrawingMode(mode: ToolMode): boolean {
 
 export function isEraseMode(mode: ToolMode): boolean {
   return mode === 'erase'
+}
+
+export function isLassoMode(mode: ToolMode): boolean {
+  return mode === 'lasso'
 }

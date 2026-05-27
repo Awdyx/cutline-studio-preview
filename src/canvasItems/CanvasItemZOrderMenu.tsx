@@ -21,6 +21,7 @@ import {
 } from './canvasItemZMenuLayout'
 import { useCanvasItemDragStore } from './canvasItemDragStore'
 import { useCanvasItemsStore } from './canvasItemsStore'
+import { useLassoStore } from '../drawing/useLassoStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import TextAlignmentMenuSection from './TextAlignmentMenuSection'
 import { resolveItemTextAlignment } from './textAlignment'
@@ -43,12 +44,14 @@ export default function CanvasItemZOrderMenu() {
 
   const itemId = getSoleSelectedItemId(selectedIds)
   const zMenuSuppressedItemId = useCanvasItemsStore((s) => s.zMenuSuppressedItemId)
+  const hasLassoItemSelection = useLassoStore((s) => s.selectedItemIds.length > 0)
   const editingAllowed = useCanvasEditingAllowed()
   const showMenu =
     itemId != null &&
     activeDragItemId !== itemId &&
     editingAllowed &&
-    itemId !== zMenuSuppressedItemId
+    itemId !== zMenuSuppressedItemId &&
+    !hasLassoItemSelection
 
   const menuItem = useCanvasItemsStore((s) =>
     itemId ? s.items.find((item) => item.id === itemId) : undefined,

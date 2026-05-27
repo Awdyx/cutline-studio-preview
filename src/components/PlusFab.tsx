@@ -28,6 +28,8 @@ import WidgetsSubmenu from './widgets/WidgetsSubmenu'
 import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
 import StudySubjectMenuRow from './study/StudySubjectMenuRow'
 import { STUDY_SUBJECTS, type StudySubjectId } from './study/studyHubData'
+import UiPinHost from '../uiCustomization/UiPinHost'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 
 export type CanvasAddType = 'space' | 'sticky' | 'text' | 'image'
 
@@ -210,6 +212,7 @@ export default function PlusFab({
   }
 
   function handleFabTriggerClick() {
+    if (useUiCustomizationStore.getState().editing) return
     if (isOpen) {
       closeMenu()
       return
@@ -357,6 +360,7 @@ export default function PlusFab({
         <button
           type="button"
           data-fab-trigger
+          data-ui-anchor="plus-fab"
           aria-label={isOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={isOpen}
           onClick={handleFabTriggerClick}
@@ -368,9 +372,11 @@ export default function PlusFab({
           style={{
             background: isOpen ? 'var(--card-bg)' : glass.bg,
             border: glass.border,
+            position: 'relative',
           }}
         >
           <Plus size={22} color="var(--ui-text)" strokeWidth={2} />
+          <UiPinHost anchorId="plus-fab" />
         </button>
       </ChromeTapSqueezeWrap>
     </div>

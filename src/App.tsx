@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import type { RefObject } from 'react'
 import {
   TransformComponent,
   TransformWrapper,
@@ -8,12 +9,16 @@ import DrawingLayer from './drawing/DrawingLayer'
 import { useDrawing } from './drawing/useDrawing'
 import { usePenToolMenu } from './drawing/usePenToolMenu'
 import PenToolPillMenu from './components/PenToolPillMenu'
-import { AnimatePresence, motion } from 'framer-motion'
+import LassoOverlay from './drawing/LassoOverlay'
+import { AnimatePresence } from 'framer-motion'
 import MotionIndicator from './MotionIndicator'
 import TrailingVignette from './TrailingVignette'
 import { usePanMotionHandler } from './usePanMotionHandler'
+import { usePanMotionStore } from './panMotionStore'
+import { useCanvasMotionBlur } from './canvas/useCanvasMotionBlur'
 import {
   canvasPanExcludedClasses,
+  canvasTrackpadPanExcludedClasses,
   useCanvasNavigationStore,
 } from './canvas/canvasNavigationStore'
 import { useCanvasNavigationTracking } from './canvas/useCanvasNavigationTracking'
@@ -43,10 +48,12 @@ import { useCanvasItemDragStore } from './canvasItems/canvasItemDragStore'
 import CanvasItemsLayer from './canvasItems/CanvasItemsLayer'
 import CanvasItemZOrderMenu from './canvasItems/CanvasItemZOrderMenu'
 import SelectionBlurOverlay from './canvasItems/SelectionBlurOverlay'
+import LassoSelectionBlur from './canvasItems/LassoSelectionBlur'
 import CanvasContextMenu from './components/CanvasContextMenu'
 import { useCanvasFileHandlers } from './canvasItems/useCanvasFileHandlers'
 import { useCanvasLockStore } from './canvasLock/canvasLockStore'
 import { useCanvasEditStore } from './canvasEdit/canvasEditStore'
+import { useQuickMenuStore } from './quickMenu/quickMenuStore'
 import CanvasLockFlattenLayer from './canvasLock/CanvasLockFlattenLayer'
 import { useCanvasLockFlatten } from './canvasLock/useCanvasLockFlatten'
 import { useCanvasWorkspaceStore } from './spaces/canvasWorkspaceStore'
@@ -57,6 +64,7 @@ import type { Notification, NotificationTab, NewsTab } from './types'
 import { meshBlobVisibilities } from './theme/paletteGenerator'
 import { useThemeCssVars } from './theme/useThemeCssVars'
 import { useThemeStore } from './theme/themeStore'
+import { useToolStore } from './drawing/toolStore'
 import { useEffectiveMode } from './theme/useEffectiveMode'
 import { useProfileStore } from './profile/profileStore'
 import { profileToTopBarUser } from './profile/profileUtils'
@@ -68,6 +76,7 @@ import {
   CANVAS_ZOOM_MIN_EDGE_PADDING,
 } from './drawing/canvasDimensions'
 import { CANVAS_WHEEL_ZOOM_STEP } from './canvas/canvasCamera'
+import { useBlockPagePinchZoom } from './canvas/useBlockPagePinchZoom'
 import { useCanvasCursorWheelZoom } from './canvas/useCanvasCursorWheelZoom'
 import { useCanvasViewport } from './canvas/useCanvasViewport'
 import { useCanvasZoomEdgeEase } from './canvas/useCanvasZoomEdgeEase'
@@ -77,6 +86,11 @@ import CanvasSwapVeil from './canvas/CanvasSwapVeil'
 import { blurStrayTextFocus } from './platform/textFocus'
 import { useLayoutProfile } from './hooks/useLayoutProfile'
 import { useShortcutUiStore } from './shortcuts/shortcutUiStore'
+import SettingsSubmenu from './components/SettingsSubmenu'
+import { clientToCanvas } from './drawing/canvasCoords'
+import type { StudySubjectId } from './canvasItems/types'
+import { useUiCustomizationStore } from './uiCustomization/uiCustomizationStore'
+import UiCustomizationLayer from './uiCustomization/UiCustomizationLayer'
 
 const meshBlobMotion = [
   {
@@ -278,8 +292,31 @@ type OpenPanel =
 function App() {
   useLayoutProfile()
   const { onPanning, onPanningStop } = usePanMotionHandler()
+  useCanvasMotionBlur()
+
+  // Drive data-canvas-panning from both pan `active` and zoom `zoomActive` so all
+  // canvas gesture types get the CSS simplification treatment.
+  useEffect(() => {
+    return usePanMotionStore.subscribe((s) => {
+      const el = document.documentElement
+      if (s.active || s.zoomActive) {
+        if (!el.hasAttribute('data-canvas-panning')) {
+          el.setAttribute('data-canvas-panning', '')
+        }
+      } else {
+        el.removeAttribute('data-canvas-panning')
+      }
+    })
+  }, [])
+
+  const toolMode = useToolStore((s) => s.mode)
+  useEffect(() => {
+    document.documentElement.dataset.toolMode = toolMode
+  }, [toolMode])
+
+  const transformRef = useRef<ReactZoomPanPinchContentRef | null>(null)
   useCanvasNavigationTracking()
-  const canvasSelectionPointer = useCanvasSelectionPointer()
+  const canvasSelectionPointer = useCanvasSelectionPointer(transformRef)
   const palette = useThemeStore((s) => s.palette)
   const themeModeStore = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeModeStore)
@@ -289,13 +326,17 @@ function App() {
   const meshBlobVisibility = meshBlobVisibilities(palette.blobDepth)
   const meshLayerOpacity = effectiveMode === 'light' ? 0.92 : 0.88
 
-  const transformRef = useRef<ReactZoomPanPinchContentRef | null>(null)
+  const pinchStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { viewportRef, viewportSize, minScale, onTransformInit, onHydrated } =
     useCanvasViewport(transformRef)
   useStudyHubCanvasPanCoordination()
   const trackpadPanLockActive = useCanvasNavigationStore((s) => s.trackpadPanLockActive)
   const panExcluded = useMemo(
     () => canvasPanExcludedClasses(trackpadPanLockActive),
+    [trackpadPanLockActive],
+  )
+  const trackpadPanExcluded = useMemo(
+    () => canvasTrackpadPanExcludedClasses(trackpadPanLockActive),
     [trackpadPanLockActive],
   )
   const zoomEdgeEase = useCanvasZoomEdgeEase(minScale)
@@ -317,6 +358,7 @@ function App() {
     spawnTextAtViewportCenter,
     spawnSpaceAtViewportCenter,
     spawnStudyHubAtViewportCenter,
+    spawnStudyHubAtCanvasPoint,
     spawnAtCanvasPoint,
   } = useCanvasFileHandlers(transformRef, viewportRef, canvasRef)
 
@@ -346,16 +388,39 @@ function App() {
 
   const itemDragActive = useCanvasItemDragStore((s) => s.activeItemId !== null)
   const toolPaletteOpen = useShortcutUiStore((s) => s.toolPaletteOpen)
+  const uiEditing = useUiCustomizationStore((s) => s.editing)
 
   const isPenDown =
     penDown || penMenu.state.phase !== 'idle' || itemDragActive
-  const canvasGestureLocked = isPenDown || toolPaletteOpen
+  const studyHubMenuFocusActive = useCanvasItemsStore(
+    (s) => s.menuFocusReturnCamera != null,
+  )
+  const studyHubMenuFocusEngaged = useCanvasItemsStore(
+    (s) => s.menuFocusReturnCamera != null || s.menuFocusDismissing,
+  )
+  useEffect(() => {
+    const el = document.documentElement
+    if (studyHubMenuFocusEngaged) {
+      el.setAttribute('data-study-hub-menu-focus-engaged', '')
+    } else {
+      el.removeAttribute('data-study-hub-menu-focus-engaged')
+    }
+  }, [studyHubMenuFocusEngaged])
+  const canvasGestureLocked = isPenDown || toolPaletteOpen || uiEditing
+  useBlockPagePinchZoom()
   useCanvasCursorWheelZoom({
     transformRef,
     viewportRef,
-    panExcluded,
-    onZoom: zoomEdgeEase.onZoom,
-    onZoomStop: zoomEdgeEase.onZoomStop,
+    zoomExcluded: trackpadPanExcluded,
+    onZoom: (ref) => {
+      zoomEdgeEase.onZoom(ref)
+      usePanMotionStore.getState().setZoomActive(true)
+    },
+    onZoomStop: (ref) => {
+      zoomEdgeEase.onZoomStop(ref)
+      useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+      usePanMotionStore.getState().setZoomActive(false)
+    },
     disabled: isPenDown,
     step: CANVAS_WHEEL_ZOOM_STEP,
   })
@@ -372,6 +437,8 @@ function App() {
       useStrokesStore.getState().hydrate()
       useCanvasLockStore.getState().hydrate()
       useCanvasEditStore.getState().hydrate()
+      useQuickMenuStore.getState().hydrate()
+      useUiCustomizationStore.getState().hydrate()
       useSoundStore.getState().hydrate()
       clearHistory()
       onHydrated()
@@ -409,8 +476,12 @@ function App() {
   const [badgeAckedNotifIds, setBadgeAckedNotifIds] = useState<Set<string>>(() => new Set())
   const prevOpenPanelRef = useRef<OpenPanel>(null)
   const suppressPanelSoundRef = useRef(false)
+  const lastMousePosRef = useRef<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+  const [floatingSettingsPos, setFloatingSettingsPos] = useState<{ x: number; y: number } | null>(null)
+  const floatingSettingsAnchorRef = useRef<HTMLDivElement>(null)
 
   function openOnly(panel: OpenPanel) {
+    if (useUiCustomizationStore.getState().editing) return
     const ui = useShortcutUiStore.getState()
     ui.plusFab?.close({ silent: true })
     ui.toolPalette?.close({ silent: true })
@@ -432,7 +503,7 @@ function App() {
     useShortcutUiStore.getState().dismissPeerChromeOverlays(opts)
     setOpenPanel(null)
   }, [])
-  useKeyboardShortcuts(openPanel, closePanel)
+  useKeyboardShortcuts(openPanel, closePanel, transformRef)
   usePanelSounds(openPanel, suppressPanelSoundRef)
   useBackgroundMusic()
   useChromeTapPulse()
@@ -441,6 +512,74 @@ function App() {
     useShortcutUiStore.getState().registerAppPanels({ close: closePanel })
     return () => useShortcutUiStore.getState().registerAppPanels(null)
   }, [closePanel])
+
+  // Track mouse position for shortcuts that spawn near cursor.
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    return () => window.removeEventListener('mousemove', onMouseMove)
+  }, [])
+
+  // Register canvas spawn callbacks so the keyboard shortcut handler can call them.
+  useEffect(() => {
+    const getMouseCanvasPos = () => {
+      const { x, y } = lastMousePosRef.current
+      return clientToCanvas(x, y, transformRef, canvasRef.current) ?? { x: 0, y: 0 }
+    }
+
+    useShortcutUiStore.getState().registerCanvasSpawn({
+      spawnText: spawnTextAtViewportCenter,
+      spawnSticky: spawnStickyAtViewportCenter,
+      openImageAtMousePos: () => {
+        const pos = getMouseCanvasPos()
+        spawnAtCanvasPoint(pos.x, pos.y, 'image')
+      },
+      spawnStudyHub: (subjectId: string) => {
+        spawnStudyHubAtViewportCenter(subjectId as StudySubjectId)
+      },
+    })
+    return () => useShortcutUiStore.getState().registerCanvasSpawn(null)
+  }, [spawnTextAtViewportCenter, spawnStickyAtViewportCenter, spawnAtCanvasPoint, spawnStudyHubAtViewportCenter, transformRef, canvasRef])
+
+  // Register openPanel so keyboard shortcuts can open top-level panels.
+  useEffect(() => {
+    useShortcutUiStore.getState().registerOpenPanel(openOnly as (panel: 'notifications' | 'news' | 'profile') => void)
+    return () => useShortcutUiStore.getState().registerOpenPanel(null)
+  })
+
+  // Register floating settings opener + closer.
+  const floatingSettingsPosRef = useRef<{ x: number; y: number } | null>(null)
+  floatingSettingsPosRef.current = floatingSettingsPos
+
+  useEffect(() => {
+    useShortcutUiStore.getState().registerOpenSettingsNearMouse(() => {
+      setFloatingSettingsPos({ ...lastMousePosRef.current })
+    })
+    useShortcutUiStore.getState().registerCloseFloatingSettings(() => {
+      if (!floatingSettingsPosRef.current) return false
+      setFloatingSettingsPos(null)
+      return true
+    })
+    return () => {
+      useShortcutUiStore.getState().registerOpenSettingsNearMouse(null)
+      useShortcutUiStore.getState().registerCloseFloatingSettings(null)
+    }
+  }, [])
+
+  // Close floating settings on click outside.
+  useEffect(() => {
+    if (!floatingSettingsPos) return
+    function handlePointerDown(e: PointerEvent) {
+      const target = e.target
+      if (!(target instanceof Element)) return
+      if (target.closest('[data-cutline-submenu="settings"]')) return
+      setFloatingSettingsPos(null)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [floatingSettingsPos])
 
   useEffect(() => {
     const prev = prevOpenPanelRef.current
@@ -511,7 +650,7 @@ function App() {
         >
           <TransformWrapper
             ref={transformRef}
-            disabled={canvasGestureLocked}
+            disabled={isPenDown}
             initialScale={minScale}
             minScale={Math.max(minScale - CANVAS_ZOOM_MIN_EDGE_PADDING, 0.05)}
             maxScale={CANVAS_MAX_SCALE + CANVAS_ZOOM_EDGE_PADDING}
@@ -522,17 +661,43 @@ function App() {
             onPanning={(ref) => {
               onPanning(ref)
               panBounce.onPanning(ref)
-              useCanvasWorkspaceStore.getState().syncMainCamera(ref)
             }}
             onPanningStop={(ref) => {
               onPanningStop(ref)
               panBounce.onPanningStop()
               useCanvasWorkspaceStore.getState().syncMainCamera(ref)
             }}
-            onZoom={zoomEdgeEase.onZoom}
-            onPinch={zoomEdgeEase.onPinch}
-            onZoomStop={zoomEdgeEase.onZoomStop}
-            onPinchStop={zoomEdgeEase.onZoomStop}
+            onZoom={(ref) => {
+              zoomEdgeEase.onZoom(ref)
+              usePanMotionStore.getState().setZoomActive(true)
+            }}
+            onPinch={(ref) => {
+              zoomEdgeEase.onPinch(ref)
+              usePanMotionStore.getState().setZoomActive(true)
+              // Safety fallback: iPad touch events don't always fire onPinchStop
+              // reliably. Reset a countdown on every pinch frame so blur always clears.
+              if (pinchStopTimer.current) clearTimeout(pinchStopTimer.current)
+              pinchStopTimer.current = setTimeout(() => {
+                pinchStopTimer.current = null
+                usePanMotionStore.getState().setZoomActive(false)
+                usePanMotionStore.getState().setPanStopped()
+              }, 300)
+            }}
+            onZoomStop={(ref) => {
+              zoomEdgeEase.onZoomStop(ref)
+              useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+              usePanMotionStore.getState().setZoomActive(false)
+            }}
+            onPinchStop={(ref) => {
+              zoomEdgeEase.onZoomStop(ref)
+              useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+              if (pinchStopTimer.current) {
+                clearTimeout(pinchStopTimer.current)
+                pinchStopTimer.current = null
+              }
+              usePanMotionStore.getState().setZoomActive(false)
+              usePanMotionStore.getState().setPanStopped()
+            }}
             wheel={{
               step: CANVAS_WHEEL_ZOOM_STEP,
               wheelDisabled: true,
@@ -541,16 +706,16 @@ function App() {
                 keys.includes('Control') || keys.includes('Meta'),
             }}
             trackPadPanning={{
-              disabled: canvasGestureLocked,
-              excluded: panExcluded,
+              disabled: isPenDown || studyHubMenuFocusEngaged,
+              excluded: trackpadPanExcluded,
             }}
             panning={{
               velocityDisabled: false,
-              disabled: canvasGestureLocked,
+              disabled: canvasGestureLocked || studyHubMenuFocusEngaged,
               excluded: panExcluded,
             }}
             pinch={{
-              disabled: canvasGestureLocked,
+              disabled: isPenDown || studyHubMenuFocusActive,
               excluded: panExcluded,
             }}
             velocityAnimation={{
@@ -621,6 +786,8 @@ function App() {
                 <CanvasItemsLayer plane="annotation" transformRef={transformRef} />
                 <DrawingLayer band="annotation" />
                 <DrawingLayer band="active" />
+                <LassoSelectionBlur />
+                <DrawingLayer band="lasso-lifted" />
                 <SelectionBlurOverlay />
               </div>
             </TransformComponent>
@@ -657,12 +824,16 @@ function App() {
       <PenFab />
 
       <PenToolPillMenu state={penMenu.state} />
+      <LassoOverlay canvasRef={canvasRef} />
       <CanvasItemZOrderMenu />
 
       <CanvasContextMenu
         showSpaceOption={!isInsideSpace}
         onAddToCanvas={(type, canvasX, canvasY) => {
           spawnAtCanvasPoint(canvasX, canvasY, type)
+        }}
+        onStudySubjectSelect={(subjectId, canvasX, canvasY) => {
+          spawnStudyHubAtCanvasPoint(canvasX, canvasY, subjectId)
         }}
       />
 
@@ -769,6 +940,41 @@ function App() {
             onSignOut={() => console.log('sign out')}
             onManageBilling={() => console.log('manage billing')}
             onChangePlan={() => console.log('change plan')}
+          />
+        )}
+      </AnimatePresence>
+
+      <UiCustomizationLayer />
+
+      {/* Virtual anchor for keyboard-triggered floating settings menu */}
+      <div
+        ref={floatingSettingsAnchorRef}
+        aria-hidden
+        style={{
+          position: 'fixed',
+          pointerEvents: 'none',
+          width: 0,
+          height: 0,
+          top: floatingSettingsPos?.y ?? 0,
+          left: floatingSettingsPos?.x ?? 0,
+        }}
+      />
+
+      <AnimatePresence>
+        {floatingSettingsPos && (
+          <SettingsSubmenu
+            key="floating-settings"
+            anchorRef={floatingSettingsAnchorRef as RefObject<HTMLElement | null>}
+            mode={themeMode}
+            onModeChange={setMode}
+            onCloseMenu={() => setFloatingSettingsPos(null)}
+            isCanvasLocked={isCanvasLocked}
+            onToggleCanvasLock={() => {
+              if (isCanvasLocked) requestUnlock()
+              else lockCanvas()
+            }}
+            showCanvasLock={!isInsideSpace}
+            onBack={() => setFloatingSettingsPos(null)}
           />
         )}
       </AnimatePresence>

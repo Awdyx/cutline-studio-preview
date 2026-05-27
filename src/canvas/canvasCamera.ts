@@ -5,6 +5,7 @@ import {
   CANVAS_HEIGHT,
   CANVAS_MAX_SCALE,
   CANVAS_WIDTH,
+  CANVAS_ZOOM_EDGE_PADDING,
   getCanvasMinScale,
 } from '../drawing/canvasDimensions'
 import type { SpaceCamera } from '../spaces/types'
@@ -27,6 +28,10 @@ export type FocusItemOptions = {
   fitPaddingX?: number
   fitPaddingTop?: number
   fitPaddingBottom?: number
+  /** Fit zoom may exceed CANVAS_MAX_SCALE (study-hub menu focus). */
+  bypassMaxScale?: boolean
+  /** Allow pan past canvas edges so edge items can center (study-hub menu focus). */
+  bypassPanBounds?: boolean
 }
 
 const FOCUS_FIT_PADDING_X = 40
@@ -35,6 +40,49 @@ const FOCUS_FIT_PADDING_TOP_DESKTOP = 56
 const FOCUS_FIT_PADDING_BOTTOM = 48
 const FOCUS_FIT_PADDING_BOTTOM_PHONE = 52
 const FOCUS_FIT_PHONE_HEADER_CLEARANCE = 8
+/** Tighter than FOCUS_FIT_PADDING_BOTTOM — study-hub menu focus zooms in a touch more. */
+const STUDY_HUB_MENU_FOCUS_EDGE_GAP = 26
+
+/** Typical transform maxScale from TransformWrapper (hard max + edge padding). */
+const TRANSFORM_MAX_SCALE = CANVAS_MAX_SCALE + CANVAS_ZOOM_EDGE_PADDING
+
+let savedTransformMaxScale: number | null = null
+let savedLimitToBounds: boolean | null = null
+
+/** Raise the library zoom ceiling so menu-focus fit animations can exceed CANVAS_MAX_SCALE. */
+export function elevateTransformMaxScale(
+  ref: ReactZoomPanPinchContentRef,
+  neededScale: number,
+): void {
+  if (savedTransformMaxScale === null) {
+    savedTransformMaxScale = ref.instance.setup.maxScale
+  }
+  ref.instance.setup.maxScale = Math.max(neededScale, TRANSFORM_MAX_SCALE)
+}
+
+/** Let menu-focus fit pan past canvas edges so near-edge hubs can center. */
+export function relaxTransformPanBounds(
+  ref: ReactZoomPanPinchContentRef,
+): void {
+  if (savedLimitToBounds === null) {
+    savedLimitToBounds = ref.instance.setup.limitToBounds ?? true
+  }
+  ref.instance.setup.limitToBounds = false
+}
+
+/** Restore the normal zoom ceiling and pan limits after menu-focus dismiss. */
+export function restoreTransformMaxScale(
+  ref: ReactZoomPanPinchContentRef | null,
+): void {
+  if (!ref) return
+  ref.instance.setup.maxScale = savedTransformMaxScale ?? TRANSFORM_MAX_SCALE
+  savedTransformMaxScale = null
+  if (savedLimitToBounds !== null) {
+    ref.instance.setup.limitToBounds = savedLimitToBounds
+    savedLimitToBounds = null
+  }
+  syncLibraryBounds(ref)
+}
 
 let activeFocusRaf: number | null = null
 
@@ -66,6 +114,46 @@ function focusDurationMs(
   return Math.min(720, Math.max(460, 400 + panDist * 0.06 + scaleDelta * 260))
 }
 
+/** Fit padding for study-hub menu focus — equal gap below search bar and above viewport bottom. */
+export function studyHubMenuFocusFitPadding(): Pick<
+  FocusItemOptions,
+  'fitPaddingTop' | 'fitPaddingBottom'
+> {
+  const paddingBottom = isPhoneLayout()
+    ? FOCUS_FIT_PADDING_BOTTOM_PHONE - 16
+    : STUDY_HUB_MENU_FOCUS_EDGE_GAP
+
+  if (isPhoneLayout()) {
+    return {
+      fitPaddingTop:
+        PHONE_HEADER_BLOCK_HEIGHT + FOCUS_FIT_PHONE_HEADER_CLEARANCE,
+      fitPaddingBottom: paddingBottom,
+    }
+  }
+
+  const searchBar = document.querySelector('[data-ui-anchor="search-bar"]')
+  const chromeBottom =
+    searchBar instanceof HTMLElement
+      ? searchBar.getBoundingClientRect().bottom
+      : FOCUS_FIT_PADDING_TOP_DESKTOP
+
+  return {
+    fitPaddingTop: chromeBottom + paddingBottom,
+    fitPaddingBottom: paddingBottom,
+  }
+}
+
+/** Fit options for study-hub menu focus — bypasses the normal canvas zoom cap. */
+export function studyHubMenuFocusFitOptions(): FocusItemOptions {
+  return {
+    fit: true,
+    curved: true,
+    bypassMaxScale: true,
+    bypassPanBounds: true,
+    ...studyHubMenuFocusFitPadding(),
+  }
+}
+
 function defaultFitPadding(): {
   paddingX: number
   paddingTop: number
@@ -93,7 +181,13 @@ export function computeCameraToFitItem(
   item: FocusItemRect,
   options?: Pick<
     FocusItemOptions,
-    'fitPaddingX' | 'fitPaddingTop' | 'fitPaddingBottom' | 'screenOffsetY' | 'scale'
+    | 'fitPaddingX'
+    | 'fitPaddingTop'
+    | 'fitPaddingBottom'
+    | 'screenOffsetY'
+    | 'scale'
+    | 'bypassMaxScale'
+    | 'bypassPanBounds'
   >,
 ): SpaceCamera | null {
   const size = wrapperSize(ref)
@@ -110,35 +204,54 @@ export function computeCameraToFitItem(
   const fitScale = Math.min(availW / item.width, availH / item.height)
 
   const minScale = getCanvasMinScale(size.width, size.height)
+  const hardMax = options?.bypassMaxScale
+    ? Number.POSITIVE_INFINITY
+    : CANVAS_MAX_SCALE
   const scale =
     options?.scale ??
-    Math.min(CANVAS_MAX_SCALE, Math.max(minScale, fitScale))
+    Math.min(hardMax, Math.max(minScale, fitScale))
 
   const viewCenterX = paddingX + availW / 2
   const viewCenterY = paddingTop + availH / 2 + screenOffsetY
   const cx = item.x + item.width / 2
   const cy = item.y + item.height / 2
 
-  const bounds = canvasPanBoundsForScale(size.width, size.height, scale)
-  const { positionX, positionY } = clampPanPosition(
-    viewCenterX - cx * scale,
-    viewCenterY - cy * scale,
-    bounds,
-  )
+  const positionX = viewCenterX - cx * scale
+  const positionY = viewCenterY - cy * scale
 
-  return { positionX, positionY, scale }
+  if (options?.bypassPanBounds) {
+    return { positionX, positionY, scale }
+  }
+
+  const bounds = canvasPanBoundsForScale(size.width, size.height, scale)
+  const clamped = clampPanPosition(positionX, positionY, bounds)
+  return { ...clamped, scale }
 }
 
 function animateCameraTo(
   ref: ReactZoomPanPinchContentRef,
   target: SpaceCamera,
-  options?: { curved?: boolean; animationMs?: number },
+  options?: {
+    curved?: boolean
+    animationMs?: number
+    onComplete?: () => void
+    bypassMaxScale?: boolean
+    bypassPanBounds?: boolean
+    restoreTransformMaxScale?: boolean
+  },
 ): void {
   cancelFocusItemAnimation()
   cancelLibraryAnimation(ref)
 
   const start = readCameraFromRef(ref)
   if (!start) return
+
+  if (options?.bypassMaxScale) {
+    elevateTransformMaxScale(ref, target.scale)
+  }
+  if (options?.bypassPanBounds) {
+    relaxTransformPanBounds(ref)
+  }
 
   const duration = focusDurationMs(start, target, options?.animationMs)
   const startTime = performance.now()
@@ -176,8 +289,14 @@ function animateCameraTo(
 
     ref.setTransform(target.positionX, target.positionY, target.scale, 0)
     syncLibraryBounds(ref)
-    clampToLibraryBounds(ref)
+    if (!options?.bypassPanBounds) {
+      clampToLibraryBounds(ref)
+    }
     activeFocusRaf = null
+    if (options?.restoreTransformMaxScale) {
+      restoreTransformMaxScale(ref)
+    }
+    options?.onComplete?.()
   }
 
   activeFocusRaf = requestAnimationFrame(tick)
@@ -187,7 +306,12 @@ function animateCameraTo(
 export function animateCameraToTarget(
   ref: ReactZoomPanPinchContentRef | null,
   target: SpaceCamera,
-  options?: { curved?: boolean; animationMs?: number },
+  options?: {
+    curved?: boolean
+    animationMs?: number
+    onComplete?: () => void
+    restoreTransformMaxScale?: boolean
+  },
 ): void {
   if (!ref) return
   animateCameraTo(ref, target, options)
@@ -507,6 +631,8 @@ export function focusItemOnCanvas(
     animateCameraTo(ref, target, {
       curved: options.curved,
       animationMs: options.animationMs,
+      bypassMaxScale: options.bypassMaxScale,
+      bypassPanBounds: options.bypassPanBounds,
     })
     return
   }

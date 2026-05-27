@@ -40,6 +40,98 @@ type PreviewCoords = {
   left: number
 }
 
+function ComingSoonOverlay({ onDismiss }: { onDismiss: () => void }) {
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      onClick={onDismiss}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: '#000',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer',
+      }}
+    >
+      <motion.p
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.22 }}
+        style={{
+          margin: 0,
+          color: '#fff',
+          fontFamily: font.family,
+          fontSize: 20,
+          fontWeight: 500,
+          letterSpacing: '-0.02em',
+        }}
+      >
+        coming soon {'<3'}
+      </motion.p>
+    </motion.div>,
+    document.body,
+  )
+}
+
+function BioMention({
+  text,
+  onComingSoon,
+}: {
+  text: string
+  onComingSoon: () => void
+}) {
+  const reduceMotion = useReducedMotion()
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <motion.button
+      type="button"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={(e) => {
+        e.stopPropagation()
+        onComingSoon()
+      }}
+      animate={{ scale: hovered && !reduceMotion ? 1.045 : 1 }}
+      whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+      transition={
+        reduceMotion
+          ? { duration: 0 }
+          : { type: 'spring', stiffness: 420, damping: 32, mass: 0.5 }
+      }
+      style={{
+        font: 'inherit',
+        fontStyle: 'italic',
+        fontWeight: 600,
+        color: 'inherit',
+        border: 'none',
+        padding: 0,
+        margin: 0,
+        background: 'none',
+        cursor: 'pointer',
+        display: 'inline-block',
+        verticalAlign: 'baseline',
+        transformOrigin: 'center',
+      }}
+    >
+      {text}
+    </motion.button>
+  )
+}
+
+function renderBio(bio: string, onComingSoon: () => void): React.ReactNode {
+  const parts = bio.split(/(@\w+)/g)
+  return parts.map((part, i) =>
+    part.startsWith('@') ? (
+      <BioMention key={i} text={part} onComingSoon={onComingSoon} />
+    ) : (
+      part
+    ),
+  )
+}
+
 const socialPillStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -59,151 +151,165 @@ const socialPillStyle: React.CSSProperties = {
 function CanvasPreviewMock({
   title,
   previewImageUrl,
-  onClick,
 }: {
   title: string
   previewImageUrl?: string
   onClick: () => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [comingSoon, setComingSoon] = useState(false)
 
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        position: 'relative',
-        width: '100%',
-        height: previewImageUrl ? 132 : 118,
-        marginTop: 12,
-        padding: 0,
-        border: '1px solid var(--glass-border)',
-        borderRadius: 12,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        background: previewImageUrl
-          ? '#f4f4f2'
-          : 'radial-gradient(circle at 20% 30%, rgba(148, 132, 184, 0.35), transparent 55%), radial-gradient(circle at 80% 70%, rgba(106, 155, 200, 0.28), transparent 50%), var(--card-bg)',
-        textAlign: 'left',
-      }}
-    >
-      {previewImageUrl ? (
-        <img
-          src={previewImageUrl}
-          alt=""
+    <>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setComingSoon(true)
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: previewImageUrl ? 132 : 118,
+          marginTop: 12,
+          padding: 0,
+          border: '1px solid var(--glass-border)',
+          borderRadius: 12,
+          overflow: 'hidden',
+          cursor: 'pointer',
+          background: previewImageUrl
+            ? '#f4f4f2'
+            : 'radial-gradient(circle at 20% 30%, rgba(148, 132, 184, 0.35), transparent 55%), radial-gradient(circle at 80% 70%, rgba(106, 155, 200, 0.28), transparent 50%), var(--card-bg)',
+          textAlign: 'left',
+        }}
+      >
+        {previewImageUrl ? (
+          <img
+            src={previewImageUrl}
+            alt=""
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center top',
+            }}
+          />
+        ) : (
+          <>
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: 14,
+                top: 16,
+                width: 52,
+                height: 38,
+                borderRadius: 4,
+                background: 'rgba(254, 243, 160, 0.92)',
+                boxShadow: '0 2px 8px rgba(20, 30, 50, 0.08)',
+                transform: 'rotate(-3deg)',
+              }}
+            />
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: 72,
+                top: 28,
+                width: 58,
+                height: 42,
+                borderRadius: 4,
+                background: 'rgba(255, 212, 229, 0.9)',
+                boxShadow: '0 2px 8px rgba(20, 30, 50, 0.08)',
+                transform: 'rotate(2deg)',
+              }}
+            />
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                right: 14,
+                top: 18,
+                width: 74,
+                height: 28,
+                borderRadius: 8,
+                background: 'rgba(255, 255, 255, 0.72)',
+                border: '1px solid rgba(255, 255, 255, 0.85)',
+                boxShadow: '0 2px 8px rgba(20, 30, 50, 0.06)',
+              }}
+            />
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                left: 18,
+                bottom: 14,
+                width: 96,
+                height: 6,
+                borderRadius: 999,
+                background: 'rgba(20, 30, 50, 0.08)',
+              }}
+            />
+          </>
+        )}
+        {/* Gradient shadow — opacity-transitioned so it animates smoothly */}
+        <div
           aria-hidden
           style={{
             position: 'absolute',
             inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: 'center top',
+            background: 'linear-gradient(to top, rgba(20, 30, 50, 0.52), transparent 62%)',
+            opacity: hovered ? 1 : 0.65,
+            transition: 'opacity 220ms ease',
           }}
         />
-      ) : (
-        <>
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: 14,
-              top: 16,
-              width: 52,
-              height: 38,
-              borderRadius: 4,
-              background: 'rgba(254, 243, 160, 0.92)',
-              boxShadow: '0 2px 8px rgba(20, 30, 50, 0.08)',
-              transform: 'rotate(-3deg)',
-            }}
-          />
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: 72,
-              top: 28,
-              width: 58,
-              height: 42,
-              borderRadius: 4,
-              background: 'rgba(255, 212, 229, 0.9)',
-              boxShadow: '0 2px 8px rgba(20, 30, 50, 0.08)',
-              transform: 'rotate(2deg)',
-            }}
-          />
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              right: 14,
-              top: 18,
-              width: 74,
-              height: 28,
-              borderRadius: 8,
-              background: 'rgba(255, 255, 255, 0.72)',
-              border: '1px solid rgba(255, 255, 255, 0.85)',
-              boxShadow: '0 2px 8px rgba(20, 30, 50, 0.06)',
-            }}
-          />
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: 18,
-              bottom: 14,
-              width: 96,
-              height: 6,
-              borderRadius: 999,
-              background: 'rgba(20, 30, 50, 0.08)',
-            }}
-          />
-        </>
-      )}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-end',
-          padding: '10px 12px',
-          background: hovered
-            ? 'linear-gradient(to top, rgba(20, 30, 50, 0.52), transparent 62%)'
-            : 'linear-gradient(to top, rgba(20, 30, 50, 0.34), transparent 55%)',
-          transition: 'background 150ms ease',
-        }}
-      >
-        <span
-          className={CHROME_PRESERVE_CASE_CLASS}
+        <div
           style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: '#fff',
-            textShadow: '0 1px 4px rgba(0, 0, 0, 0.25)',
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            padding: '10px 12px',
           }}
         >
-          {title}
-        </span>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            marginTop: 2,
-            fontSize: 11,
-            color: 'rgba(255, 255, 255, 0.88)',
-          }}
-        >
-          {chromeLabel('Visit canvas')}
-          <ArrowUpRight size={12} strokeWidth={2} />
-        </span>
-      </div>
-    </button>
+          <span
+            className={CHROME_PRESERVE_CASE_CLASS}
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: '#fff',
+              textShadow: '0 1px 4px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            {title}
+          </span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              marginTop: 2,
+              fontSize: 11,
+              color: 'rgba(255, 255, 255, 0.88)',
+            }}
+          >
+            {chromeLabel('Visit canvas')}
+            <ArrowUpRight size={12} strokeWidth={2} />
+          </span>
+        </div>
+      </button>
+      <AnimatePresence>
+        {comingSoon && (
+          <ComingSoonOverlay onDismiss={() => setComingSoon(false)} />
+        )}
+      </AnimatePresence>
+    </>
   )
 }
 
@@ -221,6 +327,7 @@ const ProfilePreviewCard = forwardRef<
   ref,
 ) {
   const isPhoneModal = layout === 'phone-modal'
+  const [comingSoon, setComingSoon] = useState(false)
 
   return (
     <motion.div
@@ -392,7 +499,7 @@ const ProfilePreviewCard = forwardRef<
             color: font.colorMuted,
           }}
         >
-          {profile.bio}
+          {renderBio(profile.bio, () => setComingSoon(true))}
         </p>
         <div
           style={{
@@ -415,6 +522,11 @@ const ProfilePreviewCard = forwardRef<
         />
         </div>
       </div>
+      <AnimatePresence>
+        {comingSoon && (
+          <ComingSoonOverlay onDismiss={() => setComingSoon(false)} />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 })

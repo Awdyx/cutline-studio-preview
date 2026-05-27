@@ -1,8 +1,21 @@
+import { isPhoneLayout } from '../platform/layoutProfile'
+
 /** Visual size of handle glyphs. */
 export const HANDLE_VISUAL_SIZE = 20
 
-/** Slightly larger tap/drag target than the visible icon. */
-export const HANDLE_HIT_SIZE = 72
+/** Invisible tap/drag target (phone / coarse pointer). */
+export const HANDLE_HIT_SIZE = 120
+
+/** Reduced hit size for handles on small text items (phone). */
+export const HANDLE_HIT_SIZE_SMALL = 60
+
+/** Desktop invisible targets — 40% smaller than HANDLE_HIT_SIZE. */
+const HANDLE_HIT_SIZE_DESKTOP = 72
+const HANDLE_HIT_SIZE_SMALL_DESKTOP = 36
+
+/** Text box is "small" when both dimensions are under these values. */
+export const SMALL_TEXT_HANDLE_W = 300
+export const SMALL_TEXT_HANDLE_H = 200
 
 /** Grab handle: left of the item, vertically aligned with the item's top edge. */
 export const GRAB_HANDLE_GAP = 4
@@ -17,8 +30,20 @@ export interface GrabHandlePlacement {
   vertical: GrabHandleVertical
 }
 
-export function grabHandleHitOutset(): number {
-  return (HANDLE_HIT_SIZE - HANDLE_VISUAL_SIZE) / 2
+export function resolveCanvasHandleHitSize(opts?: { small?: boolean }): number {
+  const small = opts?.small ?? false
+  if (isPhoneLayout()) {
+    return small ? HANDLE_HIT_SIZE_SMALL : HANDLE_HIT_SIZE
+  }
+  return small ? HANDLE_HIT_SIZE_SMALL_DESKTOP : HANDLE_HIT_SIZE_DESKTOP
+}
+
+function hitOutsetForSize(hitSize: number): number {
+  return (hitSize - HANDLE_VISUAL_SIZE) / 2
+}
+
+export function grabHandleHitOutset(hitSize = resolveCanvasHandleHitSize()): number {
+  return hitOutsetForSize(hitSize)
 }
 
 /** Canvas-space left edge of the grab handle when placed on the given side. */
@@ -26,8 +51,9 @@ export function grabHandleCanvasLeft(
   itemX: number,
   itemWidth: number,
   side: GrabHandleSide,
+  hitSize = resolveCanvasHandleHitSize(),
 ): number {
-  const hitOutset = grabHandleHitOutset()
+  const hitOutset = hitOutsetForSize(hitSize)
   if (side === 'left') {
     return itemX - GRAB_HANDLE_OFFSET_X - hitOutset
   }
@@ -39,29 +65,31 @@ export function grabHandleFitsOnCanvas(
   itemWidth: number,
   side: GrabHandleSide,
   canvasWidth: number,
+  hitSize = resolveCanvasHandleHitSize(),
 ): boolean {
-  const left = grabHandleCanvasLeft(itemX, itemWidth, side)
-  return left >= 0 && left + HANDLE_HIT_SIZE <= canvasWidth
+  const left = grabHandleCanvasLeft(itemX, itemWidth, side, hitSize)
+  return left >= 0 && left + hitSize <= canvasWidth
 }
 
 export function getGrabHandleSide(
   itemX: number,
   itemWidth: number,
   canvasWidth: number,
+  hitSize = resolveCanvasHandleHitSize(),
 ): GrabHandleSide {
-  if (grabHandleFitsOnCanvas(itemX, itemWidth, 'left', canvasWidth)) {
+  if (grabHandleFitsOnCanvas(itemX, itemWidth, 'left', canvasWidth, hitSize)) {
     return 'left'
   }
-  if (grabHandleFitsOnCanvas(itemX, itemWidth, 'right', canvasWidth)) {
+  if (grabHandleFitsOnCanvas(itemX, itemWidth, 'right', canvasWidth, hitSize)) {
     return 'right'
   }
 
-  const left = grabHandleCanvasLeft(itemX, itemWidth, 'left')
-  const right = grabHandleCanvasLeft(itemX, itemWidth, 'right')
+  const left = grabHandleCanvasLeft(itemX, itemWidth, 'left', hitSize)
+  const right = grabHandleCanvasLeft(itemX, itemWidth, 'right', hitSize)
   const leftVisible =
-    Math.min(left + HANDLE_HIT_SIZE, canvasWidth) - Math.max(left, 0)
+    Math.min(left + hitSize, canvasWidth) - Math.max(left, 0)
   const rightVisible =
-    Math.min(right + HANDLE_HIT_SIZE, canvasWidth) - Math.max(right, 0)
+    Math.min(right + hitSize, canvasWidth) - Math.max(right, 0)
   return rightVisible > leftVisible ? 'right' : 'left'
 }
 
@@ -70,12 +98,13 @@ export function grabHandleCanvasTop(
   itemY: number,
   itemHeight: number,
   vertical: GrabHandleVertical,
+  hitSize = resolveCanvasHandleHitSize(),
 ): number {
-  const hitOutset = grabHandleHitOutset()
+  const hitOutset = hitOutsetForSize(hitSize)
   if (vertical === 'top') {
     return itemY + GRAB_HANDLE_TOP - hitOutset
   }
-  return itemY + itemHeight - HANDLE_HIT_SIZE
+  return itemY + itemHeight - hitSize
 }
 
 export function grabHandleFitsVerticallyOnCanvas(
@@ -83,29 +112,31 @@ export function grabHandleFitsVerticallyOnCanvas(
   itemHeight: number,
   vertical: GrabHandleVertical,
   canvasHeight: number,
+  hitSize = resolveCanvasHandleHitSize(),
 ): boolean {
-  const top = grabHandleCanvasTop(itemY, itemHeight, vertical)
-  return top >= 0 && top + HANDLE_HIT_SIZE <= canvasHeight
+  const top = grabHandleCanvasTop(itemY, itemHeight, vertical, hitSize)
+  return top >= 0 && top + hitSize <= canvasHeight
 }
 
 export function getGrabHandleVertical(
   itemY: number,
   itemHeight: number,
   canvasHeight: number,
+  hitSize = resolveCanvasHandleHitSize(),
 ): GrabHandleVertical {
-  if (grabHandleFitsVerticallyOnCanvas(itemY, itemHeight, 'top', canvasHeight)) {
+  if (grabHandleFitsVerticallyOnCanvas(itemY, itemHeight, 'top', canvasHeight, hitSize)) {
     return 'top'
   }
-  if (grabHandleFitsVerticallyOnCanvas(itemY, itemHeight, 'bottom', canvasHeight)) {
+  if (grabHandleFitsVerticallyOnCanvas(itemY, itemHeight, 'bottom', canvasHeight, hitSize)) {
     return 'bottom'
   }
 
-  const topEdge = grabHandleCanvasTop(itemY, itemHeight, 'top')
-  const bottomEdge = grabHandleCanvasTop(itemY, itemHeight, 'bottom')
+  const topEdge = grabHandleCanvasTop(itemY, itemHeight, 'top', hitSize)
+  const bottomEdge = grabHandleCanvasTop(itemY, itemHeight, 'bottom', hitSize)
   const topVisible =
-    Math.min(topEdge + HANDLE_HIT_SIZE, canvasHeight) - Math.max(topEdge, 0)
+    Math.min(topEdge + hitSize, canvasHeight) - Math.max(topEdge, 0)
   const bottomVisible =
-    Math.min(bottomEdge + HANDLE_HIT_SIZE, canvasHeight) - Math.max(bottomEdge, 0)
+    Math.min(bottomEdge + hitSize, canvasHeight) - Math.max(bottomEdge, 0)
   return bottomVisible > topVisible ? 'bottom' : 'top'
 }
 
@@ -116,17 +147,19 @@ export function getGrabHandlePlacement(
   itemHeight: number,
   canvasWidth: number,
   canvasHeight: number,
+  hitSize = resolveCanvasHandleHitSize(),
 ): GrabHandlePlacement {
   return {
-    side: getGrabHandleSide(itemX, itemWidth, canvasWidth),
-    vertical: getGrabHandleVertical(itemY, itemHeight, canvasHeight),
+    side: getGrabHandleSide(itemX, itemWidth, canvasWidth, hitSize),
+    vertical: getGrabHandleVertical(itemY, itemHeight, canvasHeight, hitSize),
   }
 }
 
 export function grabHandleHorizontalStyle(
   side: GrabHandleSide,
+  hitSize = resolveCanvasHandleHitSize(),
 ): { left: number | string } {
-  const hitOutset = grabHandleHitOutset()
+  const hitOutset = hitOutsetForSize(hitSize)
   if (side === 'left') {
     return { left: -(GRAB_HANDLE_OFFSET_X + hitOutset) }
   }
@@ -135,8 +168,9 @@ export function grabHandleHorizontalStyle(
 
 export function grabHandleVerticalStyle(
   vertical: GrabHandleVertical,
+  hitSize = resolveCanvasHandleHitSize(),
 ): { top?: number | string; bottom?: number | string } {
-  const hitOutset = grabHandleHitOutset()
+  const hitOutset = hitOutsetForSize(hitSize)
   if (vertical === 'top') {
     return { top: GRAB_HANDLE_TOP - hitOutset, bottom: 'auto' }
   }

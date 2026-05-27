@@ -40,6 +40,7 @@ export default function ImageItem({
               display: 'block',
               filter: `saturate(${MEDIA_SATURATE})`,
               opacity: mediaLoadOpacity(status),
+              willChange: 'transform',
               ...mediaLoadTransitionStyle(),
             }}
           />

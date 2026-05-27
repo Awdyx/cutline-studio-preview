@@ -4,9 +4,8 @@ import {
   applyAnchoredWheelZoom,
   CANVAS_WHEEL_ZOOM_STEP,
 } from './canvasCamera'
+import { shouldBlockCanvasZoomForStudyHubMenuFocus } from '../canvasItems/studyHubMenuFocus'
 import { CANVAS_PAN_SESSION_GAP_MS } from './studyHubPanScroll'
-import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
-
 function isModifierWheelZoom(event: WheelEvent): boolean {
   return event.ctrlKey || event.metaKey
 }
@@ -37,7 +36,7 @@ function wrapperLocalAnchor(
 export function useCanvasCursorWheelZoom({
   transformRef,
   viewportRef,
-  panExcluded,
+  zoomExcluded,
   onZoom,
   onZoomStop,
   disabled = false,
@@ -45,7 +44,8 @@ export function useCanvasCursorWheelZoom({
 }: {
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
   viewportRef: RefObject<HTMLElement | null>
-  panExcluded: string[]
+  /** Like trackpad pan exclusions — drag/resize handles must not block cursor zoom. */
+  zoomExcluded: string[]
   onZoom: (ref: ReactZoomPanPinchContentRef) => void
   onZoomStop: (ref: ReactZoomPanPinchContentRef) => void
   disabled?: boolean
@@ -59,21 +59,28 @@ export function useCanvasCursorWheelZoom({
 
     function onWheel(event: WheelEvent) {
       if (!isModifierWheelZoom(event)) return
-      if (isExcludedWheelTarget(event.target, panExcluded)) return
+
+      // Always block browser page zoom for pinch gestures over the canvas.
+      event.preventDefault()
+
+      if (shouldBlockCanvasZoomForStudyHubMenuFocus(event.target)) {
+        event.stopPropagation()
+        return
+      }
+
+      if (isExcludedWheelTarget(event.target, zoomExcluded)) return
 
       const ref = transformRef.current
       if (!ref || ref.instance.setup.disabled || ref.instance.setup.wheel.disabled) {
         return
       }
 
-      event.preventDefault()
       event.stopPropagation()
 
       const anchor = wrapperLocalAnchor(ref, event)
       if (!applyAnchoredWheelZoom(ref, event.deltaY, anchor, step)) return
 
       onZoom(ref)
-      useCanvasWorkspaceStore.getState().syncMainCamera(ref)
 
       if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
       stopTimerRef.current = setTimeout(() => {
@@ -91,5 +98,5 @@ export function useCanvasCursorWheelZoom({
         stopTimerRef.current = null
       }
     }
-  }, [transformRef, viewportRef, panExcluded, onZoom, onZoomStop, disabled, step])
+  }, [transformRef, viewportRef, zoomExcluded, onZoom, onZoomStop, disabled, step])
 }

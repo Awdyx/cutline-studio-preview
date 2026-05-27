@@ -8,7 +8,9 @@ import {
   CHROME_CARD_CLASS,
   CHROME_FROSTED_MENU_CLASS,
   CHROME_GLASS_CLASS,
+  CHROME_SURFACE_BG_TRANSITION,
   chromeFrostedMenuStyle,
+  chromeGlassSurfaceBg,
   chromeMenuMotionY,
   chromeBottomRightFixed,
   card,
@@ -178,6 +180,8 @@ export default function PlusFab({
   const showCanvasEditSection = !isPhone || canvasEditEnabled
   const [isOpen, setIsOpen] = useState(false)
   const [fabHoverScale, setFabHoverScale] = useState(false)
+  const editingUi = useUiCustomizationStore((s) => s.editing)
+  const fabHoverLift = fabHoverScale && !editingUi
   const [widgetsComingSoon, setWidgetsComingSoon] = useState(false)
   const spaceWidgetCount = useCanvasItemsStore((s) => countSpaceWidgets(s.items))
 
@@ -342,7 +346,8 @@ export default function PlusFab({
             isOpen ? 'chrome-fab-trigger--open' : ''
           } ${fabHoverScale ? 'chrome-fab-trigger--hover' : ''}`}
           style={{
-            background: isOpen ? 'var(--card-bg)' : glass.bg,
+            transition: CHROME_SURFACE_BG_TRANSITION,
+            background: chromeGlassSurfaceBg({ active: isOpen, hoverLift: fabHoverLift }),
             border: glass.border,
             position: 'relative',
           }}

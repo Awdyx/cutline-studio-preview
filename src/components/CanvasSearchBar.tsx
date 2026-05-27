@@ -15,7 +15,9 @@ import {
   CHROME_CARD_CLASS,
   CHROME_GLASS_CLASS,
   CHROME_PRESERVE_CASE_CLASS,
+  CHROME_SURFACE_BG_TRANSITION,
   CHROME_TAP_SQUEEZE_TARGET_CLASS,
+  chromeGlassSurfaceBg,
   card,
   font,
   glass,
@@ -111,6 +113,8 @@ export default function CanvasSearchBar({
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [searchInputReady, setSearchInputReady] = useState(!prefersCoarsePointer())
+  const [hovered, setHovered] = useState(false)
+  const editingUi = useUiCustomizationStore((s) => s.editing)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const dropdownOpenRef = useRef(dropdownOpen)
@@ -124,6 +128,7 @@ export default function CanvasSearchBar({
   )
 
   const showDropdown = dropdownOpen && value.trim().length > 0 && !hidden
+  const hoverLift = hovered && !editingUi
 
   useEffect(() => {
     if (!hidden) return
@@ -209,12 +214,15 @@ export default function CanvasSearchBar({
         style={{
           ...islandBase,
           position: 'relative',
-          background: showDropdown ? card.bg : glass.bg,
+          transition: CHROME_SURFACE_BG_TRANSITION,
+          background: chromeGlassSurfaceBg({ active: showDropdown, hoverLift }),
           gap: 8,
           padding: compact ? '8px 12px 8px 14px' : '8px 14px',
           width: '100%',
           cursor: 'text',
         }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         onClick={() => {
           if (useUiCustomizationStore.getState().editing) return
           setSearchInputReady(true)

@@ -97,7 +97,7 @@ html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
   outline: none;
   pointer-events: auto;
   box-shadow: var(--glass-shadow);
-  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, background 150ms ease;
 }
 
 .chrome-fab-trigger--hover {

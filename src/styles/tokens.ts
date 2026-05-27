@@ -63,6 +63,17 @@ export const card = {
   transitionDuration: '180ms',
 }
 
+/** Hover lift + open-state background crossfade for frosted chrome islands/buttons. */
+export const CHROME_SURFACE_BG_TRANSITION = 'background 150ms ease'
+
+export function chromeGlassSurfaceBg(options: {
+  active?: boolean
+  hoverLift?: boolean
+} = {}): string {
+  const { active = false, hoverLift = false } = options
+  return active || hoverLift ? card.bg : glass.bg
+}
+
 /** Shared surface for frosted chrome menus (shadow comes from plus-fab-menu-glass CSS). */
 export const chromeFrostedMenuStyle: CSSProperties = {
   background: glass.bg,

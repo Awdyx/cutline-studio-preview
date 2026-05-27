@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Bell, GraduationCap, LayoutGrid, MessageSquare, Newspaper, Trophy, Users } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
-import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, CHROME_TAP_SQUEEZE_TARGET_CLASS, glass, font } from '../styles/tokens'
+import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, CHROME_TAP_SQUEEZE_TARGET_CLASS, CHROME_SURFACE_BG_TRANSITION, chromeGlassSurfaceBg, glass, font } from '../styles/tokens'
 import { APP_DESTINATION_LABELS, useAppDestinationStore } from '../navigation/appDestinationStore'
 import { PHONE_HEADER_ROW_GAP } from '../styles/phoneChrome'
 import CanvasSearchBar from './CanvasSearchBar'
@@ -173,11 +173,11 @@ export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandP
           width: fullWidth ? '100%' : undefined,
           justifyContent: fullWidth ? 'center' : undefined,
           cursor: 'pointer',
-          background: isOpen || holdOpen
-            ? 'var(--card-bg)'
-            : showHoverBackground
-              ? 'var(--card-bg)'
-              : glass.bg,
+          transition: CHROME_SURFACE_BG_TRANSITION,
+          background: chromeGlassSurfaceBg({
+            active: isOpen || holdOpen,
+            hoverLift: showHoverBackground,
+          }),
           border: glass.border,
         }}
       >
@@ -268,6 +268,54 @@ export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandP
   )
 }
 
+// ─── Chrome island button ─────────────────────────────────────────────────────
+
+interface ChromeIslandButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  active?: boolean
+  islandStyle?: React.CSSProperties
+}
+
+function ChromeIslandButton({
+  active = false,
+  islandStyle,
+  className,
+  style,
+  children,
+  onMouseEnter,
+  onMouseLeave,
+  ...rest
+}: ChromeIslandButtonProps) {
+  const [hovered, setHovered] = useState(false)
+  const editingUi = useUiCustomizationStore((s) => s.editing)
+  const hoverLift = hovered && !editingUi
+
+  return (
+    <button
+      {...rest}
+      onMouseEnter={(e) => {
+        setHovered(true)
+        onMouseEnter?.(e)
+      }}
+      onMouseLeave={(e) => {
+        setHovered(false)
+        onMouseLeave?.(e)
+      }}
+      className={`theme-surface ${CHROME_GLASS_CLASS}${className ? ` ${className}` : ''}`}
+      style={{
+        ...islandBase,
+        position: 'relative',
+        cursor: 'pointer',
+        transition: CHROME_SURFACE_BG_TRANSITION,
+        background: chromeGlassSurfaceBg({ active, hoverLift }),
+        ...islandStyle,
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
 // ─── User Cluster ─────────────────────────────────────────────────────────────
 
 function AttentionIcon({
@@ -299,6 +347,9 @@ interface UserClusterProps {
   }
   unreadCount: number
   newsCount: number
+  newsOpen?: boolean
+  notificationsOpen?: boolean
+  profileOpen?: boolean
   onNewsClick: () => void
   onNotificationClick: () => void
   onProfileClick: () => void
@@ -309,6 +360,9 @@ export function UserCluster({
   user,
   unreadCount,
   newsCount,
+  newsOpen = false,
+  notificationsOpen = false,
+  profileOpen = false,
   onNewsClick,
   onNotificationClick,
   onProfileClick,
@@ -317,68 +371,52 @@ export function UserCluster({
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 6 : 8 }}>
       <ChromeTapSqueezeWrap compact>
-        <button
+        <ChromeIslandButton
           type="button"
           onClick={onNewsClick}
+          active={newsOpen}
           aria-label={newsCount > 0 ? `News, ${newsCount} new` : 'News'}
           data-panel-trigger="news"
           data-ui-anchor="news"
-          className={`theme-surface ${CHROME_GLASS_CLASS}`}
-          style={{
-            ...islandBase,
-            position: 'relative',
-            background: glass.bg,
-            padding: 10,
-            cursor: 'pointer',
-          }}
+          islandStyle={{ padding: 10 }}
         >
           <AttentionIcon active={newsCount > 0} origin="center center">
             <Newspaper size={16} color="var(--ui-text)" strokeWidth={1.8} />
           </AttentionIcon>
           <UiPinHost anchorId="news" />
-        </button>
+        </ChromeIslandButton>
       </ChromeTapSqueezeWrap>
 
       <ChromeTapSqueezeWrap compact>
-        <button
+        <ChromeIslandButton
           type="button"
           onClick={onNotificationClick}
+          active={notificationsOpen}
           aria-label={
             unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'
           }
           data-panel-trigger="notifications"
           data-ui-anchor="notifications"
-          className={`theme-surface ${CHROME_GLASS_CLASS}`}
-          style={{
-            ...islandBase,
-            position: 'relative',
-            background: glass.bg,
-            padding: 10,
-            cursor: 'pointer',
-          }}
+          islandStyle={{ padding: 10 }}
         >
           <AttentionIcon active={unreadCount > 0} origin="top center">
             <Bell size={16} color="var(--ui-text)" strokeWidth={1.8} />
           </AttentionIcon>
           <UiPinHost anchorId="notifications" />
-        </button>
+        </ChromeIslandButton>
       </ChromeTapSqueezeWrap>
 
       <ChromeTapSqueezeWrap compact={compact}>
-        <button
+        <ChromeIslandButton
           type="button"
           onClick={onProfileClick}
+          active={profileOpen}
           aria-label={`Profile: ${user.name}`}
           data-panel-trigger="profile"
           data-ui-anchor="profile"
-          className={`theme-surface ${CHROME_GLASS_CLASS}`}
-          style={{
-            ...islandBase,
-            position: 'relative',
-            background: glass.bg,
+          islandStyle={{
             gap: compact ? 0 : 8,
             padding: compact ? 6 : '6px 12px 6px 8px',
-            cursor: 'pointer',
           }}
         >
           <UserAvatar
@@ -398,7 +436,7 @@ export function UserCluster({
             </span>
           )}
           <UiPinHost anchorId="profile" />
-        </button>
+        </ChromeIslandButton>
       </ChromeTapSqueezeWrap>
     </div>
   )
@@ -410,6 +448,9 @@ interface TopBarProps {
   user: UserClusterProps['user']
   unreadCount: number
   cutlineMenuOpen?: boolean
+  newsOpen?: boolean
+  notificationsOpen?: boolean
+  profileOpen?: boolean
   /** Phone: collapse search row while a top chrome menu is open. */
   phoneMenuOpen?: boolean
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
@@ -424,6 +465,9 @@ export default function TopBar({
   user,
   unreadCount,
   cutlineMenuOpen = false,
+  newsOpen = false,
+  notificationsOpen = false,
+  profileOpen = false,
   phoneMenuOpen = false,
   transformRef,
   onCutlineClick,
@@ -489,6 +533,9 @@ export default function TopBar({
               user={user}
               unreadCount={unreadCount}
               newsCount={newsCount}
+              newsOpen={newsOpen}
+              notificationsOpen={notificationsOpen}
+              profileOpen={profileOpen}
               onNewsClick={onNewsClick}
               onNotificationClick={onNotificationClick}
               onProfileClick={onProfileClick}
@@ -566,6 +613,9 @@ export default function TopBar({
           user={user}
           unreadCount={unreadCount}
           newsCount={newsCount}
+          newsOpen={newsOpen}
+          notificationsOpen={notificationsOpen}
+          profileOpen={profileOpen}
           onNewsClick={onNewsClick}
           onNotificationClick={onNotificationClick}
           onProfileClick={onProfileClick}

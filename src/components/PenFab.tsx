@@ -11,9 +11,11 @@ import {
   CHROME_FROSTED_MENU_CLASS,
   CHROME_GLASS_CLASS,
   CHROME_MENU_TRANSITION,
+  CHROME_SURFACE_BG_TRANSITION,
   card,
   chromeBottomRightFixed,
   chromeFrostedMenuStyle,
+  chromeGlassSurfaceBg,
   font,
   glass,
   menuDividerVerticalStyle,
@@ -334,6 +336,8 @@ export default function PenFab() {
   const [menuMounted, setMenuMounted] = useState(false)
   const [menuVisible, setMenuVisible] = useState(false)
   const [fabHoverScale, setFabHoverScale] = useState(false)
+  const editingUi = useUiCustomizationStore((s) => s.editing)
+  const fabHoverLift = fabHoverScale && !editingUi
   const [colorPopover, setColorPopover] = useState<'pen' | 'highlighter' | null>(
     null,
   )
@@ -681,7 +685,8 @@ export default function PenFab() {
             isOpen ? 'chrome-fab-trigger--pen-open' : ''
           } ${fabHoverScale ? 'chrome-fab-trigger--hover' : ''}`}
           style={{
-            background: isOpen ? 'var(--card-bg)' : glass.bg,
+            transition: CHROME_SURFACE_BG_TRANSITION,
+            background: chromeGlassSurfaceBg({ active: isOpen, hoverLift: fabHoverLift }),
             border: glass.border,
             position: 'relative',
           }}

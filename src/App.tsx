@@ -812,6 +812,9 @@ function App() {
         user={topBarUser}
         unreadCount={unreadCount}
         cutlineMenuOpen={openPanel === 'cutline'}
+        newsOpen={openPanel === 'news'}
+        notificationsOpen={openPanel === 'notifications'}
+        profileOpen={openPanel === 'profile'}
         phoneMenuOpen={openPanel !== null}
         transformRef={transformRef}
         onCutlineClick={() => openOnly('cutline')}

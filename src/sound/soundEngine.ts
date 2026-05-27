@@ -13,7 +13,6 @@ let sfxBus: GainNode | null = null
 let sfxCompressor: DynamicsCompressorNode | null = null
 /** Per-play trim node; defaults to sfxBus when null. */
 let sfxSink: GainNode | null = null
-let musicGain: GainNode | null = null
 let lastPlayAt = 0
 const activeNodes: AudioScheduledSourceNode[] = []
 
@@ -71,18 +70,11 @@ export function ensureAudioContext(): AudioContext | null {
       if (!Ctx) return null
       ctx = new Ctx()
       initSfxChain(ctx)
-      musicGain = ctx.createGain()
-      musicGain.gain.value = 0
-      musicGain.connect(ctx.destination)
     }
     return ctx
   } catch {
     return null
   }
-}
-
-function at(t: number): number {
-  return (ensureAudioContext()?.currentTime ?? 0) + t
 }
 
 function env(
@@ -720,31 +712,6 @@ export function setMasterOutputGain(gain: number): void {
   master.gain.setValueAtTime(Math.max(0, gain), ctx.currentTime)
 }
 
-/** Ramp music bus — audio plays at leg gain 1; intro lives here. */
-export function rampMusicOutputGain(
-  from: number,
-  to: number,
-  durationSec: number,
-): void {
-  const context = ensureAudioContext()
-  if (!context || !musicGain) return
-  const now = context.currentTime
-  musicGain.gain.cancelScheduledValues(now)
-  musicGain.gain.setValueAtTime(Math.max(0, from), now)
-  musicGain.gain.linearRampToValueAtTime(Math.max(0, to), now + durationSec)
-}
-
-export function setMusicOutputGainImmediate(gain: number): void {
-  if (!musicGain || !ctx) return
-  musicGain.gain.cancelScheduledValues(ctx.currentTime)
-  musicGain.gain.setValueAtTime(Math.max(0, gain), ctx.currentTime)
-}
-
-export function getMusicGainNode(): GainNode | null {
-  ensureAudioContext()
-  return musicGain
-}
-
 export function getSfxMasterGainNode(): GainNode | null {
   ensureAudioContext()
   return sfxBus
@@ -769,14 +736,22 @@ export function playSoundEngine(
   id: SoundId,
   opts?: { layer?: boolean },
 ): void {
+  void playSoundEngineAsync(id, opts)
+}
+
+async function playSoundEngineAsync(
+  id: SoundId,
+  opts?: { layer?: boolean },
+): Promise<void> {
   const context = ensureAudioContext()
   if (!context || !sfxBus) return
-  resumeAudioContext()
+  await resumeAudioContext()
 
+  const t0 = context.currentTime
   const now = performance.now()
   if (opts?.layer) {
     if (now - lastPlayAt >= DEDUP_MS) lastPlayAt = now
-    runSound(id, context, at(0))
+    runSound(id, context, t0)
     return
   }
 
@@ -785,5 +760,5 @@ export function playSoundEngine(
   }
   lastPlayAt = now
 
-  runSound(id, context, at(0))
+  runSound(id, context, t0)
 }

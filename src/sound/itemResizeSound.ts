@@ -89,6 +89,13 @@ function applyMotion(speed: number, when: number) {
 }
 
 export function startItemResizeSound(clientX?: number, clientY?: number): void {
+  void startItemResizeSoundAsync(clientX, clientY)
+}
+
+async function startItemResizeSoundAsync(
+  clientX?: number,
+  clientY?: number,
+): Promise<void> {
   if (!canPlay()) return
 
   stopItemResizeSound()
@@ -97,7 +104,7 @@ export function startItemResizeSound(clientX?: number, clientY?: number): void {
   const master = getSfxMasterGainNode()
   if (!context || !master) return
 
-  void resumeAudioContext()
+  await resumeAudioContext()
   setMasterOutputGain(SFX_ON_GAIN)
 
   const source = context.createBufferSource()

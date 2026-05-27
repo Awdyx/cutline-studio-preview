@@ -88,6 +88,10 @@ function applyMotion(speed: number, when: number) {
 }
 
 export function startItemDragSound(): void {
+  void startItemDragSoundAsync()
+}
+
+async function startItemDragSoundAsync(): Promise<void> {
   if (!canPlay()) return
 
   stopItemDragSound()
@@ -96,7 +100,7 @@ export function startItemDragSound(): void {
   const master = getSfxMasterGainNode()
   if (!context || !master) return
 
-  void resumeAudioContext()
+  await resumeAudioContext()
   setMasterOutputGain(SFX_ON_GAIN)
 
   const source = context.createBufferSource()

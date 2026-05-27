@@ -2,7 +2,6 @@ import { useSoundStore } from './soundStore'
 import {
   ensureAudioContext,
   playSoundEngine,
-  resumeAudioContext,
   setMasterOutputGain,
 } from './soundEngine'
 import { SFX_ON_GAIN } from './soundLevels'
@@ -16,8 +15,6 @@ export function playSound(
   if (!hydrated || (muted && !opts?.bypassMute)) return
 
   ensureAudioContext()
-  void resumeAudioContext()
-
   setMasterOutputGain(SFX_ON_GAIN)
   playSoundEngine(id, opts)
 }

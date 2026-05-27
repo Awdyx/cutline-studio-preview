@@ -27,9 +27,9 @@ function AlignToggle({
 }) {
   const [hovered, setHovered] = useState(false)
   const bg = active
-    ? 'rgba(20, 30, 50, 0.1)'
+    ? 'var(--menu-row-toggle-active-bg)'
     : hovered
-      ? 'rgba(20, 30, 50, 0.056)'
+      ? 'var(--menu-row-hover-fill)'
       : 'transparent'
   return (
     <button

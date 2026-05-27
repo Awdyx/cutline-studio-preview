@@ -749,7 +749,7 @@ function MediaChangeTile({
               style={{
                 position: 'absolute',
                 inset: 0,
-                background: hovered && !disabled ? 'rgba(20, 30, 50, 0.06)' : 'transparent',
+                background: hovered && !disabled ? 'var(--menu-row-hover-fill)' : 'transparent',
                 transition: 'background 0.15s ease',
                 pointerEvents: 'none',
               }}

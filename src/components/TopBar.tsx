@@ -244,7 +244,7 @@ export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandP
                     fontSize: 13,
                     fontWeight: 500,
                     color: hoveredItem === id ? 'var(--ui-text)' : font.colorMuted,
-                    background: hoveredItem === id ? 'var(--glass-hover-bg, rgba(120,120,140,0.10))' : 'transparent',
+                    background: hoveredItem === id ? 'var(--menu-row-hover-bg)' : 'transparent',
                     transition: 'background 80ms ease, color 80ms ease',
                     borderRadius: 10,
                     margin: '0 4px',

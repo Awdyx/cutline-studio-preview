@@ -104,23 +104,47 @@ export function buildCanvasSearchEntries(items: CanvasItem[]): CanvasSearchEntry
   )
 }
 
+function tokenStartsWithQuery(token: string, q: string): boolean {
+  return token.startsWith(q)
+}
+
+/** Higher scores surface first; title/preview matches beat deep body text. */
+function canvasSearchRelevanceScore(entry: CanvasSearchEntry, q: string): number {
+  const title = entry.title.toLowerCase()
+  const preview = entry.preview.toLowerCase()
+
+  if (title.startsWith(q)) return 4000
+
+  const titleTokens = title.split(/\s+/).filter(Boolean)
+  if (titleTokens.some((t) => tokenStartsWithQuery(t, q))) return 3500
+  if (title.includes(q)) return 3000
+
+  if (preview.startsWith(q)) return 2800
+
+  const previewTokens = preview.split(/\s+/).filter(Boolean)
+  if (previewTokens.some((t) => tokenStartsWithQuery(t, q))) return 2500
+  if (preview.includes(q)) return 2200
+
+  if (entry.searchText.includes(q)) return 1000
+
+  return 0
+}
+
+function entryMatchesQuery(entry: CanvasSearchEntry, q: string): boolean {
+  return canvasSearchRelevanceScore(entry, q) > 0
+}
+
 export function filterCanvasSearchEntries(
   entries: CanvasSearchEntry[],
   query: string,
 ): CanvasSearchEntry[] {
   const q = query.trim().toLowerCase()
   if (!q) return []
-  const matched = entries.filter(
-    (e) =>
-      e.searchText.includes(q) ||
-      e.title.toLowerCase().includes(q) ||
-      e.preview.toLowerCase().includes(q),
-  )
+  const matched = entries.filter((e) => entryMatchesQuery(e, q))
 
   return matched.sort((a, b) => {
-    const aStudyHub = a.kind === 'study_hub' ? 0 : 1
-    const bStudyHub = b.kind === 'study_hub' ? 0 : 1
-    if (aStudyHub !== bStudyHub) return aStudyHub - bStudyHub
+    const scoreDiff = canvasSearchRelevanceScore(b, q) - canvasSearchRelevanceScore(a, q)
+    if (scoreDiff !== 0) return scoreDiff
     return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
   })
 }

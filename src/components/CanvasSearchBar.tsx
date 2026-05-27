@@ -372,7 +372,7 @@ export default function CanvasSearchBar({
                       cursor: 'pointer',
                       textAlign: 'left',
                       fontFamily: font.family,
-                      background: active ? 'rgba(0, 0, 0, 0.05)' : 'transparent',
+                      background: active ? 'var(--menu-row-hover-bg)' : 'transparent',
                       borderRadius: rowHighlightBorderRadius(
                         index,
                         results.length,

@@ -29,7 +29,7 @@ const panelTone = {
   title: font.colorPrimary,
   tabActive: font.colorPrimary,
   tabInactive: font.colorMuted,
-  rowHover: 'rgba(20, 30, 50, 0.04)',
+  rowHover: 'var(--menu-row-hover-bg)',
 } as const
 
 /** Visual weight — higher layers read first; chrome recedes. */

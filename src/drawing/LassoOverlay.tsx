@@ -443,7 +443,7 @@ function LassoBtn({
   children: React.ReactNode
 }) {
   const [hovered, setHovered] = useState(false)
-  const hoverBg = destructive ? 'rgba(196, 78, 78, 0.072)' : 'rgba(0, 0, 0, 0.056)'
+  const hoverBg = destructive ? 'var(--menu-row-destructive-hover)' : 'var(--menu-row-hover-fill)'
   return (
     <button
       type="button"

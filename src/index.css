@@ -402,6 +402,13 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   --profile-cohort-text: rgba(255, 255, 255, 0.92);
   --menu-toggle-side-icon-opacity: 0.38;
   --menu-toggle-side-icon-opacity-active: 0.82;
+  --menu-row-hover-bg: rgba(0, 0, 0, 0.04);
+  --menu-row-hover-fill: rgba(20, 30, 50, 0.048);
+  --menu-row-active-bg: rgba(20, 30, 50, 0.05);
+  --menu-row-tap-bg: rgba(20, 30, 50, 0.075);
+  --menu-row-toggle-active-bg: rgba(20, 30, 50, 0.1);
+  --menu-row-destructive-hover: rgba(196, 78, 78, 0.064);
+  --menu-row-destructive-tap: rgba(196, 78, 78, 0.1);
   --cursor-default: url('/cursors/default.svg') 2 2, default;
   /* Flat dim — applied to the backdrop layer. Stays uniform whether or not
      an anchor is focused. */
@@ -425,6 +432,13 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
     rgba(0, 0, 0, 0.26) 70%,
     rgba(0, 0, 0, 0.5) 100%
   );
+  --menu-row-hover-bg: rgba(255, 255, 255, 0.11);
+  --menu-row-hover-fill: rgba(255, 255, 255, 0.11);
+  --menu-row-active-bg: rgba(255, 255, 255, 0.13);
+  --menu-row-tap-bg: rgba(255, 255, 255, 0.16);
+  --menu-row-toggle-active-bg: rgba(255, 255, 255, 0.15);
+  --menu-row-destructive-hover: rgba(255, 110, 110, 0.14);
+  --menu-row-destructive-tap: rgba(255, 110, 110, 0.2);
 }
 
 .profile-cohort-pill {
@@ -599,7 +613,9 @@ summary {
 }
 
 [style*='cursor: pointer'],
-[style*='cursor:pointer'] {
+[style*='cursor:pointer'],
+[style*='cursor: default'],
+[style*='cursor:default'] {
   cursor: var(--cursor-default) !important;
 }
 
@@ -996,7 +1012,7 @@ html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'] * {
 }
 
 .study-subject-menu-row:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--menu-row-hover-bg);
 }
 
 .study-subject-menu-row:hover svg {
@@ -1020,10 +1036,6 @@ html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'] * {
 
 .study-subject-menu-row:hover .study-subject-menu-row__fill {
   filter: brightness(1.3);
-}
-
-html[data-theme='dark'] .study-subject-menu-row:hover {
-  background: rgba(255, 255, 255, 0.06);
 }
 
 html[data-theme='dark'] .study-subject-menu-row__track {

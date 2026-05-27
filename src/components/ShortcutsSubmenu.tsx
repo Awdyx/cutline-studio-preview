@@ -53,7 +53,11 @@ function ShortcutRow({ shortcut }: { shortcut: ShortcutDef }) {
     <li
       onMouseEnter={() => { setHovered(true); submenuRowHoverProps().onMouseEnter() }}
       onMouseLeave={() => setHovered(false)}
-      style={shortcutRowStyle}
+      style={{
+        ...shortcutRowStyle,
+        background: hovered ? 'var(--menu-row-hover-bg)' : 'transparent',
+        transition: 'background 120ms ease',
+      }}
     >
       <motion.span
         animate={{ scale: hovered && !reduceMotion ? 1.045 : 1 }}

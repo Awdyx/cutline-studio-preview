@@ -113,7 +113,7 @@ function ActionRow({
         width: '100%',
         padding: '10px 0',
         border: 'none',
-        background: hovered ? 'rgba(20, 30, 50, 0.04)' : 'transparent',
+        background: hovered ? 'var(--menu-row-hover-bg)' : 'transparent',
         borderRadius: 8,
         cursor: 'pointer',
         fontFamily: font.family,

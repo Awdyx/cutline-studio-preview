@@ -65,7 +65,7 @@ export default function ThemeSubmenu({
           className="theme-surface"
           onMouseEnter={(e) => {
             playSubmenuHover()
-            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)'
+            e.currentTarget.style.background = 'var(--menu-row-hover-bg)'
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'transparent'

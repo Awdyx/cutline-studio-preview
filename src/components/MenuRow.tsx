@@ -91,7 +91,7 @@ export function MenuRow({
             ? '10px 12px'
             : '10px 16px',
         borderRadius: inset ? 10 : undefined,
-        background: showInsetFill ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
+        background: showInsetFill ? 'var(--menu-row-hover-bg)' : 'transparent',
         border: 'none',
         outline: 'none',
         cursor: canInteract ? 'pointer' : 'default',
@@ -121,7 +121,7 @@ export function MenuRow({
             left: 6,
             right: 6,
             zIndex: -1,
-            background: destructive ? 'rgba(196, 78, 78, 0.064)' : 'rgba(20, 30, 50, 0.048)',
+            background: destructive ? 'var(--menu-row-destructive-hover)' : 'var(--menu-row-hover-fill)',
             borderRadius: 10,
             pointerEvents: 'none',
             opacity: hovered && canInteract ? 1 : 0,
@@ -145,7 +145,7 @@ export function MenuRow({
               left: inset ? 0 : 6,
               right: inset ? 0 : 6,
               zIndex: -1,
-              background: 'rgba(20, 30, 50, 0.05)',
+              background: 'var(--menu-row-active-bg)',
               borderRadius: 10,
               pointerEvents: 'none',
             }}
@@ -167,8 +167,8 @@ export function MenuRow({
             right: inset ? 0 : 6,
             zIndex: -1,
             background: destructive
-              ? 'rgba(196, 78, 78, 0.10)'
-              : 'rgba(20, 30, 50, 0.075)',
+              ? 'var(--menu-row-destructive-tap)'
+              : 'var(--menu-row-tap-bg)',
             borderRadius: 10,
             pointerEvents: 'none',
           }}

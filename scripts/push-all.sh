@@ -46,31 +46,61 @@ ensure_worktree_audio() {
   done_msg "Audio asset restored locally"
 }
 
-verify_pages_build_includes_audio() {
-  step "Verifying GitHub Pages build includes audio…"
-  local build_dir
-  build_dir="$(mktemp -d "${TMPDIR:-/tmp}/cutline-pages-build.XXXXXX")"
+PAGES_BUILD_DIR=""
+
+cleanup_pages_build_dir() {
+  if [[ -n "${PAGES_BUILD_DIR:-}" && -d "$PAGES_BUILD_DIR" ]]; then
+    rm -rf "$PAGES_BUILD_DIR"
+    PAGES_BUILD_DIR=""
+  fi
+}
+trap cleanup_pages_build_dir EXIT
+
+build_pages_dist() {
+  step "Building personal demo for GitHub Pages…"
+  PAGES_BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cutline-pages-build.XXXXXX")"
 
   if ! (
     cd "$STUDIO_ROOT"
-    GITHUB_PAGES=true npm run build:pages -- --outDir "$build_dir"
+    GITHUB_PAGES=true npm run build:pages -- --outDir "$PAGES_BUILD_DIR"
   ) >/dev/null 2>&1; then
-    rm -rf "$build_dir"
-    die "GitHub Pages build failed during pre-push audio check."
+    die "GitHub Pages build failed."
   fi
 
-  if [[ ! -f "$build_dir/audio/account-selection.mp3" ]]; then
-    rm -rf "$build_dir"
+  if [[ ! -f "$PAGES_BUILD_DIR/audio/account-selection.mp3" ]]; then
     die "Pages build is missing dist/audio/account-selection.mp3 (demo would ship without music)."
   fi
 
-  rm -rf "$build_dir"
-  done_msg "Pages build includes audio asset"
+  done_msg "Pages build ready (includes audio)"
+}
+
+publish_personal_demo_live() {
+  [[ -n "${PAGES_BUILD_DIR:-}" && -d "$PAGES_BUILD_DIR" ]] \
+    || die "Pages build missing; cannot publish live demo."
+
+  local demo_url deploy_dir
+  demo_url="$(git remote get-url public-demo)"
+  deploy_dir="$(mktemp -d "${TMPDIR:-/tmp}/cutline-pages-deploy.XXXXXX")"
+
+  cp -R "$PAGES_BUILD_DIR/." "$deploy_dir/"
+  touch "$deploy_dir/.nojekyll"
+
+  step "Publishing live demo (gh-pages → awdyx.github.io/cutline-studio-demo/)…"
+  (
+    cd "$deploy_dir"
+    git init -q
+    git add -A
+    git -c user.name="Cutline Push" -c user.email="push@cutline.studio" \
+      commit -qm "Deploy $(git -C "$STUDIO_ROOT" log -1 --pretty=format:'%h %s')"
+    git push -f "$demo_url" HEAD:gh-pages
+  )
+  rm -rf "$deploy_dir"
+  done_msg "Live demo published (gh-pages branch)"
 }
 
 ensure_tracked_audio
 ensure_worktree_audio
-verify_pages_build_includes_audio
+build_pages_dist
 
 step "Syncing cutline-studio → cutline-2.0/web/"
 rsync -a --delete \
@@ -92,9 +122,10 @@ rsync -a "$STUDIO_ROOT/public/audio/" "$WEB_DIR/public/audio/"
   || die "Company web missing audio after sync ($AUDIO_GIT_PATH)."
 done_msg "Synced to company web/"
 
-step "Pushing personal demo (github.com/Awdyx/cutline-studio-demo)"
+step "Pushing personal demo source (github.com/Awdyx/cutline-studio-demo)"
 git push public-demo main
-done_msg "Personal demo updated"
+done_msg "Personal demo source pushed (main)"
+publish_personal_demo_live
 
 cd "$COMPANY_ROOT"
 
@@ -121,4 +152,6 @@ git push origin main
 done_msg "Company repo updated"
 
 echo ""
-echo "All done — personal demo + company GitHub are in sync."
+echo "All done — personal demo live site + company GitHub are in sync."
+echo "Live demo: https://awdyx.github.io/cutline-studio-demo/"
+echo "If the site looks stale, set GitHub → Settings → Pages → Deploy from branch → gh-pages → / (root)."

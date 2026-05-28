@@ -6,6 +6,9 @@ STUDIO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPANY_ROOT="$(cd "$STUDIO_ROOT/../cutline-2.0" && pwd)"
 WEB_DIR="$COMPANY_ROOT/web"
 
+AUDIO_GIT_PATH="public/audio/account-selection.mp3"
+AUDIO_MIN_BYTES=1000000
+
 die() { echo "Error: $*" >&2; exit 1; }
 step() { echo "→ $*"; }
 done_msg() { echo "✓ $*"; }
@@ -20,15 +23,73 @@ if [[ -n "$(git status --porcelain)" ]]; then
   die "Uncommitted changes in cutline-studio. Commit first, then run: npm run push"
 fi
 
+ensure_tracked_audio() {
+  git cat-file -e "HEAD:$AUDIO_GIT_PATH" 2>/dev/null \
+    || die "Required audio missing from git ($AUDIO_GIT_PATH). Restore it before pushing."
+
+  local size
+  size="$(git cat-file -s "HEAD:$AUDIO_GIT_PATH")"
+  if (( size < AUDIO_MIN_BYTES )); then
+    die "Audio asset in git looks truncated ($size bytes): $AUDIO_GIT_PATH"
+  fi
+}
+
+ensure_worktree_audio() {
+  if [[ -f "$STUDIO_ROOT/$AUDIO_GIT_PATH" ]]; then
+    return
+  fi
+
+  step "Restoring missing audio asset from git ($AUDIO_GIT_PATH)…"
+  git checkout HEAD -- "$AUDIO_GIT_PATH"
+  [[ -f "$STUDIO_ROOT/$AUDIO_GIT_PATH" ]] \
+    || die "Failed to restore $AUDIO_GIT_PATH into the working tree."
+  done_msg "Audio asset restored locally"
+}
+
+verify_pages_build_includes_audio() {
+  step "Verifying GitHub Pages build includes audio…"
+  local build_dir
+  build_dir="$(mktemp -d "${TMPDIR:-/tmp}/cutline-pages-build.XXXXXX")"
+
+  if ! (
+    cd "$STUDIO_ROOT"
+    GITHUB_PAGES=true npm run build:pages -- --outDir "$build_dir"
+  ) >/dev/null 2>&1; then
+    rm -rf "$build_dir"
+    die "GitHub Pages build failed during pre-push audio check."
+  fi
+
+  if [[ ! -f "$build_dir/audio/account-selection.mp3" ]]; then
+    rm -rf "$build_dir"
+    die "Pages build is missing dist/audio/account-selection.mp3 (demo would ship without music)."
+  fi
+
+  rm -rf "$build_dir"
+  done_msg "Pages build includes audio asset"
+}
+
+ensure_tracked_audio
+ensure_worktree_audio
+verify_pages_build_includes_audio
+
 step "Syncing cutline-studio → cutline-2.0/web/"
 rsync -a --delete \
   --exclude node_modules \
   --exclude dist \
   --exclude .git \
+  --exclude .cursor \
+  --exclude .env \
+  --exclude '.env.*' \
   --exclude Dockerfile \
   --exclude server.js \
   --exclude scripts/push-all.sh \
+  --exclude 'public/audio/' \
   "$STUDIO_ROOT/" "$WEB_DIR/"
+
+mkdir -p "$WEB_DIR/public/audio"
+rsync -a "$STUDIO_ROOT/public/audio/" "$WEB_DIR/public/audio/"
+[[ -f "$WEB_DIR/$AUDIO_GIT_PATH" ]] \
+  || die "Company web missing audio after sync ($AUDIO_GIT_PATH)."
 done_msg "Synced to company web/"
 
 step "Pushing personal demo (github.com/Awdyx/cutline-studio-demo)"
@@ -38,8 +99,17 @@ done_msg "Personal demo updated"
 cd "$COMPANY_ROOT"
 
 if [[ -n "$(git status --porcelain -- web)" ]]; then
+  if [[ ! -f "$WEB_DIR/$AUDIO_GIT_PATH" ]]; then
+    die "Company web missing audio asset; refusing to commit sync."
+  fi
+
   SYNC_MSG="Sync cutline-studio ($(git -C "$STUDIO_ROOT" log -1 --pretty=format:'%h %s'))"
   git add web
+
+  if git diff --cached --name-only --diff-filter=D -- web | grep -Fq "web/public/audio/account-selection.mp3"; then
+    die "Sync would delete web/public/audio/account-selection.mp3 from company web/. Aborting."
+  fi
+
   git commit -m "$SYNC_MSG"
   done_msg "Committed to company repo"
 else

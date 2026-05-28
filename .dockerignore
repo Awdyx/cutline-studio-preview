@@ -1,0 +1,13 @@
+.git
+.env
+.env.*
+!.env.staging.example
+
+node_modules
+dist
+
+caddy
+scripts
+systemd
+STAGING_SETUP.md
+.cursor

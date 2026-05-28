@@ -86,6 +86,43 @@ build_pages_dist() {
   done_msg "Pages build ready (includes audio)"
 }
 
+trigger_staging_deploy() {
+  local url="https://staging.cutlinetutoring.nz/deploy-staging-webhook"
+  local payload='{"ref":"refs/heads/main","repository":{"full_name":"Cutline-Tutoring/cutline-2.0"}}'
+
+  step "Triggering staging deploy (staging.cutlinetutoring.nz)…"
+
+  local curl_args=(
+    -sS -X POST "$url"
+    -H "Content-Type: application/json"
+    -H "X-GitHub-Event: push"
+    -d "$payload"
+  )
+
+  if [[ -n "${STAGING_WEBHOOK_SECRET:-}" ]]; then
+    local sig
+    sig="$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$STAGING_WEBHOOK_SECRET" | awk '{print $2}')"
+    curl_args+=(-H "X-Hub-Signature-256: sha256=${sig}")
+  else
+    echo "  Note: set STAGING_WEBHOOK_SECRET locally if the server rejects unsigned requests."
+  fi
+
+  local body_file http_code response
+  body_file="$(mktemp)"
+  http_code="$(curl "${curl_args[@]}" -o "$body_file" -w '%{http_code}' 2>/dev/null || echo "000")"
+  response="$(cat "$body_file" 2>/dev/null || true)"
+  rm -f "$body_file"
+
+  if [[ "$http_code" == "200" || "$http_code" == "202" ]]; then
+    done_msg "Staging deploy triggered (HTTP $http_code)"
+    return 0
+  fi
+
+  echo "WARN: Staging webhook returned HTTP ${http_code:-unknown}: ${response:-no response}" >&2
+  echo "  → Add STAGING_WEBHOOK_SECRET to GitHub repo secrets, or configure a push webhook on cutline-2.0." >&2
+  return 0
+}
+
 publish_personal_demo_live() {
   [[ -n "${PAGES_BUILD_DIR:-}" && -d "$PAGES_BUILD_DIR" ]] \
     || die "Pages build missing; cannot publish live demo."
@@ -135,7 +172,6 @@ rsync -a --delete \
   --exclude docker-compose.staging.yml \
   --exclude STAGING_SETUP.md \
   --exclude .env.staging.example \
-  --exclude .dockerignore \
   --exclude 'public/audio/' \
   "$STUDIO_ROOT/" "$COMPANY_ROOT/"
 
@@ -174,7 +210,9 @@ step "Pushing company repo (github.com/Cutline-Tutoring/cutline-2.0)"
 git push origin main
 done_msg "Company repo updated"
 
+trigger_staging_deploy
+
 echo ""
-echo "All done — personal demo live site + company GitHub are in sync."
-echo "Live demo: https://awdyx.github.io/cutline-studio-demo/"
-echo "Company app: https://github.com/Cutline-Tutoring/cutline-2.0 (main branch root)"
+echo "All done — company main pushed; staging deploy triggered if webhook is configured."
+echo "Staging demo: https://staging.cutlinetutoring.nz/"
+echo "Company repo: https://github.com/Cutline-Tutoring/cutline-2.0"

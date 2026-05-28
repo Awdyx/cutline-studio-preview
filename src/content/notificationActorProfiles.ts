@@ -1,6 +1,7 @@
 import sofiacodesAvatar from '../assets/notification-profiles/sofiacodes-avatar.png'
 import sofiacodesBanner from '../assets/notification-profiles/sofiacodes-banner.png'
 import sofiacodesCanvas from '../assets/notification-profiles/sofiacodes-canvas.png'
+import type { PinnedTrack } from '../profile/types'
 
 export type NotificationActorSocial = {
   label: string
@@ -20,6 +21,9 @@ export type NotificationActorProfile = {
   cohort?: string
   socials: NotificationActorSocial[]
   canvasTitle: string
+  pinnedTrack?: PinnedTrack | null
+  /** Resolved client-side via iTunes lookup when preview URLs are not stored. */
+  pinnedTrackAppleUrl?: string
 }
 
 export const NOTIFICATION_ACTOR_PROFILES: Record<string, NotificationActorProfile> = {
@@ -39,5 +43,15 @@ export const NOTIFICATION_ACTOR_PROFILES: Record<string, NotificationActorProfil
       { label: 'website', value: 'sofi.study' },
     ],
     canvasTitle: 'HU Ethics — Week 4',
+    pinnedTrack: {
+      id: 1709413704,
+      title: 'Your face',
+      artist: 'Wisp',
+      art: '',
+      preview: '',
+      startTime: 0,
+    },
+    pinnedTrackAppleUrl:
+      'https://music.apple.com/nz/album/your-face/1709413623?i=1709413704',
   },
 }

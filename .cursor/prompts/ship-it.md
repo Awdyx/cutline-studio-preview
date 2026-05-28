@@ -1,29 +1,5 @@
-# Ship it — copy & paste into Cursor chat
+# Deploy code
 
-Paste this whole block when you're ready to upload everything:
+**`CLN-FULL-DEPLOY`**
 
----
-
-**Ship it**
-
-Commit all my local changes in `cutline-studio` with a clear message, then run `npm run push` so everything goes to:
-- my personal GitHub / demo (`Awdyx/cutline-studio-demo`)
-- the company repo (`Cutline-Tutoring/cutline-2.0` → `web/`)
-
-Do it all for me — no terminals or manual steps on my end. Tell me what was committed and where it landed.
-
----
-
-## Short version (same thing)
-
-```
-Ship it
-```
-
-or
-
-```
-Push my changes
-```
-
-Both work — this project is set up so the agent handles commit + push automatically.
+Paste only that line (or add a note after it). The agent commits everything in `cutline-studio`, runs `npm run push`, and reports main + gh-pages + company `web/`.

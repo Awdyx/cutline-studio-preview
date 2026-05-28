@@ -28,8 +28,11 @@ import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { PHONE_CHROME_INSET } from '../styles/phoneChrome'
 import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
+import ProfileBannerHeader from './ProfileBannerHeader'
+import ProfileIdentityTags from './ProfileIdentityTags'
+import ProfileSocialPills from './ProfileSocialPills'
 import UserAvatar from './UserAvatar'
-import { PROFILE_BANNER_HEIGHT } from './ProfileBannerHeader'
+import ResolvedProfilePinnedTrack from '../music/ResolvedProfilePinnedTrack'
 
 const CARD_WIDTH = 300
 const PANEL_GAP = 12
@@ -130,22 +133,6 @@ function renderBio(bio: string, onComingSoon: () => void): React.ReactNode {
       part
     ),
   )
-}
-
-const socialPillStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '3px 8px',
-  borderRadius: 6,
-  border: '1px solid var(--glass-border)',
-  background: 'rgba(20, 30, 50, 0.04)',
-  color: font.colorMuted,
-  fontSize: 11,
-  fontWeight: 500,
-  fontFamily: font.family,
-  letterSpacing: '0.03em',
-  lineHeight: 1.2,
-  whiteSpace: 'nowrap',
 }
 
 function CanvasPreviewMock({
@@ -419,107 +406,47 @@ const ProfilePreviewCard = forwardRef<
               />
             </button>
           )}
-          <div
-            aria-hidden
-            style={{
-              height: PROFILE_BANNER_HEIGHT,
-              position: 'relative',
-              overflow: 'hidden',
-              background: profile.bannerGradient ?? 'var(--card-bg)',
-            }}
+          <ProfileBannerHeader
+            bannerImageUrl={profile.bannerImageUrl ?? null}
+            displayName={profile.displayName}
+            avatarColor={profile.avatarColor}
+            avatarImageUrl={profile.avatarImageUrl ?? null}
+            edgeToEdge
+            contentPaddingBottom={12}
           >
-            {profile.bannerImageUrl && (
-              <img
-                src={profile.bannerImageUrl}
-                alt=""
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  objectPosition: 'center 18%',
-                }}
+            <ProfileIdentityTags
+              displayName={profile.displayName}
+              handle={profile.handle}
+              studentCohort={profile.cohort ?? ''}
+            />
+            {(profile.pinnedTrack || profile.pinnedTrackAppleUrl) && (
+              <ResolvedProfilePinnedTrack
+                track={profile.pinnedTrack}
+                appleMusicUrl={profile.pinnedTrackAppleUrl}
               />
             )}
-          </div>
-          <div
-            style={{
-              position: 'absolute',
-              left: 14,
-              bottom: 0,
-              transform: 'translateY(50%)',
-              zIndex: 2,
-              borderRadius: '50%',
-              boxShadow: isPhoneModal
-                ? '0 0 0 3px var(--chrome-solid-bg)'
-                : '0 0 0 3px var(--card-bg)',
-            }}
-          >
-            <UserAvatar
-              displayName={profile.avatarInitial}
-              avatarColor={profile.avatarColor}
-              avatarImageUrl={profile.avatarImageUrl}
-              size={44}
-              fontSize={16}
-            />
-          </div>
+            {profile.bio && (
+              <p
+                className={CHROME_PRESERVE_CASE_CLASS}
+                style={{
+                  margin: '16px 0 0',
+                  fontSize: 12,
+                  lineHeight: 1.45,
+                  color: font.colorFaint,
+                }}
+              >
+                {renderBio(profile.bio, () => setComingSoon(true))}
+              </p>
+            )}
+            <ProfileSocialPills socials={profile.socials} centered />
+          </ProfileBannerHeader>
         </div>
-        <div
-          style={{
-            padding: '28px 14px 14px',
-          }}
-        >
-        <div className={CHROME_PRESERVE_CASE_CLASS}>
-          <p
-            style={{
-              margin: 0,
-              fontSize: 15,
-              fontWeight: 600,
-              color: font.colorPrimary,
-            }}
-          >
-            {profile.displayName}
-          </p>
-          <p
-            style={{
-              margin: '2px 0 0',
-              fontSize: 12,
-              color: font.colorMuted,
-            }}
-          >
-            {profile.handle}
-            {profile.cohort ? ` · ${profile.cohort}` : ''}
-          </p>
-        </div>
-        <p
-          className={CHROME_PRESERVE_CASE_CLASS}
-          style={{
-            margin: '10px 0 0',
-            fontSize: 13,
-            lineHeight: 1.45,
-            color: font.colorMuted,
-          }}
-        >
-          {renderBio(profile.bio, () => setComingSoon(true))}
-        </p>
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-            marginTop: 10,
-          }}
-        >
-          {profile.socials.map(({ label, value }) => (
-            <span key={label} style={socialPillStyle}>
-              {chromeLabel(`${label} · ${value}`)}
-            </span>
-          ))}
-        </div>
-        <CanvasPreviewMock
-          title={profile.canvasTitle}
-          previewImageUrl={profile.canvasPreviewImageUrl}
-          onClick={onVisitCanvas}
-        />
+        <div style={{ padding: '0 14px 14px' }}>
+          <CanvasPreviewMock
+            title={profile.canvasTitle}
+            previewImageUrl={profile.canvasPreviewImageUrl}
+            onClick={onVisitCanvas}
+          />
         </div>
       </div>
       <AnimatePresence>

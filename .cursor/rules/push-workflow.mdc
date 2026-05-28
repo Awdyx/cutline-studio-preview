@@ -7,10 +7,19 @@ alwaysApply: true
 
 The user works in `cutline-studio` and should never need to run git commands manually.
 
-When they say things like **"ship it"**, "push", "push my changes", "upload to github", or "ship it — commit and push everything":
+## Deploy code (primary trigger)
+
+When the user message is exactly **`CLN-FULL-DEPLOY`** or contains that token (case-sensitive), run the full deploy workflow below. No other interpretation.
+
+Meaning of **`CLN-FULL-DEPLOY`**: commit all changes in `cutline-studio`, then `npm run push` — personal demo `main`, live site `gh-pages` build, company `cutline-2.0` → `web/`. Never substitute raw `git push` only.
+
+Also honor: **"full deploy"**, **"ship it"**, **"deploy everything"**, "push my changes", "upload to github", or "ship it — commit and push everything":
 
 1. Commit any uncommitted changes in `cutline-studio` (use a clear message from the diff).
-2. Run `npm run push` from the `cutline-studio` directory.
-3. Report what was pushed: personal demo (`Awdyx/cutline-studio-demo`) and company repo (`Cutline-Tutoring/cutline-2.0` → `web/`).
+2. Run `npm run push` from the `cutline-studio` directory (never substitute raw `git push` only).
+3. Report what landed:
+   - Personal demo source: `Awdyx/cutline-studio-demo` → `main`
+   - Live demo: same repo → `gh-pages` (built Pages artifact)
+   - Company: `Cutline-Tutoring/cutline-2.0` → `web/` (rsync + commit if needed)
 
 Do not ask them to open terminals, switch repos, or run scripts themselves.

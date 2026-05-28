@@ -84,6 +84,7 @@ import { useCanvasPanBounce } from './canvas/useCanvasPanBounce'
 import { useCanvasCompositorWarmup } from './canvas/useCanvasCompositorWarmup'
 import CanvasSwapVeil from './canvas/CanvasSwapVeil'
 import { blurStrayTextFocus } from './platform/textFocus'
+import { idleAfterFirstPaint, isTouchFirstDevice } from './platform/compositor'
 import { useLayoutProfile } from './hooks/useLayoutProfile'
 import { useShortcutUiStore } from './shortcuts/shortcutUiStore'
 import SettingsSubmenu from './components/SettingsSubmenu'
@@ -325,6 +326,7 @@ function App() {
   const meshColors = generated.meshColors
   const meshBlobVisibility = meshBlobVisibilities(palette.blobDepth)
   const meshLayerOpacity = effectiveMode === 'light' ? 0.92 : 0.88
+  const showMeshBlobs = !isTouchFirstDevice()
 
   const pinchStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { viewportRef, viewportSize, minScale, onTransformInit, onHydrated } =
@@ -432,11 +434,14 @@ function App() {
 
   useEffect(() => {
     void (async () => {
+      const touchFirst = isTouchFirstDevice()
       await useCanvasWorkspaceStore.getState().hydrate()
+      if (touchFirst) await idleAfterFirstPaint(200)
       useCanvasItemsStore.getState().hydrate()
       useStrokesStore.getState().hydrate()
       useCanvasLockStore.getState().hydrate()
       useCanvasEditStore.getState().hydrate()
+      if (touchFirst) await idleAfterFirstPaint(100)
       useQuickMenuStore.getState().hydrate()
       useUiCustomizationStore.getState().hydrate()
       useSoundStore.getState().hydrate()
@@ -756,7 +761,8 @@ function App() {
                   pointerEvents: canvasSwapBusy ? 'none' : undefined,
                 }}
               >
-                {meshColors.map((color, index) => {
+                {showMeshBlobs &&
+                  meshColors.map((color, index) => {
                   const visibility = meshBlobVisibility[index] ?? 0
                   if (visibility <= 0) return null
 

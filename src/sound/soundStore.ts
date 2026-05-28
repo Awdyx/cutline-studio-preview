@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isTouchFirstDevice } from '../platform/compositor'
 import { backgroundMusic } from './backgroundMusic'
 import { unlockAudioFromUserGesture } from './unlockAudio'
 import { ensureAudioContext, setMasterOutputGain } from './soundEngine'
@@ -43,7 +44,9 @@ export const useSoundStore = create<SoundState>((set, get) => ({
     persistEnabled = true
     ensureAudioContext()
     applyOutputGain(loaded.muted)
-    backgroundMusic.preload()
+    if (!isTouchFirstDevice()) {
+      backgroundMusic.preload()
+    }
     applyMusic(loaded.musicEnabled)
   },
 

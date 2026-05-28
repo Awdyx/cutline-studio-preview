@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { isTouchFirstDevice } from '../platform/compositor'
 import { usePanMotionStore } from '../panMotionStore'
 
 const MAX_PAN_BLUR = 0.75 // px at intensity = 1.0 (fastest possible pan)
@@ -6,6 +7,7 @@ const ZOOM_BLUR = 0.3     // px fixed during zoom gesture
 
 export function useCanvasMotionBlur() {
   useEffect(() => {
+    if (isTouchFirstDevice()) return
     return usePanMotionStore.subscribe((s) => {
       let blur = 0
       if (s.active) {

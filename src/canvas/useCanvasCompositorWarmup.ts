@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react'
+import { isTouchFirstDevice } from '../platform/compositor'
 
 /**
  * Promote the pan/zoom layer once after first paint — mirrors what a space
@@ -11,6 +12,7 @@ export function useCanvasCompositorWarmup(
   const doneRef = useRef(false)
 
   useEffect(() => {
+    if (isTouchFirstDevice()) return
     if (!ready || doneRef.current) return
     const canvas = canvasRef.current
     if (!canvas) return

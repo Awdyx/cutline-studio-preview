@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { idleAfterFirstPaint, isTouchFirstDevice } from '../platform/compositor'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { backgroundMusic } from '../sound/backgroundMusic'
@@ -14,14 +15,22 @@ export function useBackgroundMusic() {
       backgroundMusic.sync(musicEnabled)
     }
 
-    backgroundMusic.preload()
     syncBackgroundMusicEnclosedAcoustics()
 
     const startSync = () => sync()
-    if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(startSync, { timeout: 200 })
+
+    if (isTouchFirstDevice()) {
+      const startPreload = () => backgroundMusic.preload()
+      document.addEventListener('pointerdown', startPreload, { once: true, capture: true })
+      void idleAfterFirstPaint(1200).then(startPreload)
+      void idleAfterFirstPaint(400).then(startSync)
     } else {
-      setTimeout(startSync, 0)
+      backgroundMusic.preload()
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(startSync, { timeout: 200 })
+      } else {
+        setTimeout(startSync, 0)
+      }
     }
 
     const unsubSound = useSoundStore.subscribe(sync)

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { isTouchFirstDevice } from './platform/compositor'
 import { vignetteIsVisible } from './canvasPanVignette'
 import { usePanMotionStore } from './panMotionStore'
 
@@ -44,6 +45,8 @@ export default function TrailingVignette() {
   const edges = usePanMotionStore((s) => s.edges)
   const zoomEdgeStrength = usePanMotionStore((s) => s.zoomEdgeStrength)
   const visible = vignetteIsVisible(edges) || zoomEdgeStrength > 0
+
+  if (isTouchFirstDevice()) return null
 
   return (
     <motion.div

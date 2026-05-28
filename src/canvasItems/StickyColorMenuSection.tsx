@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { playSubmenuHover, runSubmenuClick } from '../sound/submenuSound'
 import { menuDividerStyle } from '../styles/tokens'
 import { STICKY_SWATCH_COLORS } from '../theme/paletteGenerator'
+import { useThemeStore } from '../theme/themeStore'
+import { useEffectiveMode } from '../theme/useEffectiveMode'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import type { StickyColorId } from './types'
 
@@ -16,27 +18,39 @@ function ColorSwatch({
   active,
   label,
   onClick,
+  disabled = false,
 }: {
   colorId: StickyColorId
   active: boolean
   label: string
   onClick: () => void
+  disabled?: boolean
 }) {
   const [hovered, setHovered] = useState(false)
-  const bg = active
+  const canInteract = !disabled
+  const bg = active && canInteract
     ? 'var(--menu-row-toggle-active-bg)'
-    : hovered
+    : hovered && canInteract
       ? 'var(--menu-row-hover-fill)'
       : 'transparent'
 
   return (
     <button
       type="button"
+      disabled={disabled}
       aria-label={label}
       aria-pressed={active}
-      onMouseEnter={() => { setHovered(true); playSubmenuHover() }}
+      aria-disabled={disabled || undefined}
+      onMouseEnter={() => {
+        if (!canInteract) return
+        setHovered(true)
+        playSubmenuHover()
+      }}
       onMouseLeave={() => setHovered(false)}
-      onClick={() => runSubmenuClick(onClick)}
+      onClick={() => {
+        if (!canInteract) return
+        runSubmenuClick(onClick)
+      }}
       style={{
         flex: 1,
         display: 'flex',
@@ -46,7 +60,7 @@ function ColorSwatch({
         border: 'none',
         borderRadius: 8,
         background: bg,
-        cursor: 'pointer',
+        cursor: canInteract ? 'pointer' : 'default',
         transition: 'background 120ms ease',
       }}
     >
@@ -57,7 +71,7 @@ function ColorSwatch({
           height: 18,
           borderRadius: '50%',
           background: STICKY_SWATCH_COLORS[colorId],
-          boxShadow: active
+          boxShadow: active && canInteract
             ? '0 0 0 1.5px var(--menu-row-toggle-active-bg), 0 0 0 2px rgba(0,0,0,0.35)'
             : '0 0 0 1.5px rgba(0,0,0,0.12)',
           flexShrink: 0,
@@ -76,6 +90,9 @@ export default function StickyColorMenuSection({
   currentColor: StickyColorId | undefined
 }) {
   const setStickyColor = useCanvasItemsStore((s) => s.setStickyColor)
+  const themeMode = useThemeStore((s) => s.mode)
+  const effectiveMode = useEffectiveMode(themeMode)
+  const colorsDisabled = effectiveMode === 'dark'
   const active = currentColor ?? 'yellow'
 
   return (
@@ -84,7 +101,9 @@ export default function StickyColorMenuSection({
         style={{
           display: 'flex',
           gap: 4,
-          padding: '6px 6px 4px',
+          padding: '6px 6px 10px',
+          opacity: colorsDisabled ? 0.48 : 1,
+          transition: 'opacity 120ms ease',
         }}
       >
         {COLOR_OPTIONS.map(({ id, label }) => (
@@ -93,6 +112,7 @@ export default function StickyColorMenuSection({
             colorId={id}
             active={active === id}
             label={label}
+            disabled={colorsDisabled}
             onClick={() => setStickyColor(itemId, id === 'yellow' ? undefined : id)}
           />
         ))}

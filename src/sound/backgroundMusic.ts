@@ -1,3 +1,5 @@
+import { isTouchFirstDevice } from '../platform/compositor'
+import { ensureAudioContext } from './soundEngine'
 import { MUSIC_ON_GAIN } from './soundLevels'
 
 const MUSIC_SRC = `${import.meta.env.BASE_URL}audio/account-selection.mp3`
@@ -75,12 +77,17 @@ function ensureMusicContext(): AudioContext | null {
   if (typeof window === 'undefined') return null
   try {
     if (!musicCtx) {
-      const Ctx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext
-      if (!Ctx) return null
-      musicCtx = new Ctx()
+      const sharedCtx = isTouchFirstDevice() ? ensureAudioContext() : null
+      if (sharedCtx) {
+        musicCtx = sharedCtx
+      } else {
+        const Ctx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext })
+            .webkitAudioContext
+        if (!Ctx) return null
+        musicCtx = new Ctx()
+      }
       musicGain = musicCtx.createGain()
       musicGain.gain.value = 0
       musicGain.connect(musicCtx.destination)
@@ -117,34 +124,40 @@ function ensureMusicEffectChain(): boolean {
     musicLowpass.connect(musicBassShelf)
     musicBassShelf.connect(musicHighShelf)
 
-    try {
-      musicConvolver = ctx.createConvolver()
-      musicConvolver.buffer = createReverbImpulse(ctx, 2.8, 1.65)
-      musicConvolver.normalize = true
+    const touchFirst = isTouchFirstDevice()
+    if (!touchFirst) {
+      try {
+        musicConvolver = ctx.createConvolver()
+        musicConvolver.buffer = createReverbImpulse(ctx, 2.8, 1.65)
+        musicConvolver.normalize = true
 
-      musicDryGain = ctx.createGain()
-      musicDryGain.gain.value = ACOUSTICS.outside.reverbDry
+        musicDryGain = ctx.createGain()
+        musicDryGain.gain.value = ACOUSTICS.outside.reverbDry
 
-      musicWetGain = ctx.createGain()
-      musicWetGain.gain.value = ACOUSTICS.outside.reverbWet
+        musicWetGain = ctx.createGain()
+        musicWetGain.gain.value = ACOUSTICS.outside.reverbWet
 
-      musicPresenceGain = ctx.createGain()
-      musicPresenceGain.gain.value = ACOUSTICS.outside.presence
+        musicPresenceGain = ctx.createGain()
+        musicPresenceGain.gain.value = ACOUSTICS.outside.presence
 
-      musicHighShelf.connect(musicDryGain)
-      musicHighShelf.connect(musicConvolver)
-      musicConvolver.connect(musicWetGain)
-      musicDryGain.connect(musicPresenceGain)
-      musicWetGain.connect(musicPresenceGain)
-      musicPresenceGain.connect(musicGain)
-      musicReverbEnabled = true
-    } catch (reverbErr) {
-      console.warn('[music] reverb unavailable, using filter-only path', reverbErr)
+        musicHighShelf.connect(musicDryGain)
+        musicHighShelf.connect(musicConvolver)
+        musicConvolver.connect(musicWetGain)
+        musicDryGain.connect(musicPresenceGain)
+        musicWetGain.connect(musicPresenceGain)
+        musicPresenceGain.connect(musicGain)
+        musicReverbEnabled = true
+      } catch (reverbErr) {
+        console.warn('[music] reverb unavailable, using filter-only path', reverbErr)
+        musicHighShelf.connect(musicGain)
+        musicConvolver = null
+        musicDryGain = null
+        musicWetGain = null
+        musicPresenceGain = null
+        musicReverbEnabled = false
+      }
+    } else {
       musicHighShelf.connect(musicGain)
-      musicConvolver = null
-      musicDryGain = null
-      musicWetGain = null
-      musicPresenceGain = null
       musicReverbEnabled = false
     }
 

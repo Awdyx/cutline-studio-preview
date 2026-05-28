@@ -6,6 +6,12 @@ STUDIO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPANY_ROOT="$(cd "$STUDIO_ROOT/../cutline-2.0" && pwd)"
 WEB_DIR="$COMPANY_ROOT/web"
 
+# remote_name|github_repo_slug|live_url_label
+PERSONAL_DEMOS=(
+  "public-demo|cutline-studio-demo|awdyx.github.io/cutline-studio-demo"
+  "public-demo-play|cutline-studio-play|awdyx.github.io/cutline-studio-play"
+)
+
 AUDIO_GIT_PATH="public/audio/account-selection.mp3"
 AUDIO_MIN_BYTES=1000000
 
@@ -46,46 +52,41 @@ ensure_worktree_audio() {
   done_msg "Audio asset restored locally"
 }
 
-PAGES_BUILD_DIR=""
-
-cleanup_pages_build_dir() {
-  if [[ -n "${PAGES_BUILD_DIR:-}" && -d "$PAGES_BUILD_DIR" ]]; then
-    rm -rf "$PAGES_BUILD_DIR"
-    PAGES_BUILD_DIR=""
-  fi
-}
-trap cleanup_pages_build_dir EXIT
-
 build_pages_dist() {
-  step "Building personal demo for GitHub Pages…"
-  PAGES_BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cutline-pages-build.XXXXXX")"
+  local pages_repo="$1"
+  local out_dir="$2"
 
+  step "Building personal demo for GitHub Pages ($pages_repo)…"
   if ! (
     cd "$STUDIO_ROOT"
-    GITHUB_PAGES=true npm run build:pages -- --outDir "$PAGES_BUILD_DIR"
+    GITHUB_PAGES=true GITHUB_PAGES_REPO="$pages_repo" npm run build:pages -- --outDir "$out_dir"
   ) >/dev/null 2>&1; then
-    die "GitHub Pages build failed."
+    die "GitHub Pages build failed for $pages_repo."
   fi
 
-  if [[ ! -f "$PAGES_BUILD_DIR/audio/account-selection.mp3" ]]; then
+  if [[ ! -f "$out_dir/audio/account-selection.mp3" ]]; then
     die "Pages build is missing dist/audio/account-selection.mp3 (demo would ship without music)."
   fi
 
-  done_msg "Pages build ready (includes audio)"
+  done_msg "Pages build ready for $pages_repo (includes audio)"
 }
 
 publish_personal_demo_live() {
-  [[ -n "${PAGES_BUILD_DIR:-}" && -d "$PAGES_BUILD_DIR" ]] \
-    || die "Pages build missing; cannot publish live demo."
+  local remote_name="$1"
+  local pages_repo="$2"
+  local live_label="$3"
 
-  local demo_url deploy_dir
-  demo_url="$(git remote get-url public-demo)"
+  local demo_url build_dir deploy_dir
+  demo_url="$(git remote get-url "$remote_name")"
+  build_dir="$(mktemp -d "${TMPDIR:-/tmp}/cutline-pages-build.XXXXXX")"
   deploy_dir="$(mktemp -d "${TMPDIR:-/tmp}/cutline-pages-deploy.XXXXXX")"
 
-  cp -R "$PAGES_BUILD_DIR/." "$deploy_dir/"
+  build_pages_dist "$pages_repo" "$build_dir"
+  cp -R "$build_dir/." "$deploy_dir/"
+  rm -rf "$build_dir"
   touch "$deploy_dir/.nojekyll"
 
-  step "Publishing live demo (gh-pages → awdyx.github.io/cutline-studio-demo/)…"
+  step "Publishing live demo (gh-pages → $live_label/)…"
   (
     cd "$deploy_dir"
     git init -q
@@ -95,12 +96,11 @@ publish_personal_demo_live() {
     git push -f "$demo_url" HEAD:gh-pages
   )
   rm -rf "$deploy_dir"
-  done_msg "Live demo published (gh-pages branch)"
+  done_msg "Live demo published ($pages_repo → gh-pages)"
 }
 
 ensure_tracked_audio
 ensure_worktree_audio
-build_pages_dist
 
 step "Syncing cutline-studio → cutline-2.0/web/"
 rsync -a --delete \
@@ -122,10 +122,23 @@ rsync -a "$STUDIO_ROOT/public/audio/" "$WEB_DIR/public/audio/"
   || die "Company web missing audio after sync ($AUDIO_GIT_PATH)."
 done_msg "Synced to company web/"
 
-step "Pushing personal demo source (github.com/Awdyx/cutline-studio-demo)"
-git push public-demo main
-done_msg "Personal demo source pushed (main)"
-publish_personal_demo_live
+LIVE_DEMO_URLS=()
+
+for entry in "${PERSONAL_DEMOS[@]}"; do
+  IFS='|' read -r remote_name pages_repo live_label <<< "$entry"
+
+  if ! git remote get-url "$remote_name" &>/dev/null; then
+    echo "⚠ Skipping $pages_repo — git remote \"$remote_name\" not configured."
+    continue
+  fi
+
+  step "Pushing personal demo source (github.com/Awdyx/$pages_repo)"
+  git push "$remote_name" main
+  done_msg "Personal demo source pushed ($pages_repo → main)"
+
+  publish_personal_demo_live "$remote_name" "$pages_repo" "$live_label"
+  LIVE_DEMO_URLS+=("https://${live_label}/")
+done
 
 cd "$COMPANY_ROOT"
 
@@ -152,6 +165,8 @@ git push origin main
 done_msg "Company repo updated"
 
 echo ""
-echo "All done — personal demo live site + company GitHub are in sync."
-echo "Live demo: https://awdyx.github.io/cutline-studio-demo/"
-echo "If the site looks stale, set GitHub → Settings → Pages → Deploy from branch → gh-pages → / (root)."
+echo "All done — personal demo live site(s) + company GitHub are in sync."
+for url in "${LIVE_DEMO_URLS[@]}"; do
+  echo "Live demo: $url"
+done
+echo "If a site looks stale, set GitHub → Settings → Pages → Deploy from branch → gh-pages → / (root)."

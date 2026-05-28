@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { playSound } from '../sound/playSound'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Keyboard, Settings, ChevronRight, Sparkles } from 'lucide-react'
+import { Download, Keyboard, Settings, ChevronRight, Sparkles, Upload } from 'lucide-react'
+import {
+  downloadCutlineBackupFile,
+  exportCutlineBackup,
+  importCutlineBackup,
+  parseCutlineBackupFile,
+} from '../backup/cutlineBackup'
+import {
+  showBackupExportDone,
+  showBackupExportFailed,
+  showBackupExportStarted,
+  showBackupImportFailed,
+} from '../backup/backupFeedback'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, chromeFrostedMenuStyle, font, menuDividerStyle } from '../styles/tokens'
 import { phonePanelSheetStyle, phoneSubmenuSlideMotion } from '../styles/phoneChrome'
@@ -39,8 +51,10 @@ export default function CutlineMenu({
   const panelRef = useRef<HTMLDivElement>(null)
   const settingsAnchorRef = useRef<HTMLDivElement>(null)
   const shortcutsAnchorRef = useRef<HTMLDivElement>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
   const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false)
   const [shortcutsSubmenuOpen, setShortcutsSubmenuOpen] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
 
   const closeAllSubmenus = useCallback(() => {
     setSettingsSubmenuOpen(false)
@@ -88,6 +102,56 @@ export default function CutlineMenu({
     isInside: (target) => !!target.closest('[data-cutline-submenu]'),
     dismissInsidePanel: hasFlyoutSubmenu,
   })
+
+  const handleExportBackup = useCallback(async () => {
+    if (backupBusy) return
+    closeAllSubmenus()
+    setBackupBusy(true)
+    showBackupExportStarted()
+    try {
+      const backup = await exportCutlineBackup()
+      downloadCutlineBackupFile(backup)
+      showBackupExportDone()
+    } catch (err) {
+      console.warn('[backup] export failed', err)
+      showBackupExportFailed()
+    } finally {
+      setBackupBusy(false)
+    }
+  }, [backupBusy, closeAllSubmenus])
+
+  const handleImportBackup = useCallback(() => {
+    if (backupBusy) return
+    closeAllSubmenus()
+    importInputRef.current?.click()
+  }, [backupBusy, closeAllSubmenus])
+
+  const handleImportFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ''
+      if (!file) return
+
+      const confirmed = window.confirm(
+        'Import will replace your current canvas, spaces, menu layout, shortcuts, theme, and profile images. Continue?',
+      )
+      if (!confirmed) return
+
+      setBackupBusy(true)
+      try {
+        const backup = await parseCutlineBackupFile(file)
+        onClose({ silent: true })
+        await importCutlineBackup(backup)
+      } catch (err) {
+        console.warn('[backup] import failed', err)
+        const reason =
+          err instanceof Error && err.message ? err.message : undefined
+        showBackupImportFailed(reason)
+        setBackupBusy(false)
+      }
+    },
+    [onClose],
+  )
 
   return (
     <>
@@ -137,6 +201,27 @@ export default function CutlineMenu({
         <SubmenuSoundScope>
         <CutlineAppNavSection onNavigate={onClose} />
         <div style={menuDividerStyle} />
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={handleImportFileChange}
+        />
+        <MenuRow
+          icon={Download}
+          label="Export"
+          inset
+          disabled={backupBusy}
+          onClick={() => void handleExportBackup()}
+        />
+        <MenuRow
+          icon={Upload}
+          label="Import"
+          inset
+          disabled={backupBusy}
+          onClick={handleImportBackup}
+        />
           <MenuRow
           icon={Sparkles}
           label="Customize Menu"

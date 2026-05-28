@@ -434,23 +434,41 @@ function App() {
 
   useEffect(() => {
     void (async () => {
-      const touchFirst = isTouchFirstDevice()
-      await useCanvasWorkspaceStore.getState().hydrate()
-      if (touchFirst) await idleAfterFirstPaint(200)
-      useCanvasItemsStore.getState().hydrate()
-      useStrokesStore.getState().hydrate()
-      useCanvasLockStore.getState().hydrate()
-      useCanvasEditStore.getState().hydrate()
-      if (touchFirst) await idleAfterFirstPaint(100)
-      useQuickMenuStore.getState().hydrate()
-      useUiCustomizationStore.getState().hydrate()
-      useSoundStore.getState().hydrate()
-      clearHistory()
-      onHydrated()
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setAppHydrated(true))
-      })
-      blurStrayTextFocus()
+      try {
+        const touchFirst = isTouchFirstDevice()
+        await useCanvasWorkspaceStore.getState().hydrate()
+        if (touchFirst) await idleAfterFirstPaint(200)
+        useCanvasItemsStore.getState().hydrate()
+        useStrokesStore.getState().hydrate()
+        useCanvasLockStore.getState().hydrate()
+        useCanvasEditStore.getState().hydrate()
+        if (touchFirst) await idleAfterFirstPaint(100)
+        useQuickMenuStore.getState().hydrate()
+        useUiCustomizationStore.getState().hydrate()
+        useSoundStore.getState().hydrate()
+        clearHistory()
+        onHydrated()
+      } catch (err) {
+        console.error('[app] hydrate failed — continuing with defaults', err)
+        try {
+          useCanvasItemsStore.getState().hydrate()
+          useStrokesStore.getState().hydrate()
+          useCanvasLockStore.getState().hydrate()
+          useCanvasEditStore.getState().hydrate()
+          useQuickMenuStore.getState().hydrate()
+          useUiCustomizationStore.getState().hydrate()
+          useSoundStore.getState().hydrate()
+          clearHistory()
+        } catch {
+          // last resort — still reveal UI so the tab is not stuck blank
+        }
+        onHydrated()
+      } finally {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => setAppHydrated(true))
+        })
+        blurStrayTextFocus()
+      }
     })()
 
     const flushWorkspace = () => {

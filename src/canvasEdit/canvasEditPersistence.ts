@@ -1,6 +1,8 @@
 import { isPhoneLayout } from '../platform/layoutProfile'
 
-export const CANVAS_EDIT_STORAGE_KEY = 'cutline-canvas-edit-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const CANVAS_EDIT_STORAGE_KEY = scopedStorageKey('cutline-canvas-edit-v1')
 
 export type PersistedCanvasEditSettings = {
   enabled: boolean

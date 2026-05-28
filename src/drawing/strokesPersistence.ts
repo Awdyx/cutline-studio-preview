@@ -8,7 +8,9 @@ import {
 } from './colorUtils'
 import type { DrawTool } from './types'
 
-export const STROKES_STORAGE_KEY = 'cutline-strokes-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const STROKES_STORAGE_KEY = scopedStorageKey('cutline-strokes-v1')
 const STORAGE_VERSION = 2
 const MAX_BYTES = 4 * 1024 * 1024
 

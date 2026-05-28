@@ -1,4 +1,5 @@
 import { createStore, del, get, keys, set } from 'idb-keyval'
+import { scopedIdbName } from '../storage/storageScope'
 import {
   isPrimaryMediaBlobKey,
   mediaBlobBackupKey,
@@ -7,11 +8,11 @@ import {
   snapshotBlobKey,
 } from './mediaKeys'
 
-const blobStore = createStore('cutline-media', 'blobs')
+export const mediaBlobStore = createStore(scopedIdbName('cutline-media'), 'blobs')
 
 async function readBlob(key: string): Promise<Blob | null> {
   try {
-    const value = await get<Blob>(key, blobStore)
+    const value = await get<Blob>(key, mediaBlobStore)
     return value instanceof Blob && value.size > 0 ? value : null
   } catch {
     return null
@@ -20,14 +21,14 @@ async function readBlob(key: string): Promise<Blob | null> {
 
 async function writeBlobWithBackup(key: string, backupKey: string, blob: Blob): Promise<boolean> {
   try {
-    await set(key, blob, blobStore)
+    await set(key, blob, mediaBlobStore)
   } catch (err) {
     console.warn(`[media] failed to save blob ${key}`, err)
     return false
   }
 
   try {
-    await set(backupKey, blob, blobStore)
+    await set(backupKey, blob, mediaBlobStore)
   } catch (err) {
     console.warn(`[media] failed to save backup blob ${backupKey}`, err)
   }
@@ -71,7 +72,7 @@ export async function getMediaBlob(mediaId: string): Promise<Blob | null> {
     const backup = await readBlob(mediaBlobBackupKey(mediaId))
     if (!backup) return null
 
-    await set(key, backup, blobStore)
+    await set(key, backup, mediaBlobStore)
     return backup
   } catch (err) {
     console.warn(`[media] failed to load media ${mediaId}`, err)
@@ -86,7 +87,7 @@ export async function restoreMediaBlobFromBackup(
   const backup = await readBlob(mediaBlobBackupKey(mediaId))
   if (!backup) return false
   try {
-    await set(mediaBlobKey(mediaId), backup, blobStore)
+    await set(mediaBlobKey(mediaId), backup, mediaBlobStore)
     return true
   } catch {
     return false
@@ -95,7 +96,7 @@ export async function restoreMediaBlobFromBackup(
 
 export async function deleteMediaBlob(mediaId: string): Promise<void> {
   try {
-    await del(mediaBlobKey(mediaId), blobStore)
+    await del(mediaBlobKey(mediaId), mediaBlobStore)
   } catch (err) {
     console.warn(`[media] failed to delete media ${mediaId}`, err)
   }
@@ -103,7 +104,7 @@ export async function deleteMediaBlob(mediaId: string): Promise<void> {
 
 export async function listMediaBlobIds(): Promise<string[]> {
   try {
-    const allKeys = await keys(blobStore)
+    const allKeys = await keys(mediaBlobStore)
     return allKeys
       .filter(
         (key): key is string =>
@@ -151,7 +152,7 @@ export async function getSnapshotBlob(spaceId: string): Promise<Blob | null> {
     const backup = await readBlob(snapshotBlobBackupKey(spaceId))
     if (!backup) return null
 
-    await set(key, backup, blobStore)
+    await set(key, backup, mediaBlobStore)
     return backup
   } catch (err) {
     console.warn(`[media] failed to load snapshot ${spaceId}`, err)
@@ -161,7 +162,7 @@ export async function getSnapshotBlob(spaceId: string): Promise<Blob | null> {
 
 export async function deleteSnapshotBlob(spaceId: string): Promise<void> {
   try {
-    await del(snapshotBlobKey(spaceId), blobStore)
+    await del(snapshotBlobKey(spaceId), mediaBlobStore)
   } catch (err) {
     console.warn(`[media] failed to delete snapshot ${spaceId}`, err)
   }

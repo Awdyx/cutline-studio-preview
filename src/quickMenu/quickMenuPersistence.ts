@@ -1,4 +1,6 @@
-export const QUICK_MENU_STORAGE_KEY = 'cutline-quick-menu-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const QUICK_MENU_STORAGE_KEY = scopedStorageKey('cutline-quick-menu-v1')
 
 export type QuickMenuMode = 'shortcut' | 'study'
 

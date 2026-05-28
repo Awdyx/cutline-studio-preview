@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { scopedStorageKey } from '../storage/storageScope'
 import { useStrokesStore } from './strokesStore'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import {
@@ -13,7 +14,7 @@ export type LassoTargetType = 'strokes' | CanvasItemType
 
 const DEFAULT_TARGETS: LassoTargetType[] = ['strokes']
 
-const LASSO_TARGETS_KEY = 'cutline-lasso-targets-v1'
+const LASSO_TARGETS_KEY = scopedStorageKey('cutline-lasso-targets-v1')
 const VALID_TARGETS = new Set<LassoTargetType>([
   'strokes', 'sticky', 'text', 'image', 'video', 'space', 'study_hub',
 ])

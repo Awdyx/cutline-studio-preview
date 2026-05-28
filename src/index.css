@@ -645,11 +645,13 @@ textarea,
   overflow: hidden;
   background: var(--canvas-bg);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.42s ease-out;
 }
 
 .cutline-app-shell[data-ready] {
   opacity: 1;
+  pointer-events: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

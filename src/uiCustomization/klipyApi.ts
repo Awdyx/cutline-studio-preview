@@ -1,3 +1,5 @@
+import { scopedStorageKey } from '../storage/storageScope'
+
 export type KlipyMediaKind = 'gifs' | 'stickers'
 
 export interface KlipyMediaResult {
@@ -9,7 +11,7 @@ export interface KlipyMediaResult {
 }
 
 const KLIPY_BASE = 'https://api.klipy.com/api/v1'
-const CUSTOMER_ID_KEY = 'cutline-klipy-customer-id'
+const CUSTOMER_ID_KEY = scopedStorageKey('cutline-klipy-customer-id')
 
 export const KLIPY_DEFAULT_TERMS = [
   'korean aesthetic',
@@ -37,7 +39,8 @@ const DEFAULT_FEED_TOTAL = 42
 /** KLIPY search requires per_page >= 8. */
 const DEFAULT_FEED_PER_TERM = 8
 
-const FEED_CACHE_KEY = (kind: KlipyMediaKind) => `cutline-klipy-feed-${kind}`
+const FEED_CACHE_KEY = (kind: KlipyMediaKind) =>
+  scopedStorageKey(`cutline-klipy-feed-${kind}`)
 const FEED_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 1 week
 
 type PersistedFeed = { results: KlipyMediaResult[]; fetchedAt: number }

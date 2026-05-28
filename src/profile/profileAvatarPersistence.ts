@@ -1,4 +1,6 @@
-const DB_NAME = 'cutline-profile'
+import { scopedIdbName } from '../storage/storageScope'
+
+const DB_NAME = scopedIdbName('cutline-profile')
 const DB_VERSION = 1
 const STORE_NAME = 'avatar'
 const AVATAR_KEY = 'user'

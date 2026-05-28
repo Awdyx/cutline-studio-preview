@@ -42,12 +42,14 @@ export const useSoundStore = create<SoundState>((set, get) => ({
     const loaded = loadSoundSettingsFromStorage()
     set({ ...loaded, hydrated: true })
     persistEnabled = true
-    ensureAudioContext()
-    applyOutputGain(loaded.muted)
     if (!isTouchFirstDevice()) {
+      ensureAudioContext()
       backgroundMusic.preload()
     }
-    applyMusic(loaded.musicEnabled)
+    applyOutputGain(loaded.muted)
+    if (!isTouchFirstDevice()) {
+      applyMusic(loaded.musicEnabled)
+    }
   },
 
   setMuted: (muted) => {

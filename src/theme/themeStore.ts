@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { scopedStorageKey } from '../storage/storageScope'
 import type { PaletteConfig } from './paletteGenerator'
 
 export type ThemeMode = 'light' | 'dark' | 'auto'
@@ -43,7 +44,7 @@ export const useThemeStore = create<ThemeState>()(
       setMode: (mode) => set({ mode }),
     }),
     {
-      name: 'cutline-theme-v1',
+      name: scopedStorageKey('cutline-theme-v1'),
       version: 3,
       migrate: (persisted: unknown, fromVersion) => {
         const state = persisted as PersistedV1

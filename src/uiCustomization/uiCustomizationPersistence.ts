@@ -10,7 +10,9 @@ import {
   pinRectFromSize,
 } from './types'
 
-export const UI_CUSTOMIZATION_STORAGE_KEY = 'cutline-ui-customization-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const UI_CUSTOMIZATION_STORAGE_KEY = scopedStorageKey('cutline-ui-customization-v1')
 
 export type PersistedUiCustomization = {
   pins: UiPin[]

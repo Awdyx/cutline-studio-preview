@@ -1,7 +1,9 @@
 import type { PinnedTrack, ProfileSocialLink, UserProfile } from './types'
 import { parseProfileMediaFrame } from './profileMediaFrame'
 
-export const PROFILE_STORAGE_KEY = 'cutline-profile-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const PROFILE_STORAGE_KEY = scopedStorageKey('cutline-profile-v1')
 
 export const DEFAULT_PROFILE: UserProfile = {
   displayName: 'James',

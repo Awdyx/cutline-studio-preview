@@ -1,4 +1,6 @@
-export const CANVAS_LOCK_STORAGE_KEY = 'cutline-canvas-lock-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const CANVAS_LOCK_STORAGE_KEY = scopedStorageKey('cutline-canvas-lock-v1')
 
 type PersistedLock = {
   isLocked: boolean

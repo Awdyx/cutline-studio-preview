@@ -59,6 +59,11 @@ function initSfxChain(context: AudioContext): void {
   sfxSink = sfxBus
 }
 
+/** Shared SFX context — also used for ambient music on touch-first devices. */
+export function getAudioContext(): AudioContext | null {
+  return ctx
+}
+
 export function ensureAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null
   try {

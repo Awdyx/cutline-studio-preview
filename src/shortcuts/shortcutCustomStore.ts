@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { scopedStorageKey } from '../storage/storageScope'
 import { modKeyEvent, modKeyLabel } from './modKey'
 import { SHORTCUTS_BY_ID } from './shortcutDefs'
 
@@ -142,6 +143,6 @@ export const useShortcutCustomStore = create<ShortcutCustomState>()(
         return null
       },
     }),
-    { name: 'cutline-shortcut-overrides', version: 1 },
+    { name: scopedStorageKey('cutline-shortcut-overrides'), version: 1 },
   ),
 )

@@ -4,7 +4,9 @@ import { useLassoStore } from './useLassoStore'
 
 export type ToolMode = 'pen' | 'highlighter' | 'erase' | 'lasso'
 
-const STORAGE_KEY = 'cutline-tools-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+const STORAGE_KEY = scopedStorageKey('cutline-tools-v1')
 
 type PersistedTools = {
   mode?: ToolMode

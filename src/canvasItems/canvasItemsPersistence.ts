@@ -15,7 +15,9 @@ function normalizeStickyColor(value: unknown): StickyColorId | undefined {
 }
 import { studyHubDimensionsForWidth } from './studyHubBounds'
 
-export const CANVAS_ITEMS_STORAGE_KEY = 'cutline-canvas-items-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const CANVAS_ITEMS_STORAGE_KEY = scopedStorageKey('cutline-canvas-items-v1')
 const STORAGE_VERSION = 1
 const MAX_ITEM_BYTES = 5 * 1024 * 1024
 

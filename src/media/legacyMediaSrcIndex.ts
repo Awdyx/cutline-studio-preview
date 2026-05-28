@@ -1,5 +1,6 @@
 import { CANVAS_ITEMS_STORAGE_KEY } from '../canvasItems/canvasItemsPersistence'
 import { WORKSPACE_STORAGE_KEY } from '../spaces/workspacePersistence'
+import { isCutlineStorageKey } from '../storage/storageScope'
 import { isInlineDataUrl } from './mediaKeys'
 
 type LegacyMediaFields = {
@@ -51,7 +52,7 @@ export function buildLegacyMediaSrcIndex(): Map<string, string> {
 
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
-    if (!key?.startsWith('cutline')) continue
+    if (!key || !isCutlineStorageKey(key)) continue
     try {
       const raw = localStorage.getItem(key)
       if (!raw || !raw.includes('data:')) continue

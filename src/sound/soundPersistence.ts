@@ -1,4 +1,6 @@
-export const SOUND_STORAGE_KEY = 'cutline-sound-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const SOUND_STORAGE_KEY = scopedStorageKey('cutline-sound-v1')
 
 export type PersistedSoundSettings = {
   muted: boolean

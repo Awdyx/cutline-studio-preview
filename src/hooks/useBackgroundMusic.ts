@@ -9,27 +9,68 @@ import { unlockAudioFromUserGesture } from '../sound/unlockAudio'
 
 export function useBackgroundMusic() {
   useEffect(() => {
+    let touchMusicReady = !isTouchFirstDevice()
+
     const sync = () => {
       const { musicEnabled, hydrated } = useSoundStore.getState()
-      if (!hydrated) return
+      if (!hydrated || !touchMusicReady) return
       backgroundMusic.sync(musicEnabled)
     }
 
     syncBackgroundMusicEnclosedAcoustics()
 
-    const startSync = () => sync()
+    let unsubHydrated: (() => void) | undefined
+    let idlePreload: Promise<void> | undefined
+    let idleSync: Promise<void> | undefined
+
+    function startTouchIdleFallbacks() {
+      touchMusicReady = true
+      idlePreload = idleAfterFirstPaint(2000).then(() => backgroundMusic.preload())
+      idleSync = idleAfterFirstPaint(1200).then(sync)
+    }
+
+    function attachGestureUnlock() {
+      function unlock() {
+        touchMusicReady = true
+        unlockAudioFromUserGesture()
+        sync()
+      }
+
+      document.addEventListener('pointerdown', unlock, { capture: true })
+      document.addEventListener('keydown', unlock, { capture: true })
+
+      return () => {
+        document.removeEventListener('pointerdown', unlock, { capture: true })
+        document.removeEventListener('keydown', unlock, { capture: true })
+      }
+    }
+
+    let removeGestureUnlock = attachGestureUnlock()
 
     if (isTouchFirstDevice()) {
-      const startPreload = () => backgroundMusic.preload()
-      document.addEventListener('pointerdown', startPreload, { once: true, capture: true })
-      void idleAfterFirstPaint(1200).then(startPreload)
-      void idleAfterFirstPaint(400).then(startSync)
+      removeGestureUnlock()
+
+      const startTouchAudio = () => {
+        startTouchIdleFallbacks()
+        removeGestureUnlock = attachGestureUnlock()
+      }
+
+      if (useSoundStore.getState().hydrated) {
+        startTouchAudio()
+      } else {
+        unsubHydrated = useSoundStore.subscribe((state) => {
+          if (!state.hydrated) return
+          unsubHydrated?.()
+          unsubHydrated = undefined
+          startTouchAudio()
+        })
+      }
     } else {
       backgroundMusic.preload()
       if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(startSync, { timeout: 200 })
+        requestIdleCallback(sync, { timeout: 200 })
       } else {
-        setTimeout(startSync, 0)
+        setTimeout(sync, 0)
       }
     }
 
@@ -41,19 +82,14 @@ export function useBackgroundMusic() {
       syncBackgroundMusicEnclosedAcoustics()
     })
 
-    function unlock() {
-      unlockAudioFromUserGesture()
-    }
-
-    document.addEventListener('pointerdown', unlock, { capture: true })
-    document.addEventListener('keydown', unlock, { capture: true })
-
     return () => {
+      unsubHydrated?.()
+      void idlePreload
+      void idleSync
+      removeGestureUnlock()
       unsubSound()
       unsubWorkspace()
       unsubStudyFocus()
-      document.removeEventListener('pointerdown', unlock, { capture: true })
-      document.removeEventListener('keydown', unlock, { capture: true })
     }
   }, [])
 }

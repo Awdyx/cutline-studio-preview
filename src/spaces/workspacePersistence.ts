@@ -14,7 +14,9 @@ import {
   type SpaceCanvasData,
 } from './types'
 
-export const WORKSPACE_STORAGE_KEY = 'cutline-workspace-v1'
+import { scopedStorageKey } from '../storage/storageScope'
+
+export const WORKSPACE_STORAGE_KEY = scopedStorageKey('cutline-workspace-v1')
 export const WORKSPACE_STORAGE_VERSION = 2
 
 type PersistedSpace = {

@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STUDIO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPANY_ROOT="$(cd "$STUDIO_ROOT/../cutline-2.0" && pwd)"
-WEB_DIR="$COMPANY_ROOT/web"
+LEGACY_WEB_DIR="$COMPANY_ROOT/web"
 
 AUDIO_GIT_PATH="public/audio/account-selection.mp3"
 AUDIO_MIN_BYTES=1000000
@@ -15,7 +15,6 @@ done_msg() { echo "✓ $*"; }
 
 [[ -d "$STUDIO_ROOT/.git" ]] || die "cutline-studio git repo not found at $STUDIO_ROOT"
 [[ -d "$COMPANY_ROOT/.git" ]] || die "Company repo not found at $COMPANY_ROOT (expected ../cutline-2.0)"
-[[ -d "$WEB_DIR" ]] || die "Company web/ folder not found at $WEB_DIR"
 
 cd "$STUDIO_ROOT"
 
@@ -44,6 +43,19 @@ ensure_worktree_audio() {
   [[ -f "$STUDIO_ROOT/$AUDIO_GIT_PATH" ]] \
     || die "Failed to restore $AUDIO_GIT_PATH into the working tree."
   done_msg "Audio asset restored locally"
+}
+
+migrate_legacy_web_layout() {
+  [[ -d "$LEGACY_WEB_DIR" ]] || return 0
+
+  step "Migrating legacy cutline-2.0/web/ layout to repo root…"
+
+  if [[ -f "$LEGACY_WEB_DIR/server.js" && ! -f "$COMPANY_ROOT/server.js" ]]; then
+    cp "$LEGACY_WEB_DIR/server.js" "$COMPANY_ROOT/server.js"
+  fi
+
+  rm -rf "$LEGACY_WEB_DIR"
+  done_msg "Removed legacy web/ folder"
 }
 
 PAGES_BUILD_DIR=""
@@ -102,7 +114,9 @@ ensure_tracked_audio
 ensure_worktree_audio
 build_pages_dist
 
-step "Syncing cutline-studio → cutline-2.0/web/"
+migrate_legacy_web_layout
+
+step "Syncing cutline-studio → cutline-2.0 (main repo root)"
 rsync -a --delete \
   --exclude node_modules \
   --exclude dist \
@@ -113,14 +127,23 @@ rsync -a --delete \
   --exclude Dockerfile \
   --exclude server.js \
   --exclude scripts/push-all.sh \
+  --exclude 'scripts/deploy-staging.sh' \
+  --exclude 'scripts/github-staging-webhook-server.js' \
+  --exclude 'scripts/README-STAGING-WEBHOOK.md' \
+  --exclude caddy \
+  --exclude systemd \
+  --exclude docker-compose.staging.yml \
+  --exclude STAGING_SETUP.md \
+  --exclude .env.staging.example \
+  --exclude .dockerignore \
   --exclude 'public/audio/' \
-  "$STUDIO_ROOT/" "$WEB_DIR/"
+  "$STUDIO_ROOT/" "$COMPANY_ROOT/"
 
-mkdir -p "$WEB_DIR/public/audio"
-rsync -a "$STUDIO_ROOT/public/audio/" "$WEB_DIR/public/audio/"
-[[ -f "$WEB_DIR/$AUDIO_GIT_PATH" ]] \
-  || die "Company web missing audio after sync ($AUDIO_GIT_PATH)."
-done_msg "Synced to company web/"
+mkdir -p "$COMPANY_ROOT/public/audio"
+rsync -a "$STUDIO_ROOT/public/audio/" "$COMPANY_ROOT/public/audio/"
+[[ -f "$COMPANY_ROOT/$AUDIO_GIT_PATH" ]] \
+  || die "Company repo missing audio after sync ($AUDIO_GIT_PATH)."
+done_msg "Synced to company repo root"
 
 step "Pushing personal demo source (github.com/Awdyx/cutline-studio-demo)"
 git push public-demo main
@@ -129,22 +152,22 @@ publish_personal_demo_live
 
 cd "$COMPANY_ROOT"
 
-if [[ -n "$(git status --porcelain -- web)" ]]; then
-  if [[ ! -f "$WEB_DIR/$AUDIO_GIT_PATH" ]]; then
-    die "Company web missing audio asset; refusing to commit sync."
+if [[ -n "$(git status --porcelain)" ]]; then
+  if [[ ! -f "$COMPANY_ROOT/$AUDIO_GIT_PATH" ]]; then
+    die "Company repo missing audio asset; refusing to commit sync."
   fi
 
   SYNC_MSG="Sync cutline-studio ($(git -C "$STUDIO_ROOT" log -1 --pretty=format:'%h %s'))"
-  git add web
+  git add -A
 
-  if git diff --cached --name-only --diff-filter=D -- web | grep -Fq "web/public/audio/account-selection.mp3"; then
-    die "Sync would delete web/public/audio/account-selection.mp3 from company web/. Aborting."
+  if git diff --cached --name-only --diff-filter=D | grep -Fq "$AUDIO_GIT_PATH"; then
+    die "Sync would delete $AUDIO_GIT_PATH from company repo. Aborting."
   fi
 
   git commit -m "$SYNC_MSG"
   done_msg "Committed to company repo"
 else
-  done_msg "Company web/ already up to date (no new commit needed)"
+  done_msg "Company repo already up to date (no new commit needed)"
 fi
 
 step "Pushing company repo (github.com/Cutline-Tutoring/cutline-2.0)"
@@ -154,4 +177,4 @@ done_msg "Company repo updated"
 echo ""
 echo "All done — personal demo live site + company GitHub are in sync."
 echo "Live demo: https://awdyx.github.io/cutline-studio-demo/"
-echo "If the site looks stale, set GitHub → Settings → Pages → Deploy from branch → gh-pages → / (root)."
+echo "Company app: https://github.com/Cutline-Tutoring/cutline-2.0 (main branch root)"

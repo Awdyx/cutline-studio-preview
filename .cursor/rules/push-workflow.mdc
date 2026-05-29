@@ -21,6 +21,6 @@ Also honor: **"full deploy"**, **"ship it"**, **"deploy everything"**, "push my 
    - Personal demo source: `Awdyx/cutline-studio-demo` → `main`
    - Fresh iPad demo: `Awdyx/cutline-studio-play` → `main` (when remote configured)
    - Live demo: same repo → `gh-pages` (built Pages artifact)
-   - Company: `Cutline-Tutoring/cutline-2.0` → `web/` on branch `master` (rsync + commit if needed)
+   - Company: `Cutline-Tutoring/cutline-2.0` → `web/` on branch `main` (rsync + commit if needed)
 
 Do not ask them to open terminals, switch repos, or run scripts themselves.

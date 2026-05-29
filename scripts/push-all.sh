@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STUDIO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPANY_ROOT="$(cd "$STUDIO_ROOT/../cutline-2.0" && pwd)"
 WEB_DIR="$COMPANY_ROOT/web"
-COMPANY_BRANCH="${COMPANY_BRANCH:-master}"
+COMPANY_BRANCH="${COMPANY_BRANCH:-main}"
 
 # remote_name|github_repo_slug|live_url_label
 PERSONAL_DEMOS=(

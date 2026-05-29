@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STUDIO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPANY_ROOT="$(cd "$STUDIO_ROOT/../cutline-2.0" && pwd)"
 WEB_DIR="$COMPANY_ROOT/web"
+COMPANY_BRANCH="${COMPANY_BRANCH:-master}"
 
 # remote_name|github_repo_slug|live_url_label
 PERSONAL_DEMOS=(
@@ -160,9 +161,9 @@ else
   done_msg "Company web/ already up to date (no new commit needed)"
 fi
 
-step "Pushing company repo (github.com/Cutline-Tutoring/cutline-2.0)"
-git push origin main
-done_msg "Company repo updated"
+step "Pushing company repo (github.com/Cutline-Tutoring/cutline-2.0 → $COMPANY_BRANCH)"
+git push origin "HEAD:$COMPANY_BRANCH"
+done_msg "Company repo updated ($COMPANY_BRANCH)"
 
 echo ""
 echo "All done — personal demo live site(s) + company GitHub are in sync."

@@ -9,7 +9,7 @@ export function useTrackSearch({ debounce = 350 } = {}) {
   const [results, setResults] = useState<Track[]>([])
   const [status, setStatus] = useState<TrackSearchStatus>('idle')
   const seq = useRef(0)
-  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     clearTimeout(timer.current)

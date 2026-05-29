@@ -33,11 +33,11 @@ function jsonp(path: string, { timeout = 8000 } = {}): Promise<{ results?: unkno
 
     function cleanup() {
       clearTimeout(timer)
-      delete (window as Record<string, unknown>)[cb]
+      delete (window as unknown as Record<string, unknown>)[cb]
       script.remove()
     }
 
-    ;(window as Record<string, unknown>)[cb] = (data: { results?: unknown[] }) => {
+    ;(window as unknown as Record<string, unknown>)[cb] = (data: { results?: unknown[] }) => {
       cleanup()
       resolve(data)
     }

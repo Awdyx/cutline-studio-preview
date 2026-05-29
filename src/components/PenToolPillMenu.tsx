@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type ComponentType } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Eraser, Highlighter, Pen } from 'lucide-react'
@@ -15,7 +15,15 @@ const ICON_STROKE = 2
 /** Thin physical ring behind the glyph (theme-colored via --pill-icon-halo). */
 const ICON_HALO_STROKE = 3
 
-const TOOL_DEFS: { mode: ToolMode; Icon: typeof Pen; label: string }[] = [
+type ToolIconProps = {
+  size?: number | string
+  strokeWidth?: number | string
+  className?: string
+  stroke?: string
+  color?: string
+}
+
+const TOOL_DEFS: { mode: ToolMode; Icon: ComponentType<ToolIconProps>; label: string }[] = [
   { mode: 'pen', Icon: Pen, label: 'Pen' },
   { mode: 'highlighter', Icon: Highlighter, label: 'Highlighter' },
   { mode: 'lasso', Icon: LassoIcon, label: 'Lasso' },
@@ -30,7 +38,7 @@ const PEN_TOOL_PILL_MOTION = {
   transition: CHROME_MENU_TRANSITION,
 }
 
-function PillToolIcon({ Icon }: { Icon: typeof Pen }) {
+function PillToolIcon({ Icon }: { Icon: ComponentType<ToolIconProps> }) {
   return (
     <span className="pen-tool-pill__icon" aria-hidden>
       <Icon

@@ -62,13 +62,6 @@ function persistTools(state: ToolState): void {
   }
 }
 
-function normalizeMode(mode?: string): ToolMode {
-  if (mode === 'highlighter') return 'highlighter'
-  if (mode === 'erase' || mode === 'erase-tap' || mode === 'erase-drag') return 'erase'
-  if (mode === 'lasso') return 'lasso'
-  return 'pen'
-}
-
 const persisted = loadPersisted()
 
 export const useToolStore = create<ToolState>((set, get) => ({

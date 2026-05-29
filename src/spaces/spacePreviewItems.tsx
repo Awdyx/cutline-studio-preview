@@ -228,8 +228,6 @@ export function PreviewStudyHubItem({
     effectiveMode === 'light'
       ? 'rgba(255, 255, 255, 0.85)'
       : 'rgba(44, 46, 50, 0.85)'
-  const muted =
-    effectiveMode === 'light' ? 'rgba(0, 0, 0, 0.55)' : 'rgba(255, 255, 255, 0.55)'
   const primary =
     effectiveMode === 'light' ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.9)'
 

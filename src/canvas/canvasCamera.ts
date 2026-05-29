@@ -2,9 +2,7 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import { PHONE_HEADER_BLOCK_HEIGHT } from '../styles/phoneChrome'
 import {
-  CANVAS_HEIGHT,
   CANVAS_MAX_SCALE,
-  CANVAS_WIDTH,
   CANVAS_ZOOM_EDGE_PADDING,
   canvasLayoutHeight,
   canvasLayoutWidth,

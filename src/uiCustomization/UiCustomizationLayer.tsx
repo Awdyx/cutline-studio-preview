@@ -3,6 +3,7 @@ import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
 import { Check, Crop, Pencil } from 'lucide-react'
 import { playSound } from '../sound/playSound'
 import { font } from '../styles/tokens'
+import type { UiPinAsset } from './types'
 import UiPinTray from './UiPinTray'
 import UiPinToolbar from './UiPinToolbar'
 import {
@@ -169,7 +170,7 @@ function GhostImageAsset({ mediaId }: { mediaId: string }) {
   )
 }
 
-function GhostContent({ asset, previewUrl }: { asset: ReturnType<typeof useUiCustomizationStore>['pinDrag'] extends infer D ? D extends object ? D['asset'] : never : never; previewUrl?: string }) {
+function GhostContent({ asset, previewUrl }: { asset: UiPinAsset; previewUrl?: string }) {
   if (!asset) return null
 
   if (asset.kind === 'emoji') {

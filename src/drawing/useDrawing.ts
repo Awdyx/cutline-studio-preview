@@ -208,12 +208,6 @@ export function useDrawing(
       if (activeStroke) endStroke()
     }
 
-    function hasActiveDrawSession(): boolean {
-      if (eraseActive) return true
-      if (activeStickyId) return true
-      return useStrokesStore.getState().activeStroke !== null
-    }
-
     function onSpaceDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.repeat) return
       if (isEditableTarget(e.target)) return

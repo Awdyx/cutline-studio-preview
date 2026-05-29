@@ -5,7 +5,6 @@ import type { SpacePreviewPan } from '../spaces/spacePreviewPan'
 import { DEFAULT_SPACE_NAME_ALIGNMENT, DEFAULT_TEXT_ALIGNMENT } from './textAlignment'
 
 export type { ItemTextAlignment, TextAlignH, TextAlignV } from './textAlignment'
-export type { StickyColorId }
 export { DEFAULT_TEXT_ALIGNMENT, DEFAULT_SPACE_NAME_ALIGNMENT }
 export type { CanvasLayer } from '../canvasLock/layer'
 

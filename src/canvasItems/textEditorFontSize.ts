@@ -135,7 +135,7 @@ export function prepareEditorForTyping(editor: HTMLElement, defaultPx: number): 
   if (!isEditorEmpty(editor)) return
 
   editor.innerHTML = ''
-  return insertTypingSpan(
+  insertTypingSpan(
     (() => {
       const range = document.createRange()
       range.selectNodeContents(editor)

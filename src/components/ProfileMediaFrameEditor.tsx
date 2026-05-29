@@ -94,7 +94,7 @@ function applyImageStyles(img: HTMLImageElement, frame: ProfileMediaFrame) {
   const style = framedImageStyle(frame)
   for (const [key, value] of Object.entries(style)) {
     if (value != null) {
-      ;(img.style as CSSProperties & Record<string, string>)[key] = String(value)
+      ;(img.style as unknown as Record<string, string>)[key] = String(value)
     }
   }
 }
@@ -654,8 +654,8 @@ export default function ProfileMediaFrameEditor({
           height: '100%',
           objectFit: 'cover',
           userSelect: 'none',
-          WebkitUserDrag: 'none',
           pointerEvents: 'none',
+          ...({ WebkitUserDrag: 'none' } as CSSProperties),
           willChange: isGrabbing ? 'transform, object-position' : undefined,
         }}
       />

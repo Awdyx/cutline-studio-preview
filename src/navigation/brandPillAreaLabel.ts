@@ -1,7 +1,6 @@
 import type { AppDestination } from '../navigation/appDestinationStore'
 import { useAppDestinationStore } from '../navigation/appDestinationStore'
 import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
-import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 
 export type BrandPillAreaLabel = AppDestination | 'canvas'

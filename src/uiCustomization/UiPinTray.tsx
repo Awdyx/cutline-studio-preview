@@ -40,7 +40,6 @@ import {
   DRAW_TOOL_SIZE_MAX,
   DRAW_TOOL_SIZE_MIN,
   useUiCustomizationStore,
-  UI_FOCUS_SCALE,
 } from './uiCustomizationStore'
 import { DrawingStrokesSvg } from './DrawingStrokesSvg'
 import { UI_PIN_DEFAULT_EMOJI_SIZE, UI_PIN_DEFAULT_SIZE } from './types'
@@ -703,7 +702,7 @@ function DraggableImage({
 }: {
   img: StagedImage
   pos: { x: number; y: number }
-  containerRef: React.RefObject<HTMLDivElement>
+  containerRef: React.RefObject<HTMLDivElement | null>
   onDragEnd: (id: string, x: number, y: number) => void
   onRemove: (id: string) => void
   onPick: (img: StagedImage) => void
@@ -909,7 +908,7 @@ function ImageTab({
         role="button"
         tabIndex={0}
         aria-label="Tap to upload an image or GIF"
-        onClick={(e) => {
+        onClick={() => {
           if (uploading) return
           onPickFile()
         }}
@@ -1245,14 +1244,7 @@ function KlipyMediaGrid({
               ))}
             </div>
             <KlipyLoadSentinel
-              enabled={
-                hasMore &&
-                !loadingMore &&
-                status !== 'loading' &&
-                status !== 'error' &&
-                status !== 'rate_limit' &&
-                status !== 'unconfigured'
-              }
+              enabled={hasMore && !loadingMore && status !== 'loading'}
               rootRef={scrollRef}
               onVisible={onLoadMore}
             />

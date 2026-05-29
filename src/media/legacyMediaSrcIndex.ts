@@ -31,7 +31,7 @@ function walkJsonForMediaSrc(value: unknown, index: Map<string, string>): void {
   if (!value || typeof value !== 'object') return
 
   const record = value as Record<string, unknown>
-  indexLegacyMediaSrc(record as LegacyMediaFields, index)
+  indexLegacyMediaSrc(index, record as LegacyMediaFields)
 
   if (
     typeof record.snapshot === 'string' &&

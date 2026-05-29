@@ -1,4 +1,4 @@
-import { CANVAS_ITEMS_STORAGE_KEY, loadCanvasItemsFromStorage } from '../canvasItems/canvasItemsPersistence'
+import { loadCanvasItemsFromStorage } from '../canvasItems/canvasItemsPersistence'
 import type { CanvasItem } from '../canvasItems/types'
 import type { LoadedWorkspace } from '../spaces/workspacePersistence'
 import { tryRecoverMediaBlob } from './tryRecoverMediaBlob'

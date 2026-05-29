@@ -7,12 +7,10 @@ import { LassoIcon } from '../drawing/LassoIcon'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import ChromeTapSqueezeWrap from './ChromeTapSqueezeWrap'
 import {
-  CHROME_CARD_CLASS,
   CHROME_FROSTED_MENU_CLASS,
   CHROME_GLASS_CLASS,
   CHROME_MENU_TRANSITION,
   CHROME_SURFACE_BG_TRANSITION,
-  card,
   chromeBottomRightFixed,
   chromeFrostedMenuStyle,
   chromeGlassSurfaceBg,

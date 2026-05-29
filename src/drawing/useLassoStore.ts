@@ -6,8 +6,10 @@ import {
   screenPolyToCanvas,
   strokeIntersectsPolygon,
   itemIntersectsPolygon,
+  studioCentrePolygon,
   type Pt,
 } from './lassoGeometry'
+import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import type { CanvasItemType } from '../canvasItems/types'
 
 export type LassoTargetType = 'strokes' | CanvasItemType
@@ -72,6 +74,10 @@ type LassoState = {
   undoClearSelection: () => boolean
   toggleTargetType: (type: LassoTargetType) => void
   setDragOffset: (offset: { canvasDx: number; canvasDy: number; ids: string[] } | null) => void
+  /** Delete lasso-selected strokes and items in one undo step. Returns true if anything was removed. */
+  deleteSelection: () => boolean
+  /** Select every stroke and item intersecting the studio-centre working area. */
+  selectAllInStudioCentre: () => boolean
 }
 
 export const useLassoStore = create<LassoState>((set, get) => ({
@@ -173,4 +179,64 @@ export const useLassoStore = create<LassoState>((set, get) => ({
     }),
 
   setDragOffset: (offset) => set({ dragOffset: offset }),
+
+  deleteSelection: () => {
+    const { selectedStrokeIds, selectedItemIds } = get()
+    if (selectedStrokeIds.length === 0 && selectedItemIds.length === 0) return false
+
+    // Items first: deleteSelected() pushes one snapshot that captures the full
+    // state (strokes still present). Strokes second: skip their own snapshot so
+    // the entire mixed deletion lands in a single undo step.
+    if (selectedItemIds.length > 0) useCanvasItemsStore.getState().deleteSelected()
+    if (selectedStrokeIds.length > 0) {
+      useStrokesStore
+        .getState()
+        .deleteStrokes(selectedStrokeIds, { skipSnapshot: selectedItemIds.length > 0 })
+    }
+
+    // Clear WITHOUT saving to previous* — elements are deleted, not just
+    // deselected, so undoClearSelection() must not intercept the next Cmd+Z.
+    set({
+      selectedStrokeIds: [],
+      selectedItemIds: [],
+      previousStrokeIds: [],
+      previousItemIds: [],
+      dragOffset: null,
+    })
+    return true
+  },
+
+  selectAllInStudioCentre: () => {
+    const centrePoly = studioCentrePolygon()
+    const { strokes } = useStrokesStore.getState()
+    const strokeIds = strokes
+      .filter((s) => strokeIntersectsPolygon(s, centrePoly))
+      .map((s) => s.id)
+
+    const { items } = useCanvasItemsStore.getState()
+    const itemIds = items
+      .filter((item) => itemIntersectsPolygon(item, centrePoly))
+      .map((item) => item.id)
+
+    if (strokeIds.length === 0 && itemIds.length === 0) return false
+
+    useShortcutUiStore.getState().dismissChromeForCanvasInteraction()
+
+    if (itemIds.length > 0) {
+      useCanvasItemsStore.getState().setSelectedIds(itemIds)
+    } else {
+      useCanvasItemsStore.getState().clearSelection({ silent: true })
+    }
+
+    set({
+      drawingPoints: [],
+      isDrawing: false,
+      selectedStrokeIds: strokeIds,
+      selectedItemIds: itemIds,
+      previousStrokeIds: [],
+      previousItemIds: [],
+      dragOffset: null,
+    })
+    return true
+  },
 }))

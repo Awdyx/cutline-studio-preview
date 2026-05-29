@@ -17,8 +17,9 @@ import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { useStrokesStore } from './strokesStore'
 import { useToolStore } from './toolStore'
 import type { StrokePoint } from './types'
-import { clientToCanvasFromElement } from './canvasCoords'
+import { clientToCanvasFromElementForStroke } from './canvasCoords'
 import { useLassoStore } from './useLassoStore'
+import { keepActiveLassoSelectionForPointer } from './lassoPointerGuard'
 import { isPointerOnCanvasItem } from '../canvas/canvasSelectionDismiss'
 import { isUiDrawCanvasTarget } from './penToolMenuLayout'
 
@@ -80,7 +81,7 @@ export function useDrawing(
     }
 
     function toCanvasCoords(clientX: number, clientY: number): { x: number; y: number } | null {
-      return clientToCanvasFromElement(clientX, clientY, canvasEl)
+      return clientToCanvasFromElementForStroke(clientX, clientY, canvasEl)
     }
 
     function toStickyLocalPoint(
@@ -146,7 +147,7 @@ export function useDrawing(
         eraseActive = true
         beginDragErase()
         lastEraseAt = 0
-        applyDragErase(coords)
+        eraseAt(coords)
         return
       }
 
@@ -277,6 +278,11 @@ export function useDrawing(
       return !!target.closest('.canvas-item-resize-handle, .canvas-item-drag-handle-wrapper')
     }
 
+    function isLassoSelectionChromeTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof Element)) return false
+      return !!target.closest('.lasso-selection-pane')
+    }
+
     function onTouchStart(event: TouchEvent) {
       if (event.touches.length !== 1) return
       const touch = event.touches[0]
@@ -301,8 +307,18 @@ export function useDrawing(
     }
 
     function onTouchEnd(event: TouchEvent) {
-      if (penMenu()?.isActive()) return
+      const menu = penMenu()
+      if (menu?.isMenuOpen()) {
+        const ended = event.changedTouches[0]
+        if (ended) menu.releasePointer(ended.clientX, ended.clientY)
+        return
+      }
+      // Pointer stroke still live — wait for pointerup; iPad can reorder touch vs pointer end.
       if (pointerPenActive || isSpaceDrawHeld()) return
+      if (menu?.isPending()) {
+        const ended = event.changedTouches[0]
+        if (ended) menu.releasePointer(ended.clientX, ended.clientY)
+      }
       const ended = event.changedTouches[0]
       if (ended && isStylusTouch(ended)) {
         setPenDown(false)
@@ -312,6 +328,7 @@ export function useDrawing(
     function onPointerDown(event: PointerEvent) {
       if (!isCanvasEventTarget(event.target)) return
       if (isHandleTarget(event.target)) return
+      if (isLassoSelectionChromeTarget(event.target)) return
       if (penMenu()?.isMenuOpen()) return
       penMenu()?.onPointerDown(event)
       if (isUiDrawCanvasTarget(event.target)) return
@@ -336,6 +353,16 @@ export function useDrawing(
       capturePointer(event)
 
       if (mode === 'lasso') {
+        if (
+          keepActiveLassoSelectionForPointer(
+            event.clientX,
+            event.clientY,
+            event.target,
+            canvasEl,
+          )
+        ) {
+          return
+        }
         useLassoStore.getState().clearSelection()
         useLassoStore.getState().startLasso(event.clientX, event.clientY)
         return
@@ -370,10 +397,20 @@ export function useDrawing(
         event.pointerId === activePointerId &&
         isPhoneFingerDrawMode()
       ) {
-        penMenu()?.cancelPointerHold()
+        penMenu()?.cancelPendingHold()
       }
 
-      if (penMenu()?.onPointerMove(event)) return
+      const menu = penMenu()
+      if (
+        menu &&
+        menu.isPending() &&
+        pointerPenActive &&
+        event.pointerId === activePointerId
+      ) {
+        menu.trackPointer(event.clientX, event.clientY, event.pointerId)
+      }
+
+      if (menu?.onPointerMove(event)) return
       if (!pointerPenActive || event.pointerId !== activePointerId) return
 
       const mode = useToolStore.getState().mode
@@ -440,6 +477,13 @@ export function useDrawing(
     }
 
     function onTouchMove(event: TouchEvent) {
+      const menu = penMenu()
+      if (menu?.isActive()) {
+        for (let i = 0; i < event.touches.length; i++) {
+          const touch = event.touches[i]
+          menu.trackPointer(touch.clientX, touch.clientY)
+        }
+      }
       if (!pointerPenActive) return
       if (event.cancelable) event.preventDefault()
     }

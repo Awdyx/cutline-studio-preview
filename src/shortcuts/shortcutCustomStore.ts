@@ -81,8 +81,14 @@ export function comboMatchesEvent(combo: KeyCombo, e: KeyboardEvent): boolean {
   return ek === combo.key
 }
 
+/** Returns true when the user has turned off this shortcut's binding. */
+export function isShortcutDisabled(shortcutId: string): boolean {
+  return Boolean(useShortcutCustomStore.getState().disabled[shortcutId])
+}
+
 /** Returns the effective display labels for a shortcut (override ?? default). */
 export function effectiveDisplayKeys(shortcutId: string): string[] {
+  if (isShortcutDisabled(shortcutId)) return []
   const overrides = useShortcutCustomStore.getState().overrides
   if (overrides[shortcutId]) return overrides[shortcutId].display
   const def = SHORTCUTS_BY_ID[shortcutId]
@@ -91,6 +97,7 @@ export function effectiveDisplayKeys(shortcutId: string): string[] {
 
 /** Returns true when event matches a shortcut's effective combo (override ?? default). */
 export function matchesShortcut(e: KeyboardEvent, shortcutId: string): boolean {
+  if (isShortcutDisabled(shortcutId)) return false
   const overrides = useShortcutCustomStore.getState().overrides
   const override = overrides[shortcutId]
   if (override) return comboMatchesEvent(override, e)
@@ -103,7 +110,9 @@ export function matchesShortcut(e: KeyboardEvent, shortcutId: string): boolean {
 
 type ShortcutCustomState = {
   overrides: Record<string, KeyCombo>
+  disabled: Record<string, true>
   setOverride: (id: string, combo: KeyCombo) => void
+  disableShortcut: (id: string) => void
   resetOverride: (id: string) => void
   resetAll: () => void
   /** Returns the id of the shortcut that already uses this combo, excluding forId. */
@@ -114,23 +123,44 @@ export const useShortcutCustomStore = create<ShortcutCustomState>()(
   persist(
     (set, get) => ({
       overrides: {},
+      disabled: {},
 
       setOverride: (id, combo) =>
-        set((s) => ({ overrides: { ...s.overrides, [id]: combo } })),
+        set((s) => {
+          const nextDisabled = { ...s.disabled }
+          delete nextDisabled[id]
+          return {
+            overrides: { ...s.overrides, [id]: combo },
+            disabled: nextDisabled,
+          }
+        }),
+
+      disableShortcut: (id) =>
+        set((s) => {
+          const nextOverrides = { ...s.overrides }
+          delete nextOverrides[id]
+          return {
+            overrides: nextOverrides,
+            disabled: { ...s.disabled, [id]: true },
+          }
+        }),
 
       resetOverride: (id) =>
         set((s) => {
-          const next = { ...s.overrides }
-          delete next[id]
-          return { overrides: next }
+          const nextOverrides = { ...s.overrides }
+          delete nextOverrides[id]
+          const nextDisabled = { ...s.disabled }
+          delete nextDisabled[id]
+          return { overrides: nextOverrides, disabled: nextDisabled }
         }),
 
-      resetAll: () => set({ overrides: {} }),
+      resetAll: () => set({ overrides: {}, disabled: {} }),
 
       findConflict: (forId, combo) => {
-        const { overrides } = get()
+        const { overrides, disabled } = get()
         for (const def of Object.values(SHORTCUTS_BY_ID)) {
           if (def.id === forId) continue
+          if (disabled[def.id]) continue
           const effective = overrides[def.id] ?? displayToCombo(def.keys)
           if (!effective) continue
           if (
@@ -143,6 +173,6 @@ export const useShortcutCustomStore = create<ShortcutCustomState>()(
         return null
       },
     }),
-    { name: scopedStorageKey('cutline-shortcut-overrides'), version: 1 },
+    { name: scopedStorageKey('cutline-shortcut-overrides'), version: 2 },
   ),
 )

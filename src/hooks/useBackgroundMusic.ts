@@ -3,7 +3,7 @@ import { idleAfterFirstPaint, isTouchFirstDevice } from '../platform/compositor'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { backgroundMusic } from '../sound/backgroundMusic'
-import { syncBackgroundMusicEnclosedAcoustics } from '../sound/backgroundMusicAcoustics'
+import { syncBackgroundMusicAcoustics } from '../sound/backgroundMusicAcoustics'
 import { useSoundStore } from '../sound/soundStore'
 import { unlockAudioFromUserGesture } from '../sound/unlockAudio'
 
@@ -17,7 +17,7 @@ export function useBackgroundMusic() {
       backgroundMusic.sync(musicEnabled)
     }
 
-    syncBackgroundMusicEnclosedAcoustics()
+    syncBackgroundMusicAcoustics()
 
     let unsubHydrated: (() => void) | undefined
     let idlePreload: Promise<void> | undefined
@@ -76,10 +76,10 @@ export function useBackgroundMusic() {
 
     const unsubSound = useSoundStore.subscribe(sync)
     const unsubWorkspace = useCanvasWorkspaceStore.subscribe(() => {
-      syncBackgroundMusicEnclosedAcoustics()
+      syncBackgroundMusicAcoustics()
     })
     const unsubStudyFocus = useCanvasItemsStore.subscribe(() => {
-      syncBackgroundMusicEnclosedAcoustics()
+      syncBackgroundMusicAcoustics()
     })
 
     return () => {

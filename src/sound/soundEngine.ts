@@ -417,6 +417,24 @@ function itemGrabLift(context: AudioContext, t0: number): void {
   noiseBurst(context, 0.065, 0.01, t0 + 0.012, 440, 0.38)
 }
 
+/** Mass lift — low resonant swell when the studio slab is engaged. */
+function studioCentreGrabLift(context: AudioContext, t0: number): void {
+  const root = 46
+  tone(context, root, 0.16, 0.06, 0.32, t0, 'sine')
+  tone(context, root * 1.5, 0.055, 0.045, 0.18, t0 + 0.035, 'sine')
+  tone(context, root * 2.25, 0.028, 0.03, 0.1, t0 + 0.05, 'triangle')
+  sweep(context, root * 0.6, root * 1.05, 0.3, 0.058, t0 + 0.012)
+  noiseBurst(context, 0.2, 0.028, t0 + 0.045, 68, 1.05)
+}
+
+/** Mass settle — deep impact when the slab is released. */
+function studioCentreDropSettle(context: AudioContext, t0: number): void {
+  tone(context, 38, 0.55, 0.014, 0.26, t0)
+  tone(context, 57, 0.24, 0.01, 0.16, t0 + 0.03)
+  sweep(context, 68, 32, 0.36, 0.075, t0 + 0.008)
+  noiseBurst(context, 0.14, 0.12, t0 + 0.01, 48, 1.2)
+}
+
 /** Bouncy pluck with a soft pitch settle — Animal Crossing–ish bubble pop. */
 function bubblyPluck(
   context: AudioContext,
@@ -586,6 +604,78 @@ function aspectSnapTick(context: AudioContext, t0: number): void {
   bubblyPluck(context, 540, 0.01, t0 + 0.03, 0.068, { startMul: 1.04, endMul: 0.98 })
 }
 
+/**
+ * Canvas map overlay — quiet cartographic ticks: a soft body, then two ascending
+ * plucks like scale marks on a chart (pure sine, no noise or chrome blips).
+ */
+function minimapOpenTick(context: AudioContext, t0: number): void {
+  tone(context, 207, 0.013, 0.018, 0.068, t0, 'sine')
+  bubblyPluck(context, 370, 0.011, t0 + 0.024, 0.058, { startMul: 1.02, endMul: 1 })
+  bubblyPluck(context, 466, 0.009, t0 + 0.052, 0.064, { startMul: 1.01, endMul: 1 })
+}
+
+/** Canvas map dismiss — same cartographic tick shape as open, plucks run downward. */
+function minimapCloseTick(context: AudioContext, t0: number): void {
+  tone(context, 207, 0.013, 0.018, 0.068, t0, 'sine')
+  bubblyPluck(context, 466, 0.011, t0 + 0.024, 0.058, { startMul: 1.01, endMul: 1 })
+  bubblyPluck(context, 370, 0.009, t0 + 0.052, 0.064, { startMul: 1.02, endMul: 0.98 })
+}
+
+/**
+ * Fisheye / navigation-mode transition — a warm, dark sine glide (Animal
+ * Crossing–ish), no noise. `out` = entering overview (glide down); `in` =
+ * returning to normal (glide up). A soft sub-octave adds darkness/body.
+ */
+function fisheyeTransition(
+  context: AudioContext,
+  t0: number,
+  dir: 'in' | 'out',
+): void {
+  const dur = dir === 'out' ? 0.4 : 0.36
+  const fromHz = dir === 'out' ? 330 : 247
+  const toHz = dir === 'out' ? 247 : 330
+
+  const glide = (freqFrom: number, freqTo: number, peak: number, lpHz: number) => {
+    const osc = context.createOscillator()
+    const g = env(context, peak, 0.018, dur * 0.72, t0)
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(freqFrom, t0)
+    osc.frequency.exponentialRampToValueAtTime(freqTo, t0 + dur * 0.64)
+    const lp = context.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = lpHz
+    lp.Q.value = 0.3
+    osc.connect(lp)
+    lp.connect(g)
+    g.connect(sfxOut())
+    osc.start(t0)
+    osc.stop(t0 + dur + 0.03)
+    track(osc)
+  }
+
+  glide(fromHz, toHz, 0.024, 1200)
+  // Sub-octave for a darker, rounder body.
+  glide(fromHz / 2, toHz / 2, 0.013, 700)
+}
+
+/**
+ * Text entry confirmed (Enter) — a tactile keystroke: a short filtered noise
+ * click (the key press) topped with a warm upward pluck (the satisfying commit).
+ */
+function textCommitTick(context: AudioContext, t0: number): void {
+  // Key-press click — brief, woody filtered noise.
+  noiseBurst(context, 0.028, 0.02, t0, 1500, 0.7)
+  // Body knock so the press lands with weight.
+  canvasObjectTap(context, t0 + 0.004, 360, 0.016, 0.07, {
+    startMul: 1.08,
+    endMul: 0.92,
+    filterStart: 1300,
+    filterEnd: 700,
+  })
+  // Bright little confirm pluck — the "done" lift.
+  bubblyPluck(context, 660, 0.012, t0 + 0.028, 0.06, { startMul: 1.04, endMul: 1 })
+}
+
 /** New canvas element placed — single soft warm knock. */
 function spawnTick(context: AudioContext, t0: number): void {
   canvasObjectTap(context, t0, 318, 0.016, 0.095, {
@@ -596,9 +686,27 @@ function spawnTick(context: AudioContext, t0: number): void {
   })
 }
 
+/** Brand pill area focus — whisper loader: soft swell, three sine steps, quiet resolve. */
+function plateFocusTick(context: AudioContext, t0: number, pitchMul = 1): void {
+  const hz = (base: number) => base * pitchMul
+
+  tone(context, hz(156), 0.01, 0.028, 0.1, t0, 'sine')
+  sweep(context, hz(172), hz(380), 0.14, 0.018, t0 + 0.018)
+
+  bubblyPluck(context, hz(288), 0.0085, t0 + 0.085, 0.052, { startMul: 1.008, endMul: 1 })
+  bubblyPluck(context, hz(356), 0.009, t0 + 0.13, 0.056, { startMul: 1.01, endMul: 1 })
+  bubblyPluck(context, hz(422), 0.0095, t0 + 0.175, 0.06, { startMul: 1.012, endMul: 1.001 })
+
+  tone(context, hz(238), 0.008, 0.01, 0.078, t0 + 0.24, 'sine')
+}
+
 const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
   itemGrab(context, t0) {
     itemGrabLift(context, t0)
+  },
+
+  studioCentreGrab(context, t0) {
+    studioCentreGrabLift(context, t0)
   },
 
   itemSelect(context, t0) {
@@ -612,6 +720,10 @@ const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
   itemDrop(context, t0) {
     tone(context, 95, 0.22, 0.003, 0.09, t0)
     noiseBurst(context, 0.05, 0.06, t0 + 0.002, 180, 0.5)
+  },
+
+  studioCentreDrop(context, t0) {
+    studioCentreDropSettle(context, t0)
   },
 
   spawn(context, t0) {
@@ -702,6 +814,63 @@ const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
   aspectSnap(context, t0) {
     aspectSnapTick(context, t0)
   },
+
+  fisheyeEnter(context, t0) {
+    fisheyeTransition(context, t0, 'out')
+  },
+
+  fisheyeExit(context, t0) {
+    fisheyeTransition(context, t0, 'in')
+  },
+
+  minimapOpen(context, t0) {
+    minimapOpenTick(context, t0)
+  },
+
+  minimapClose(context, t0) {
+    minimapCloseTick(context, t0)
+  },
+
+  textCommit(context, t0) {
+    textCommitTick(context, t0)
+  },
+
+  plateFocus(context, t0) {
+    plateFocusTick(context, t0)
+  },
+}
+
+export function playPlateFocusSoundEngine(
+  _destination: unknown,
+  pitchMul: number,
+): void {
+  void playPlateFocusSoundEngineAsync(pitchMul)
+}
+
+async function playPlateFocusSoundEngineAsync(pitchMul: number): Promise<void> {
+  const context = ensureAudioContext()
+  if (!context || !sfxBus) return
+  await resumeAudioContext()
+
+  const t0 = context.currentTime
+  const now = performance.now()
+  if (now - lastPlayAt < DEDUP_MS) {
+    stopActiveNodes()
+  }
+  lastPlayAt = now
+
+  const level = SOUND_LEVELS.plateFocus
+  const playGain = context.createGain()
+  playGain.gain.value = level
+  playGain.connect(sfxBus)
+
+  const prevSink = sfxSink
+  sfxSink = playGain
+  try {
+    plateFocusTick(context, t0, pitchMul)
+  } finally {
+    sfxSink = prevSink
+  }
 }
 
 export async function resumeAudioContext(): Promise<void> {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { focusStudyHubOnCanvas } from './studyHubMenuFocus'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
+import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
 import { clientToCanvas } from '../drawing/canvasCoords'
 import { putMediaBlob } from '../media/mediaBlobStore'
 import { isPhoneLayout } from '../platform/layoutProfile'
@@ -29,8 +29,8 @@ function spawnPointCanvas(
 ): { x: number; y: number } {
   return (
     viewportItemSpawnCanvas(transformRef, viewportHost, canvasEl) ?? {
-      x: CANVAS_WIDTH / 2,
-      y: CANVAS_HEIGHT / 2,
+      x: CANVAS_ORIGINAL_WIDTH / 2,
+      y: CANVAS_ORIGINAL_HEIGHT / 2,
     }
   )
 }
@@ -173,7 +173,7 @@ export function useCanvasFileHandlers(
           transformRef,
           viewportRef.current,
           canvasRef.current,
-        ) ?? { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }
+        ) ?? { x: CANVAS_ORIGINAL_WIDTH / 2, y: CANVAS_ORIGINAL_HEIGHT / 2 }
       spawnOrFocusStudyHub(center.x, center.y, subjectId)
     },
     [spawnOrFocusStudyHub, transformRef, viewportRef, canvasRef],

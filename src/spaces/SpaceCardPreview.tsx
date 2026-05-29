@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { resolveStrokeFill } from '../drawing/colorUtils'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
+import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
 import type { Stroke } from '../drawing/types'
 import {
   canvasBackgroundColor,
@@ -155,7 +155,7 @@ export default function SpaceCardPreview({
       <svg
         width="100%"
         height="100%"
-        viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+        viewBox={`0 0 ${CANVAS_ORIGINAL_WIDTH} ${CANVAS_ORIGINAL_HEIGHT}`}
         preserveAspectRatio="xMidYMid slice"
         aria-hidden
         style={{ display: 'block' }}

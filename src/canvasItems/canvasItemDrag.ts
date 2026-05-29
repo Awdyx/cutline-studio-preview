@@ -3,7 +3,7 @@ import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import { canvasEditingAllowed } from '../canvasEdit/layer'
 import { isTouchPointerStillActive } from '../canvas/canvasPointer'
 import { primaryPointerReleased } from './canvasPointerSession'
-import { clientToCanvasFromElement } from '../drawing/canvasCoords'
+import { clientToCanvasFromElementForItem } from '../drawing/canvasCoords'
 import { playSound } from '../sound/playSound'
 import {
   startItemDragSound,
@@ -14,14 +14,26 @@ import {
   dropPositionForItem,
   hitTestSpacePreviewAt,
 } from '../spaces/spaceDropTarget'
+import {
+  isItemWithinStudioCentre,
+  showStudioCentreBoundsToast,
+} from '../canvas/studioCentre'
 import { useSpaceDropStore } from '../spaces/spaceDropStore'
-import { useCanvasItemDragStore } from './canvasItemDragStore'
+import { useStickyDropStore } from './stickyDropStore'
+import {
+  hitTestStickyForImageDrop,
+  imageCanvasPosition,
+  imageLocalPositionInSticky,
+} from './stickyImagePlacement'
+import { useCanvasItemDragStore, triggerBoundsSnapBack } from './canvasItemDragStore'
 import { useCanvasItemsStore } from './canvasItemsStore'
+import { isImageInSticky, isStickyItem } from './types'
 
 const DRAG_THRESHOLD_PX = 8
 const DRAG_ACTIVE_CLASS = 'canvas-item-drag-active'
 const HOLD_DRAG_PAN_EXCLUDE_CLASS = 'canvas-item-hold-drag-pending'
 const SPACE_DROP_ABSORB_MS = 340
+const STICKY_DROP_ABSORB_MS = 340
 
 type DragSessionOptions = {
   onReleaseWithoutDrag?: () => void
@@ -36,6 +48,7 @@ export function clearHoldDragPanExclude(root: ParentNode = document) {
 }
 
 let spaceDropTimer: ReturnType<typeof setTimeout> | null = null
+let stickyDropTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearSpaceDropTimer() {
   if (spaceDropTimer != null) {
@@ -44,9 +57,118 @@ function clearSpaceDropTimer() {
   }
 }
 
+function clearStickyDropTimer() {
+  if (stickyDropTimer != null) {
+    clearTimeout(stickyDropTimer)
+    stickyDropTimer = null
+  }
+}
+
 function clearSpaceDropState() {
   clearSpaceDropTimer()
   useSpaceDropStore.getState().clearAll()
+}
+
+function clearStickyDropState() {
+  clearStickyDropTimer()
+  useStickyDropStore.getState().clearAll()
+}
+
+function clearAllDropState() {
+  clearSpaceDropState()
+  clearStickyDropState()
+}
+
+function findDraggedItem(itemId: string) {
+  return useCanvasItemsStore.getState().items.find((entry) => entry.id === itemId)
+}
+
+function findStickyForItem(itemId: string) {
+  const item = findDraggedItem(itemId)
+  if (!item || item.type !== 'image' || !isImageInSticky(item)) return null
+  return (
+    useCanvasItemsStore
+      .getState()
+      .items.find(
+        (entry) => entry.id === item.stickyId && isStickyItem(entry),
+      ) ?? null
+  )
+}
+
+function itemCanvasOrigin(item: ReturnType<typeof findDraggedItem>) {
+  if (!item) return { x: 0, y: 0 }
+  if (item.type === 'image' && isImageInSticky(item)) {
+    const sticky = findStickyForItem(item.id)
+    if (sticky) return imageCanvasPosition(item, sticky)
+  }
+  return { x: item.x, y: item.y }
+}
+
+function updateStickyDropHover(
+  clientX: number,
+  clientY: number,
+  itemId: string,
+  canvasEl: HTMLElement,
+) {
+  const item = findDraggedItem(itemId)
+  if (!item || item.type !== 'image' || isImageInSticky(item)) {
+    useStickyDropStore.getState().setHover(null)
+    return
+  }
+
+  const hit = hitTestStickyForImageDrop(clientX, clientY, itemId, canvasEl)
+  if (!hit) {
+    useStickyDropStore.getState().setHover(null)
+    return
+  }
+
+  const sticky = useCanvasItemsStore.getState().getStickyById(hit.stickyId)
+  if (!sticky) {
+    useStickyDropStore.getState().setHover(null)
+    return
+  }
+
+  const local = imageLocalPositionInSticky(item, sticky)
+  useStickyDropStore.getState().setHover({
+    stickyId: hit.stickyId,
+    ghostItem: { ...item, x: local.x, y: local.y },
+  })
+}
+
+function executeStickyDrop(
+  itemId: string,
+  hit: ReturnType<typeof hitTestStickyForImageDrop> & object,
+) {
+  const item = findDraggedItem(itemId)
+  if (!item || item.type !== 'image') {
+    clearStickyDropState()
+    return
+  }
+
+  const sticky = useCanvasItemsStore.getState().getStickyById(hit.stickyId)
+  if (!sticky) {
+    clearStickyDropState()
+    return
+  }
+
+  const local = imageLocalPositionInSticky(item, sticky)
+  const dropStore = useStickyDropStore.getState()
+  dropStore.pulseConfirm(hit.stickyId)
+  dropStore.startAbsorb(itemId, hit.stickyId)
+  dropStore.setHover({
+    stickyId: hit.stickyId,
+    ghostItem: { ...item, x: local.x, y: local.y },
+  })
+
+  clearStickyDropTimer()
+  stickyDropTimer = setTimeout(() => {
+    stickyDropTimer = null
+    useCanvasItemsStore.getState().moveImageToSticky(itemId, hit.stickyId)
+    useStickyDropStore.getState().clearHover()
+    requestAnimationFrame(() => {
+      useStickyDropStore.getState().clearAbsorb()
+    })
+  }, STICKY_DROP_ABSORB_MS)
 }
 
 function updateSpaceDropHover(clientX: number, clientY: number, itemId: string) {
@@ -116,6 +238,8 @@ type DragSession = {
   lastClientY: number
   dragThresholdPx: number
   moved: boolean
+  dragStartX: number
+  dragStartY: number
   onReleaseWithoutDrag?: () => void
 }
 
@@ -165,6 +289,12 @@ function removeDocumentListeners() {
 function commitDragStart() {
   if (!session || session.phase === 'dragging') return
 
+  const item = findDraggedItem(session.itemId)
+  if (item) {
+    session.dragStartX = item.x
+    session.dragStartY = item.y
+  }
+
   session.phase = 'dragging'
   const store = useCanvasItemsStore.getState()
   store.beginItemDrag(session.itemId)
@@ -201,13 +331,25 @@ function finishSession() {
   if (ended) releaseBodyPointerCapture(ended.pointerId)
 
   if (!ended) {
-    clearSpaceDropState()
+    clearAllDropState()
     return
   }
 
   if (ended.phase === 'pending') {
-    clearSpaceDropState()
+    clearAllDropState()
     ended.onReleaseWithoutDrag?.()
+    return
+  }
+
+  const stickyDropHit = hitTestStickyForImageDrop(
+    ended.lastClientX,
+    ended.lastClientY,
+    ended.itemId,
+    ended.canvasEl,
+  )
+  if (stickyDropHit) {
+    stopItemDragSound()
+    executeStickyDrop(ended.itemId, stickyDropHit)
     return
   }
 
@@ -222,12 +364,59 @@ function finishSession() {
     return
   }
 
-  clearSpaceDropState()
+  clearAllDropState()
   stopItemDragSound()
+
+  const droppedItem = findDraggedItem(ended.itemId)
+  if (!droppedItem) return
+
+  if (isImageInSticky(droppedItem)) {
+    if (ended.moved) {
+      playSound('itemDrop')
+      useCanvasItemsStore.getState().updateItemPosition(
+        droppedItem.id,
+        droppedItem.x,
+        droppedItem.y,
+        { persist: true },
+      )
+    }
+    return
+  }
+
+  const dropCanvasPosition = (drag: DragSession) => {
+    const pos = clientToCanvasFromElementForItem(
+      drag.lastClientX,
+      drag.lastClientY,
+      drag.canvasEl,
+    )
+    if (!pos) return null
+    return {
+      x: pos.x - drag.grabOffsetX,
+      y: pos.y - drag.grabOffsetY,
+    }
+  }
+
+  const finalPos = dropCanvasPosition(ended)
+  const itemAtRelease = finalPos
+    ? { ...droppedItem, x: finalPos.x, y: finalPos.y }
+    : droppedItem
+
+  const allItems = useCanvasItemsStore.getState().items
+  if (!isItemWithinStudioCentre(itemAtRelease, allItems)) {
+    useCanvasItemsStore.getState().animateItemRectTo(
+      ended.itemId,
+      { x: ended.dragStartX, y: ended.dragStartY },
+      { persist: true },
+    )
+    triggerBoundsSnapBack(ended.itemId)
+    showStudioCentreBoundsToast()
+    return
+  }
+
   if (ended.moved) {
     playSound('itemDrop')
 
-    const item = useCanvasItemsStore.getState().items.find((entry) => entry.id === ended.itemId)
+    const item = findDraggedItem(ended.itemId)
     if (item) {
       useCanvasItemsStore.getState().updateItemPosition(item.id, item.x, item.y, {
         persist: true,
@@ -241,17 +430,35 @@ function applyDragPosition(clientX: number, clientY: number) {
 
   updateItemDragSound(clientX, clientY)
 
-  const pos = clientToCanvasFromElement(clientX, clientY, session.canvasEl)
+  const pos = clientToCanvasFromElementForItem(clientX, clientY, session.canvasEl)
   if (!pos) return
 
-  useCanvasItemsStore.getState().updateItemPosition(
-    session.itemId,
-    pos.x - session.grabOffsetX,
-    pos.y - session.grabOffsetY,
-    { persist: false },
-  )
+  const item = findDraggedItem(session.itemId)
+  const canvasX = pos.x - session.grabOffsetX
+  const canvasY = pos.y - session.grabOffsetY
+
+  if (item?.type === 'image' && isImageInSticky(item)) {
+    const sticky = findStickyForItem(item.id)
+    if (sticky) {
+      useCanvasItemsStore.getState().updateItemPosition(
+        session.itemId,
+        canvasX - sticky.x,
+        canvasY - sticky.y,
+        { persist: false },
+      )
+    }
+  } else {
+    useCanvasItemsStore.getState().updateItemPosition(
+      session.itemId,
+      canvasX,
+      canvasY,
+      { persist: false },
+    )
+  }
+
   session.moved = true
   updateSpaceDropHover(clientX, clientY, session.itemId)
+  updateStickyDropHover(clientX, clientY, session.itemId, session.canvasEl)
 }
 
 function scheduleDragMove(clientX: number, clientY: number) {
@@ -279,24 +486,28 @@ function startDragSession(
   const item = items.find((entry) => entry.id === itemId)
   if (!item) return
 
-  const pointerCanvas = clientToCanvasFromElement(clientX, clientY, canvasEl)
+  const pointerCanvas = clientToCanvasFromElementForItem(clientX, clientY, canvasEl)
   if (!pointerCanvas) return
 
   finishSession()
+
+  const origin = itemCanvasOrigin(item)
 
   session = {
     itemId,
     pointerId,
     phase: 'pending',
     canvasEl,
-    grabOffsetX: pointerCanvas.x - item.x,
-    grabOffsetY: pointerCanvas.y - item.y,
+    grabOffsetX: pointerCanvas.x - origin.x,
+    grabOffsetY: pointerCanvas.y - origin.y,
     startClientX: clientX,
     startClientY: clientY,
     lastClientX: clientX,
     lastClientY: clientY,
     dragThresholdPx: options?.dragThresholdPx ?? DRAG_THRESHOLD_PX,
     moved: false,
+    dragStartX: item.x,
+    dragStartY: item.y,
     onReleaseWithoutDrag: options?.onReleaseWithoutDrag,
   }
 
@@ -439,6 +650,6 @@ export function attachCanvasItemDragPointerDown(
 }
 
 export function cancelCanvasItemDrag() {
-  clearSpaceDropState()
+  clearAllDropState()
   finishSession()
 }

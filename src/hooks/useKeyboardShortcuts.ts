@@ -9,6 +9,12 @@ import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useToolStore, type ToolMode } from '../drawing/toolStore'
 import { useStrokesStore } from '../drawing/strokesStore'
 import { useLassoStore } from '../drawing/useLassoStore'
+import { dismissCanvasSelection } from '../canvas/canvasSelectionDismiss'
+import { canvasEditingAllowed } from '../canvasEdit/layer'
+import { runCanvasFisheyeExit } from '../canvas/canvasBarrelPostProcess'
+import { dismissMinimapMode, toggleCanvasMinimap } from '../canvas/canvasMinimapOpen'
+import { useCanvasFisheyeStore } from '../canvas/canvasFisheyeStore'
+import { useCanvasMinimapStore } from '../canvas/canvasMinimapStore'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { SHORTCUTS_BY_ID } from '../shortcuts/shortcutDefs'
@@ -17,6 +23,7 @@ import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import {
   effectiveDisplayKeys,
+  isShortcutDisabled,
   matchesShortcut,
   useShortcutCustomStore,
   comboMatchesEvent,
@@ -73,6 +80,13 @@ function openToolPaletteAndSetMode(mode: ToolMode, shortcutId: string) {
   if (!customizing) {
     if (!ui.toolPaletteOpen) {
       ui.dismissPeerChromeForFab('pen')
+      const { items, selectedIds } = useCanvasItemsStore.getState()
+      if (selectedIds.length === 1) {
+      const sel = items.find((i) => i.id === selectedIds[0])
+      if (sel?.type === 'text') {
+          useCanvasItemsStore.getState().clearSelection({ silent: true })
+        }
+      }
       ui.toolPalette?.open()
     } else if (tools.mode === mode) {
       ui.toolPalette?.close()
@@ -120,6 +134,16 @@ function handleEscape(
     return true
   }
 
+  if (useCanvasMinimapStore.getState().expandedOpen) {
+    dismissMinimapMode(transformRef)
+    return true
+  }
+
+  if (useCanvasFisheyeStore.getState().engaged) {
+    runCanvasFisheyeExit(transformRef.current, null)
+    return true
+  }
+
   const itemsStore = useCanvasItemsStore.getState()
 
   if (ui.toolPalette?.isColorPopoverOpen()) {
@@ -152,8 +176,13 @@ function handleEscape(
     return true
   }
 
-  if (itemsStore.selectedIds.length > 0) {
-    itemsStore.clearSelection()
+  const lasso = useLassoStore.getState()
+  if (
+    lasso.selectedStrokeIds.length > 0 ||
+    lasso.selectedItemIds.length > 0 ||
+    itemsStore.selectedIds.length > 0
+  ) {
+    dismissCanvasSelection()
     return true
   }
 
@@ -205,6 +234,16 @@ export function useKeyboardShortcuts(
         return
       }
 
+      // ── Select all (studio centre) ────────────────────────────────────────
+      if (matchesShortcut(e, 'select-all')) {
+        if (!canvasEditingAllowed() || useCanvasFisheyeStore.getState().engaged) return
+        e.preventDefault()
+        if (useLassoStore.getState().selectAllInStudioCentre()) {
+          fireToast('select-all')
+        }
+        return
+      }
+
       // ── Duplicate ─────────────────────────────────────────────────────────
       if (matchesShortcut(e, 'duplicate')) {
         e.preventDefault()
@@ -214,18 +253,30 @@ export function useKeyboardShortcuts(
       }
 
       // ── Delete ────────────────────────────────────────────────────────────
-      const deleteOverride = useShortcutCustomStore.getState().overrides['delete']
-      const isDelete = deleteOverride
-        ? comboMatchesEvent(deleteOverride, e)
-        : (!modKeyEvent(e) && !e.shiftKey && !e.altKey && (e.key === 'Delete' || e.key === 'Backspace'))
-      if (isDelete) {
-        const { selectedIds } = useCanvasItemsStore.getState()
-        if (selectedIds.length > 0) {
-          e.preventDefault()
-          useCanvasItemsStore.getState().deleteSelected()
-          fireToast('delete')
+      if (!isShortcutDisabled('delete')) {
+        const deleteOverride = useShortcutCustomStore.getState().overrides['delete']
+        const isDelete = deleteOverride
+          ? comboMatchesEvent(deleteOverride, e)
+          : (!modKeyEvent(e) && !e.shiftKey && !e.altKey && (e.key === 'Delete' || e.key === 'Backspace'))
+        if (isDelete) {
+          const lasso = useLassoStore.getState()
+          if (
+            lasso.selectedStrokeIds.length > 0 ||
+            lasso.selectedItemIds.length > 0
+          ) {
+            e.preventDefault()
+            if (lasso.deleteSelection()) fireToast('delete')
+            return
+          }
+
+          const { selectedIds } = useCanvasItemsStore.getState()
+          if (selectedIds.length > 0) {
+            e.preventDefault()
+            useCanvasItemsStore.getState().deleteSelected()
+            fireToast('delete')
+          }
+          return
         }
-        return
       }
 
       // ── Canvas lock ───────────────────────────────────────────────────────
@@ -256,6 +307,13 @@ export function useKeyboardShortcuts(
       if (matchesShortcut(e, 'find')) {
         e.preventDefault()
         useShortcutUiStore.getState().canvasSearch?.focus()
+        return
+      }
+
+      // ── Canvas map (fisheye) ───────────────────────────────────────────────
+      if (matchesShortcut(e, 'open-canvas-map')) {
+        e.preventDefault()
+        toggleCanvasMinimap(transformRef)
         return
       }
 

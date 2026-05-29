@@ -1,6 +1,6 @@
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import type { CanvasItem } from '../canvasItems/types'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
+import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
 import { useCanvasWorkspaceStore } from './canvasWorkspaceStore'
 import {
   canvasPointUnderPreviewPointer,
@@ -28,11 +28,11 @@ export function dropPositionForItem(
 ): { x: number; y: number } {
   const x = Math.max(
     0,
-    Math.min(CANVAS_WIDTH - item.width, canvasX - item.width / 2),
+    Math.min(CANVAS_ORIGINAL_WIDTH - item.width, canvasX - item.width / 2),
   )
   const y = Math.max(
     0,
-    Math.min(CANVAS_HEIGHT - item.height, canvasY - item.height / 2),
+    Math.min(CANVAS_ORIGINAL_HEIGHT - item.height, canvasY - item.height / 2),
   )
   return { x, y }
 }

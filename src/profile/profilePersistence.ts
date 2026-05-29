@@ -1,13 +1,14 @@
 import type { PinnedTrack, ProfileSocialLink, UserProfile } from './types'
 import { parseProfileMediaFrame } from './profileMediaFrame'
+import { DEFAULT_PROFILE_STATUS, parseProfileStatus } from './profileStatus'
 
 import { scopedStorageKey } from '../storage/storageScope'
 
 export const PROFILE_STORAGE_KEY = scopedStorageKey('cutline-profile-v1')
 
 export const DEFAULT_PROFILE: UserProfile = {
-  displayName: 'James',
-  handle: 'james',
+  displayName: 'CutlineBeta',
+  handle: 'betatest',
   email: 'youractual@email.com',
   bio: '',
   studentCohort: 'HSFY',
@@ -18,6 +19,7 @@ export const DEFAULT_PROFILE: UserProfile = {
   bannerFrame: null,
   socials: [],
   pinnedTrack: null,
+  status: DEFAULT_PROFILE_STATUS,
 }
 
 /** Profile fields stored in localStorage (images live in IndexedDB). */
@@ -95,6 +97,7 @@ function parseProfileMeta(raw: unknown): PersistedProfileMeta | null {
     bannerFrame: parseProfileMediaFrame(o.bannerFrame) ?? null,
     socials: parseSocials(o.socials),
     pinnedTrack: parsePinnedTrack(o.pinnedTrack),
+    status: parseProfileStatus(o.status),
   }
 }
 
@@ -173,5 +176,6 @@ export function mergePersistedMeta(
     bannerFrame: parseProfileMediaFrame(meta?.bannerFrame) ?? DEFAULT_PROFILE.bannerFrame,
     socials: Array.isArray(meta?.socials) ? meta.socials : DEFAULT_PROFILE.socials,
     pinnedTrack: parsePinnedTrack(meta?.pinnedTrack) ?? DEFAULT_PROFILE.pinnedTrack,
+    status: parseProfileStatus(meta?.status),
   }
 }

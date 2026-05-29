@@ -1,7 +1,7 @@
 import { useCallback, useRef, useEffect, useLayoutEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { User, CreditCard, HelpCircle, LogOut } from 'lucide-react'
+import { User, CreditCard, HelpCircle, LogOut, Signal } from 'lucide-react'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { CHROME_FROSTED_MENU_CLASS, CHROME_PRESERVE_CASE_CLASS, chromeFrostedMenuStyle, font, menuDividerStyle, phoneMenuDividerStyle } from '../styles/tokens'
 import {
@@ -12,6 +12,7 @@ import {
   PHONE_TOP_PANEL_SCALE,
 } from '../styles/phoneChrome'
 import { useProfileStore } from '../profile/profileStore'
+import { profileEditFieldsChanged } from '../profile/profileUtils'
 import type { UserProfile } from '../profile/types'
 import { isProfileFilePickerOpen } from '../profile/profileFilePickerSession'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
@@ -20,6 +21,7 @@ import ProfileIdentityTags from './ProfileIdentityTags'
 import ProfileSocialPills from './ProfileSocialPills'
 import ProfileSubmenu from './ProfileSubmenu'
 import SubscriptionSubmenu from './SubscriptionSubmenu'
+import { cycleProfileStatus, profileStatusShortLabel } from '../profile/profileStatus'
 import ProfilePinnedTrack from '../music/ProfilePinnedTrack'
 import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
@@ -97,16 +99,22 @@ export default function ProfilePanel({
   const [helpTauntPos, setHelpTauntPos] = useState<{ y: number; left: number } | null>(null)
   const helpTauntTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const profile = useProfileStore((s) => s.profile)
+  const saveProfile = useProfileStore((s) => s.saveProfile)
   const visualViewportOffsetTop = useVisualViewportOffset()
   const hasMountedRef = useRef(false)
+  const prevProfileRef = useRef(profile)
   const [savedVersion, setSavedVersion] = useState(0)
 
   useEffect(() => {
+    const prev = prevProfileRef.current
+    prevProfileRef.current = profile
     if (!hasMountedRef.current) {
       hasMountedRef.current = true
       return
     }
-    setSavedVersion((v) => v + 1)
+    if (profileEditFieldsChanged(prev, profile)) {
+      setSavedVersion((v) => v + 1)
+    }
   }, [profile])
 
   const closeProfileSubmenu = useCallback(() => {
@@ -214,6 +222,10 @@ export default function ProfilePanel({
     dismissInsidePanel: openSubmenu !== null,
   })
 
+  const cycleStatus = () => {
+    saveProfile({ ...profile, status: cycleProfileStatus(profile.status) })
+  }
+
   const handleNav = (destination: ProfileDestination) => {
     if (destination === 'profile') {
       setOpenSubmenu((current) => {
@@ -303,6 +315,7 @@ export default function ProfilePanel({
             contentGap={isPhone ? 4 : undefined}
             contentPaddingBottom={isPhone ? 6 : undefined}
             edgeToEdge
+            status={profile.status}
           >
             <motion.div
               key={savedVersion}
@@ -375,6 +388,14 @@ export default function ProfilePanel({
 
         <SubmenuSoundScope>
           <div style={{ padding: isPhone ? '2px 0' : '4px 0' }}>
+            <MenuRow
+              icon={Signal}
+              label="Activity status"
+              labelSuffix={profileStatusShortLabel(profile.status)}
+              inset
+              compact={isPhone}
+              onClick={cycleStatus}
+            />
             {NAV_ITEMS.map(({ icon, label, destination }) =>
               destination === 'help' ? (
                 <div key={destination} ref={helpRowRef}>

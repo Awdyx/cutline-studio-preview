@@ -11,7 +11,7 @@ import {
 } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { ERASE_HIT_RADIUS, hitTestStroke } from '../drawing/eraseUtils'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
+import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
 import { useStrokesStore } from '../drawing/strokesStore'
 import { isLassoMode, useToolStore } from '../drawing/toolStore'
 import { useLassoStore } from '../drawing/useLassoStore'
@@ -46,6 +46,7 @@ import {
   type CanvasItem,
   type ImageCanvasItem,
   type SpaceCanvasItem,
+  isImageInSticky,
   isStickyItem,
   type StickyCanvasItem,
   type StudyHubCanvasItem,
@@ -70,7 +71,21 @@ import {
   type ItemTextAlignment,
   resolveItemTextAlignment,
 } from './textAlignment'
+import {
+  imageCanvasPosition,
+  imageLocalPositionInSticky,
+} from './stickyImagePlacement'
+import {
+  nextStickyEmbedZIndexBehindText,
+  zIndexForBringToFrontInSticky,
+  zIndexForSendToBackInSticky,
+} from './stickyImageLayers'
 import { isStoredTextEmpty } from './textEditorContent'
+import {
+  STICKY_BRING_OUT_ENTER_MS,
+  STICKY_BRING_OUT_MS,
+  useStickyBringOutStore,
+} from './stickyBringOutStore'
 
 function nextItemZIndex(items: CanvasItem[], layer: CanvasLayer): number {
   const strokes = useStrokesStore.getState().strokes
@@ -84,13 +99,24 @@ type StrokeConfig = {
 }
 
 const RESTORE_SIZING_MS = 320
+const BOUNDS_SNAP_MS = 420
 
 function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3
 }
 
+function easeOutBack(t: number): number {
+  const c1 = 1.12
+  const c3 = c1 + 1
+  return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2
+}
+
 let restoreSizingFrameId: number | null = null
 let restoreSizingItemId: string | null = null
+let boundsSnapFrameId: number | null = null
+let boundsSnapItemId: string | null = null
+let stickyBringOutTimer: ReturnType<typeof setTimeout> | null = null
+let stickyBringOutEnterTimer: ReturnType<typeof setTimeout> | null = null
 
 type ZOrderPulse = {
   id: string
@@ -125,6 +151,7 @@ type CanvasItemsState = {
   selectedIds: string[]
   previewAdjustSpaceId: string | null
   restoreSizingAnimatingId: string | null
+  boundsSnapAnimatingId: string | null
   zOrderPulse: ZOrderPulse | null
   /** Sole-selected item id that should not show the arrangement submenu (programmatic focus). */
   zMenuSuppressedItemId: string | null
@@ -138,8 +165,14 @@ type CanvasItemsState = {
   pendingEditorFocusId: string | null
   activeStickyStroke: { stickyId: string; stroke: Stroke } | null
   lastStickyColor: import('./types').StickyColorId | undefined
+  /** Sole-selected item parked after panning off-screen — may restore within 5s. */
+  viewportSelectionPark: {
+    itemIds: readonly string[]
+    leftViewportAt: number
+  } | null
   hydrate: () => void
   takePendingEditorFocus: (id: string) => boolean
+  requestEditorFocus: (id: string) => void
   setSelectedIds: (ids: string[]) => void
   selectItem: (
     id: string,
@@ -153,6 +186,9 @@ type CanvasItemsState = {
   clearMenuFocusChrome: () => void
   takeMenuFocusReturnCamera: () => SpaceCamera | null
   clearSelection: (opts?: { silent?: boolean }) => void
+  parkSelectionOffScreen: () => void
+  restoreViewportParkedSelection: () => void
+  clearViewportSelectionPark: () => void
   selectAll: () => void
   deleteSelected: () => void
   duplicateSelected: () => void
@@ -174,6 +210,8 @@ type CanvasItemsState = {
     canvasX: number,
     canvasY: number,
   ) => boolean
+  moveImageToSticky: (itemId: string, stickyId: string) => boolean
+  bringImageOutOfSticky: (itemId: string) => boolean
   sendItemToMainCanvas: (itemId: string) => boolean
   beginItemResize: (id: string) => void
   updateItemPosition: (id: string, x: number, y: number, opts?: { persist?: boolean }) => void
@@ -184,6 +222,11 @@ type CanvasItemsState = {
     y: number,
     width: number,
     height: number,
+    opts?: { persist?: boolean; clampStudyHub?: boolean },
+  ) => void
+  animateItemRectTo: (
+    id: string,
+    target: { x: number; y: number; width?: number; height?: number },
     opts?: { persist?: boolean; clampStudyHub?: boolean },
   ) => void
   restoreImportSizing: (id: string) => void
@@ -229,7 +272,7 @@ function persistItems(opts?: { immediate?: boolean }) {
   notifyWorkspacePersist()
 }
 
-function findItem(items: CanvasItem[], id: string): CanvasItem | undefined {
+function findItem(items: readonly CanvasItem[], id: string): CanvasItem | undefined {
   return items.find((item) => item.id === id)
 }
 
@@ -309,7 +352,7 @@ function applySelectionChange(
   nextSelected: string[],
 ) {
   const prevSelected = get().selectedIds
-  set({ selectedIds: nextSelected })
+  set({ selectedIds: nextSelected, viewportSelectionPark: null })
   dismissEmptyTextItemsOnDeselect(
     get,
     set,
@@ -317,21 +360,50 @@ function applySelectionChange(
   )
 }
 
-function cloneItem(item: CanvasItem, offset: number, forcedId?: string): CanvasItem {
+function cloneItem(
+  item: CanvasItem,
+  offset: number,
+  forcedId?: string,
+  allItems?: readonly CanvasItem[],
+): CanvasItem {
   const { mainCanvasOrigin: _origin, ...source } = item
   const id = forcedId ?? generateItemId()
+  let nextX = item.x + offset
+  let nextY = item.y + offset
+  if (
+    item.type === 'image' &&
+    isImageInSticky(item) &&
+    allItems
+  ) {
+    const sticky = allItems.find(
+      (entry) => entry.id === item.stickyId && isStickyItem(entry),
+    )
+    if (sticky) {
+      const canvasPos = imageCanvasPosition(item, sticky)
+      nextX = canvasPos.x + offset
+      nextY = canvasPos.y + offset
+    }
+  }
   const base = {
     ...source,
     id,
-    x: item.x + offset,
-    y: item.y + offset,
+    x: nextX,
+    y: nextY,
     zIndex: item.zIndex + 1,
   }
   if (item.type === 'space') {
     useCanvasWorkspaceStore.getState().addSpaceData(id, item.name, { persist: false })
   }
   if (item.type === 'image' || item.type === 'video') {
-    return { ...base, mediaId: id } as CanvasItem
+    const mediaItem = {
+      ...base,
+      mediaId: id,
+    } as CanvasItem
+    if (item.type === 'image' && isImageInSticky(item)) {
+      const { stickyId: _stickyId, ...rest } = mediaItem as ImageCanvasItem
+      return rest as CanvasItem
+    }
+    return mediaItem
   }
   return base
 }
@@ -341,6 +413,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   selectedIds: [],
   previewAdjustSpaceId: null,
   restoreSizingAnimatingId: null,
+  boundsSnapAnimatingId: null,
   zOrderPulse: null,
   zMenuSuppressedItemId: null,
   menuFocusReturnCamera: null,
@@ -349,6 +422,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   pendingEditorFocusId: null,
   activeStickyStroke: null,
   lastStickyColor: undefined,
+  viewportSelectionPark: null,
 
   hydrate: () => {
     persistEnabled = true
@@ -360,6 +434,11 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     return true
   },
 
+  requestEditorFocus: (id) => {
+    if (!findItem(get().items, id)) return
+    set({ pendingEditorFocusId: id })
+  },
+
   setSelectedIds: (ids) => set({ selectedIds: ids }),
 
   selectItem: (id, additive = false, options) => {
@@ -367,9 +446,16 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     if (!item) return
     if (!options?.allowFrozen && !itemIsMutable(item)) return
 
-    // Tap-select while lasso is active uses normal selection chrome, not lasso chrome.
+    // Leave an active lasso group intact when re-tapping a member; clear for any other select.
     if (isLassoMode(useToolStore.getState().mode)) {
-      useLassoStore.getState().clearSelection()
+      const lasso = useLassoStore.getState()
+      const sameLassoItemOnly =
+        lasso.selectedStrokeIds.length === 0 &&
+        lasso.selectedItemIds.length > 0 &&
+        lasso.selectedItemIds.includes(id)
+      if (!sameLassoItemOnly) {
+        lasso.clearSelection()
+      }
     }
 
     useShortcutUiStore.getState().dismissChromeForCanvasInteraction()
@@ -384,6 +470,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
             selectedIds: state.selectedIds.filter((x) => x !== id),
             zMenuSuppressedItemId: null,
             menuFocusReturnCamera: null,
+            viewportSelectionPark: null,
           }
         }
         shouldPlay = true
@@ -391,6 +478,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           selectedIds: [...state.selectedIds, id],
           zMenuSuppressedItemId: null,
           menuFocusReturnCamera: null,
+          viewportSelectionPark: null,
         }
       }
       if (state.selectedIds.length === 1 && state.selectedIds[0] === id) {
@@ -414,6 +502,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           options?.suppressZMenu && options.menuFocusReturnCamera
             ? options.menuFocusReturnCamera
             : null,
+        viewportSelectionPark: null,
       }
     })
 
@@ -447,6 +536,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       zMenuSuppressedItemId: null,
       menuFocusReturnCamera: null,
       previewAdjustSpaceId: null,
+      viewportSelectionPark: null,
     })
     flushActiveTextEditor()
     dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
@@ -455,8 +545,8 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
 
   clearSelection: (opts?: { silent?: boolean }) => {
     const prevSelected = get().selectedIds
-    if (prevSelected.length === 0) return
-    if (!opts?.silent) {
+    if (prevSelected.length === 0 && get().viewportSelectionPark == null) return
+    if (prevSelected.length > 0 && !opts?.silent) {
       useShortcutUiStore.getState().dismissChromeForCanvasInteraction()
     }
     set({
@@ -466,10 +556,47 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       menuFocusReturnCamera: null,
       menuFocusDismissing: false,
       menuFocusDismissItemId: null,
+      viewportSelectionPark: null,
+    })
+    if (prevSelected.length > 0) {
+      flushActiveTextEditor()
+      dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
+      if (!opts?.silent) playSound('itemDeselect')
+    }
+  },
+
+  parkSelectionOffScreen: () => {
+    const { selectedIds } = get()
+    if (selectedIds.length !== 1) return
+    const prevSelected = selectedIds
+    set({
+      selectedIds: [],
+      previewAdjustSpaceId: null,
+      zMenuSuppressedItemId: null,
+      menuFocusReturnCamera: null,
+      menuFocusDismissing: false,
+      menuFocusDismissItemId: null,
+      viewportSelectionPark: {
+        itemIds: [...selectedIds],
+        leftViewportAt: Date.now(),
+      },
     })
     flushActiveTextEditor()
     dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
-    if (!opts?.silent) playSound('itemDeselect')
+  },
+
+  restoreViewportParkedSelection: () => {
+    const park = get().viewportSelectionPark
+    if (!park || park.itemIds.length !== 1) return
+    set({
+      selectedIds: [...park.itemIds],
+      viewportSelectionPark: null,
+    })
+  },
+
+  clearViewportSelectionPark: () => {
+    if (get().viewportSelectionPark == null) return
+    set({ viewportSelectionPark: null })
   },
 
   selectAll: () => {
@@ -530,7 +657,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           const copied = await duplicateMediaForItem(source.mediaId, id)
           if (!copied) continue
         }
-        clones.push(cloneItem(source, offset, id))
+        clones.push(cloneItem(source, offset, id, items))
       }
       if (clones.length === 0) return
       const newIds = clones.map((c) => c.id)
@@ -731,11 +858,11 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
 
     const x = Math.max(
       0,
-      Math.min(CANVAS_WIDTH - item.width, canvasX - item.width / 2),
+      Math.min(CANVAS_ORIGINAL_WIDTH - item.width, canvasX - item.width / 2),
     )
     const y = Math.max(
       0,
-      Math.min(CANVAS_HEIGHT - item.height, canvasY - item.height / 2),
+      Math.min(CANVAS_ORIGINAL_HEIGHT - item.height, canvasY - item.height / 2),
     )
     const zIndex = nextZIndexAbove(space.items)
     const transferred = {
@@ -773,6 +900,93 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
 
     persistItems({ immediate: true })
     playSound('spaceEnter', { layer: true })
+    return true
+  },
+
+  moveImageToSticky: (itemId, stickyId) => {
+    const item = findItem(get().items, itemId)
+    if (!item || item.type !== 'image' || isImageInSticky(item)) return false
+    if (!itemIsMutable(item)) return false
+
+    const sticky = get().getStickyById(stickyId)
+    if (!sticky) return false
+
+    const local = imageLocalPositionInSticky(item, sticky)
+    const embedded: ImageCanvasItem = {
+      ...item,
+      stickyId,
+      x: local.x,
+      y: local.y,
+      zIndex: nextStickyEmbedZIndexBehindText(get().items, stickyId),
+      mainCanvasOrigin: {
+        x: item.x,
+        y: item.y,
+        zIndex: item.zIndex,
+      },
+    }
+
+    set((state) => ({
+      items: state.items.map((entry) => (entry.id === itemId ? embedded : entry)),
+      selectedIds: state.selectedIds.filter((id) => id !== itemId),
+    }))
+    persistItems({ immediate: true })
+    playSound('itemDrop')
+    return true
+  },
+
+  bringImageOutOfSticky: (itemId) => {
+    const item = findItem(get().items, itemId)
+    if (!item || !isImageInSticky(item)) return false
+    if (!itemIsMutable(item)) return false
+
+    const bringOut = useStickyBringOutStore.getState()
+    if (bringOut.bringingOutItemId != null) return false
+
+    pushUndoSnapshot()
+    bringOut.beginBringOut(itemId, item.stickyId)
+
+    if (stickyBringOutTimer != null) clearTimeout(stickyBringOutTimer)
+    if (stickyBringOutEnterTimer != null) clearTimeout(stickyBringOutEnterTimer)
+
+    stickyBringOutTimer = setTimeout(() => {
+      stickyBringOutTimer = null
+
+      const current = findItem(get().items, itemId)
+      if (!current || !isImageInSticky(current)) {
+        useStickyBringOutStore.getState().clearAll()
+        return
+      }
+
+      const sticky = get().getStickyById(current.stickyId)
+      const canvasPos = sticky
+        ? imageCanvasPosition(current, sticky)
+        : { x: current.x, y: current.y }
+
+      const origin = current.mainCanvasOrigin
+      const { stickyId: _stickyId, mainCanvasOrigin: _origin, ...rest } = current
+      const restored: ImageCanvasItem = {
+        ...rest,
+        x: canvasPos.x,
+        y: canvasPos.y,
+        zIndex: sticky
+          ? Math.max(origin?.zIndex ?? current.zIndex, sticky.zIndex + 1)
+          : (origin?.zIndex ?? current.zIndex),
+      }
+
+      set((state) => ({
+        items: state.items.map((entry) => (entry.id === itemId ? restored : entry)),
+        selectedIds: [itemId],
+      }))
+      persistItems({ immediate: true })
+      playSound('itemDrop')
+      useStickyBringOutStore.getState().completeBringOut(itemId)
+
+      stickyBringOutEnterTimer = setTimeout(() => {
+        stickyBringOutEnterTimer = null
+        useStickyBringOutStore.getState().clearRecentlyBroughtOut(itemId)
+      }, STICKY_BRING_OUT_ENTER_MS)
+    }, STICKY_BRING_OUT_MS)
+
     return true
   },
 
@@ -859,6 +1073,68 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       }),
     }))
     if (opts?.persist !== false) persistItems()
+  },
+
+  animateItemRectTo: (id, target, opts) => {
+    const item = findItem(get().items, id)
+    if (!item || !itemIsMutable(item)) return
+
+    if (boundsSnapFrameId != null) {
+      cancelAnimationFrame(boundsSnapFrameId)
+      boundsSnapFrameId = null
+    }
+
+    const from = {
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+    }
+    const to = {
+      x: target.x,
+      y: target.y,
+      width: target.width ?? item.width,
+      height: target.height ?? item.height,
+    }
+
+    boundsSnapItemId = id
+    set({ boundsSnapAnimatingId: id })
+
+    const started = performance.now()
+
+    const tick = (now: number) => {
+      if (boundsSnapItemId !== id) return
+
+      const t = Math.min(1, (now - started) / BOUNDS_SNAP_MS)
+      const eased = easeOutBack(t)
+      const x = from.x + (to.x - from.x) * eased
+      const y = from.y + (to.y - from.y) * eased
+      const width = from.width + (to.width - from.width) * eased
+      const height = from.height + (to.height - from.height) * eased
+
+      set((state) => ({
+        boundsSnapAnimatingId: t < 1 ? id : null,
+        items: state.items.map((entry) => {
+          if (entry.id !== id) return entry
+          if (entry.type === 'study_hub' && opts?.clampStudyHub !== false) {
+            const { width: w, height: h } = studyHubDimensionsForWidth(width)
+            return { ...entry, x, y, width: w, height: h }
+          }
+          return { ...entry, x, y, width, height }
+        }),
+      }))
+
+      if (t < 1) {
+        boundsSnapFrameId = requestAnimationFrame(tick)
+        return
+      }
+
+      boundsSnapFrameId = null
+      boundsSnapItemId = null
+      if (opts?.persist !== false) persistItems({ immediate: true })
+    }
+
+    boundsSnapFrameId = requestAnimationFrame(tick)
   },
 
   restoreImportSizing: (id) => {
@@ -999,8 +1275,9 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   bringToFront: (id) => {
     const item = findItem(get().items, id)
     if (!itemIsMutable(item)) return
-    const strokes = useStrokesStore.getState().strokes
-    const zIndex = zIndexForBringToFront(get().items, id, strokes)
+    const zIndex = isImageInSticky(item)
+      ? zIndexForBringToFrontInSticky(get().items, id)
+      : zIndexForBringToFront(get().items, id, useStrokesStore.getState().strokes)
     if (item.zIndex === zIndex) {
       emitZOrderFeedback(get, set, id, 'front')
       return
@@ -1018,8 +1295,9 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   sendToBack: (id) => {
     const item = findItem(get().items, id)
     if (!itemIsMutable(item)) return
-    const strokes = useStrokesStore.getState().strokes
-    const zIndex = zIndexForSendToBack(get().items, id, strokes)
+    const zIndex = isImageInSticky(item)
+      ? zIndexForSendToBackInSticky(get().items, id)
+      : zIndexForSendToBack(get().items, id, useStrokesStore.getState().strokes)
     if (item.zIndex === zIndex) {
       emitZOrderFeedback(get, set, id, 'back')
       return
@@ -1052,7 +1330,17 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const target = findItem(get().items, id)
     pushUndoSnapshot()
     set((state) => ({
-      items: state.items.filter((item) => item.id !== id),
+      items: state.items.filter((item) => {
+        if (item.id === id) return false
+        if (
+          target?.type === 'sticky' &&
+          item.type === 'image' &&
+          item.stickyId === id
+        ) {
+          return false
+        }
+        return true
+      }),
       activeStickyStroke:
         state.activeStickyStroke?.stickyId === id ? null : state.activeStickyStroke,
       selectedIds: state.selectedIds.filter((sid) => sid !== id),
@@ -1189,7 +1477,9 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   },
 
   applyStickyStrokeErase: (canvasPos) => {
-    if (!useCanvasLockStore.getState().isLocked) return
+    const isLocked = effectiveCanvasLocked(
+      useCanvasLockStore.getState().isLocked,
+    )
 
     let changed = false
     set((state) => {
@@ -1199,24 +1489,34 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
         const localX = canvasPos.x - item.x
         const localY = canvasPos.y - item.y
 
-        if (item.layer === 'annotation') {
-          const next = item.strokes.filter(
-            (stroke) =>
-              !hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS),
+        if (isLocked) {
+          if (item.layer === 'annotation') {
+            const next = item.strokes.filter(
+              (stroke) =>
+                !hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS),
+            )
+            if (next.length === item.strokes.length) return item
+            changed = true
+            return { ...item, strokes: next }
+          }
+
+          const ann = item.annotationStrokes ?? []
+          if (ann.length === 0) return item
+          const next = ann.filter(
+            (stroke) => !hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS),
           )
-          if (next.length === item.strokes.length) return item
+          if (next.length === ann.length) return item
           changed = true
-          return { ...item, strokes: next }
+          return { ...item, annotationStrokes: next }
         }
 
-        const ann = item.annotationStrokes ?? []
-        if (ann.length === 0) return item
-        const next = ann.filter(
+        if (item.strokes.length === 0) return item
+        const next = item.strokes.filter(
           (stroke) => !hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS),
         )
-        if (next.length === ann.length) return item
+        if (next.length === item.strokes.length) return item
         changed = true
-        return { ...item, annotationStrokes: next }
+        return { ...item, strokes: next }
       })
       if (!changed) return state
       return { items }

@@ -13,6 +13,11 @@ import {
   isPointerOnSpacePreview,
   shouldDismissSelectionForPointer,
 } from './canvasSelectionDismiss'
+import {
+  keepActiveLassoSelectionForPointer,
+  resolveLassoCanvasEl,
+} from '../drawing/lassoPointerGuard'
+import { useLassoStore } from '../drawing/useLassoStore'
 import { useCanvasNavigationStore } from './canvasNavigationStore'
 import { watchPendingTouchTap } from './pointerTapGesture'
 
@@ -71,6 +76,24 @@ export function useCanvasSelectionPointer(
       const adjustId = useCanvasItemsStore.getState().previewAdjustSpaceId
       if (adjustId && !isPointerOnSpacePreview(event.target, adjustId)) {
         useCanvasItemsStore.getState().setPreviewAdjustSpace(null)
+      }
+
+      const canvasEl = resolveLassoCanvasEl(event.target)
+      if (
+        keepActiveLassoSelectionForPointer(
+          event.clientX,
+          event.clientY,
+          event.target,
+          canvasEl,
+        )
+      ) {
+        return
+      }
+
+      const lasso = useLassoStore.getState()
+      if (lasso.selectedStrokeIds.length > 0 || lasso.selectedItemIds.length > 0) {
+        dismissCanvasSelection()
+        return
       }
 
       const selectedIds = useCanvasItemsStore.getState().selectedIds

@@ -6,6 +6,7 @@
       (function () {
         var STORAGE_KEY = 'cutline-theme-v1'
         var CANVAS_BG = { light: '#f3f3f3', dark: '#161616' }
+        var CANVAS_VOID_BG = { light: '#f3f3f3', dark: '#141414' }
         var mode = 'light'
         try {
           var raw = localStorage.getItem(STORAGE_KEY)
@@ -23,11 +24,13 @@
             : mode
         if (effective !== 'light' && effective !== 'dark') effective = 'light'
         var bg = CANVAS_BG[effective]
+        var voidBg = CANVAS_VOID_BG[effective]
         var root = document.documentElement
         root.dataset.theme = effective
         root.style.colorScheme = effective
         root.style.setProperty('--canvas-bg', bg)
-        root.style.backgroundColor = bg
+        root.style.setProperty('--canvas-void-bg', voidBg)
+        root.style.backgroundColor = voidBg
         var tc = document.querySelector('meta[name="theme-color"]')
         if (tc) tc.setAttribute('content', bg)
       })()
@@ -47,7 +50,7 @@
       html[data-theme='dark'],
       html[data-theme='dark'] body,
       html[data-theme='dark'] #root {
-        background-color: #161616;
+        background-color: #141414;
       }
     </style>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

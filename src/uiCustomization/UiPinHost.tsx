@@ -40,8 +40,9 @@ export default function UiPinHost({ anchorId }: { anchorId: UiAnchorId }) {
         // extend past the anchor naturally.
         overflow: applyClipping ? 'hidden' : 'visible',
         borderRadius: applyClipping ? 'inherit' : undefined,
-        // Ensure pins paint above the chrome's content but inside the anchor's stacking context.
-        zIndex: 1,
+        // Above in-flow anchor content (search input, icons) so pins paint and
+        // receive hover in live mode.
+        zIndex: 6,
       }}
     >
       {pins.map((pin) => (

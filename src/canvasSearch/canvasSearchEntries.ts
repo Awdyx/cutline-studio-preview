@@ -1,6 +1,7 @@
 import { STUDY_SUBJECT_CATALOG } from '../components/study/studyHubData'
 import { storedContentToHtml } from '../canvasItems/textEditorContent'
 import type { CanvasItem, StudySubjectId } from '../canvasItems/types'
+import { DEFAULT_SPACE_NAME } from '../spaces/types'
 
 export type CanvasSearchKind = 'sticky' | 'text' | 'space' | 'study_hub'
 
@@ -73,7 +74,7 @@ export function buildCanvasSearchEntries(items: CanvasItem[]): CanvasSearchEntry
     }
 
     if (item.type === 'space') {
-      const name = item.name.trim() || 'Untitled space'
+      const name = item.name.trim() || DEFAULT_SPACE_NAME
       entries.push({
         id: item.id,
         kind: 'space',

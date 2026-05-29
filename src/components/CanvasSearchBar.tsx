@@ -50,7 +50,7 @@ const islandBase: React.CSSProperties = {
 const KIND_LABELS = {
   sticky: 'Sticky',
   text: 'Text',
-  space: 'Space',
+  space: 'Pocket',
   study_hub: 'Study hub',
 } as const
 
@@ -285,7 +285,7 @@ export default function CanvasSearchBar({
               else inputRef.current?.blur()
             }
           }}
-          placeholder="search stickies, text, spaces, and study hubs…"
+          placeholder="search stickies, text, pockets, and study hubs…"
           className="theme-surface"
           style={{
             flex: 1,

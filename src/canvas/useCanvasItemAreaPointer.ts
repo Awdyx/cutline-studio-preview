@@ -16,6 +16,7 @@ import {
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 
 import { useCanvasItemDragStore } from '../canvasItems/canvasItemDragStore'
+import { useLassoStore } from '../drawing/useLassoStore'
 
 /** Hold still on an unselected item this long to select and arm drag on the same pointer. */
 export const CANVAS_ITEM_HOLD_SELECT_MS = 450
@@ -132,6 +133,7 @@ export function useCanvasItemAreaPointer({
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (frozen || e.pointerType === 'pen') return
+      if (useLassoStore.getState().selectedItemIds.includes(itemId)) return
 
       if (e.pointerType === 'mouse' && e.button === 2) {
         handleCanvasItemRightClickSelect(itemId, e, { frozen })

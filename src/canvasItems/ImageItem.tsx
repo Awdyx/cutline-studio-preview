@@ -13,10 +13,15 @@ export default function ImageItem({
   item,
   transformRef,
   onItemResizeStateChange,
+  embeddedInSticky = false,
+  handlesPortal = null,
 }: {
   item: ImageCanvasItem
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
   onItemResizeStateChange?: (resizing: boolean) => void
+  /** Rendered inside the sticky shell — inherits sticky drag/resize transforms. */
+  embeddedInSticky?: boolean
+  handlesPortal?: HTMLElement | null
 }) {
   const { url, status } = useMediaBlobUrl(item.mediaId, item.id)
 
@@ -25,6 +30,8 @@ export default function ImageItem({
       item={item}
       transformRef={transformRef}
       onItemResizeStateChange={onItemResizeStateChange}
+      embeddedInSticky={embeddedInSticky}
+      handlesPortal={handlesPortal}
     >
       <MediaBlobFrame status={status}>
         {url ? (

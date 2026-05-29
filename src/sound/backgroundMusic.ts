@@ -8,9 +8,14 @@ const INTRO_FADE_SEC = 8
 /** Match study-hub menu-focus camera motion (~460–720ms) with a little overlap. */
 const STUDY_SPACE_ENTER_SEC = 1.05
 const STUDY_SPACE_EXIT_SEC = 0.88
+/** Main-canvas void — softer than pocket entry, still noticeable. */
+const STUDIO_ZONE_DISTANT_ENTER_SEC = 1.5
+const STUDIO_ZONE_DISTANT_EXIT_SEC = 1.5
 
 /** Fade UI music under profile / picker song previews. */
 export const PINNED_PREVIEW_DUCK_FADE_SEC = 4
+
+export type BackgroundMusicAcousticsMode = 'open' | 'distant' | 'enclosed'
 
 const ACOUSTICS = {
   outside: {
@@ -22,6 +27,17 @@ const ACOUSTICS = {
     reverbDry: 1,
     presence: 1,
     outputGain: 1,
+  },
+  distant: {
+    /** Softer pocket-like muffling while panning in the outer canvas void. */
+    lowpassHz: 6_800,
+    lowpassQ: 1.6,
+    bassDb: 9.5,
+    highShelfDb: -16,
+    reverbWet: 0.36,
+    reverbDry: 0.72,
+    presence: 1.12,
+    outputGain: 2.25,
   },
   inside: {
     /** Exaggerated preset — obvious A/B when entering a space canvas. */
@@ -36,6 +52,30 @@ const ACOUSTICS = {
     outputGain: 5,
   },
 } as const
+
+type AcousticsPreset = (typeof ACOUSTICS)[keyof typeof ACOUSTICS]
+
+function acousticsPresetForMode(mode: BackgroundMusicAcousticsMode): AcousticsPreset {
+  switch (mode) {
+    case 'enclosed':
+      return ACOUSTICS.inside
+    case 'distant':
+      return ACOUSTICS.distant
+    default:
+      return ACOUSTICS.outside
+  }
+}
+
+function acousticsTransitionDuration(
+  from: BackgroundMusicAcousticsMode,
+  to: BackgroundMusicAcousticsMode,
+): number {
+  if (to === 'enclosed') return STUDY_SPACE_ENTER_SEC
+  if (from === 'enclosed') return STUDY_SPACE_EXIT_SEC
+  if (to === 'distant') return STUDIO_ZONE_DISTANT_ENTER_SEC
+  if (from === 'distant') return STUDIO_ZONE_DISTANT_EXIT_SEC
+  return STUDIO_ZONE_DISTANT_ENTER_SEC
+}
 
 function deferHeavyWork(fn: () => void): void {
   if (typeof requestIdleCallback === 'function') {
@@ -207,15 +247,15 @@ function rampParam(
   }
 }
 
-function applyEnclosedAcoustics(
-  active: boolean,
+function applyAcousticsMode(
+  mode: BackgroundMusicAcousticsMode,
   durationSec: number,
 ): void {
   if (!ensureMusicEffectChain()) return
   const ctx = musicCtx
   if (!ctx || !musicLowpass || !musicBassShelf || !musicHighShelf) return
 
-  const target = active ? ACOUSTICS.inside : ACOUSTICS.outside
+  const target = acousticsPresetForMode(mode)
   const now = ctx.currentTime
 
   rampParam(
@@ -310,16 +350,14 @@ class BackgroundMusicController {
   private playing = false
   private startQueued = false
   private loadFailed = false
-  private enclosedAcousticsActive = false
-  private pendingEnclosedAcoustics: boolean | null = null
+  private acousticsMode: BackgroundMusicAcousticsMode = 'open'
+  private pendingAcousticsMode: BackgroundMusicAcousticsMode | null = null
   private pinnedPreviewDuckDepth = 0
   private previewFadeGeneration = 0
 
   private baseOutputGain(): number {
     if (!this.enabled) return 0
-    const mult = this.enclosedAcousticsActive
-      ? ACOUSTICS.inside.outputGain
-      : ACOUSTICS.outside.outputGain
+    const mult = acousticsPresetForMode(this.acousticsMode).outputGain
     return MUSIC_ON_GAIN * mult
   }
 
@@ -339,7 +377,7 @@ class BackgroundMusicController {
     )
   }
 
-  private rampOutputGainForEnclosed(active: boolean, durationSec: number): void {
+  private rampOutputGainForMode(_mode: BackgroundMusicAcousticsMode, durationSec: number): void {
     if (!this.enabled || !musicGain || !musicCtx) return
     this.rampToEffectiveOutput(durationSec)
   }
@@ -374,23 +412,23 @@ class BackgroundMusicController {
       }
     }
 
-    this.applyPendingEnclosedAcoustics()
+    this.applyPendingAcousticsMode()
 
     return true
   }
 
-  private applyPendingEnclosedAcoustics(): void {
+  private applyPendingAcousticsMode(): void {
     if (!this.sourceCreated || !musicLowpass) return
 
-    if (this.pendingEnclosedAcoustics != null) {
-      const pending = this.pendingEnclosedAcoustics
-      this.pendingEnclosedAcoustics = null
-      this.enclosedAcousticsActive = pending
-      applyEnclosedAcoustics(pending, 0)
-      this.rampOutputGainForEnclosed(pending, 0)
-    } else if (this.enclosedAcousticsActive) {
-      applyEnclosedAcoustics(true, 0)
-      this.rampOutputGainForEnclosed(true, 0)
+    if (this.pendingAcousticsMode != null) {
+      const pending = this.pendingAcousticsMode
+      this.pendingAcousticsMode = null
+      this.acousticsMode = pending
+      applyAcousticsMode(pending, 0)
+      this.rampOutputGainForMode(pending, 0)
+    } else if (this.acousticsMode !== 'open') {
+      applyAcousticsMode(this.acousticsMode, 0)
+      this.rampOutputGainForMode(this.acousticsMode, 0)
     }
   }
 
@@ -431,8 +469,8 @@ class BackgroundMusicController {
         await el.play()
       }
       this.playing = true
-      void import('./backgroundMusicAcoustics').then(({ syncBackgroundMusicEnclosedAcoustics }) => {
-        syncBackgroundMusicEnclosedAcoustics()
+      void import('./backgroundMusicAcoustics').then(({ syncBackgroundMusicAcoustics }) => {
+        syncBackgroundMusicAcoustics()
       })
     } catch {
       this.playing = false
@@ -477,6 +515,10 @@ class BackgroundMusicController {
     return this.playing && !!this.audio && !this.audio.paused
   }
 
+  getAcousticsMode(): BackgroundMusicAcousticsMode {
+    return this.acousticsMode
+  }
+
   /** Warm the MP3 in the background without wiring Web Audio or playing. */
   preload(): void {
     const el = this.ensureElement()
@@ -487,35 +529,45 @@ class BackgroundMusicController {
   }
 
   /**
-   * Muffled + bass + reverb while inside a canvas space or study-hub menu focus.
+   * Open / distant-void / enclosed acoustics for ambient UI music.
    */
-  setEnclosedAcoustics(
-    active: boolean,
+  setAcousticsMode(
+    mode: BackgroundMusicAcousticsMode,
     opts?: { immediate?: boolean; durationSec?: number; force?: boolean },
   ): void {
     if (
       !opts?.force &&
-      active === this.enclosedAcousticsActive &&
+      mode === this.acousticsMode &&
       opts?.immediate !== true
     ) {
       return
     }
 
-    this.enclosedAcousticsActive = active
+    const prev = this.acousticsMode
+    this.acousticsMode = mode
 
     if (!this.sourceCreated) {
-      this.pendingEnclosedAcoustics = active
+      this.pendingAcousticsMode = mode
       return
     }
     if (!musicLowpass) return
 
     const durationSec = opts?.immediate
       ? 0
-      : (opts?.durationSec ??
-        (active ? STUDY_SPACE_ENTER_SEC : STUDY_SPACE_EXIT_SEC))
+      : (opts?.durationSec ?? acousticsTransitionDuration(prev, mode))
 
-    applyEnclosedAcoustics(active, durationSec)
-    this.rampOutputGainForEnclosed(active, durationSec)
+    applyAcousticsMode(mode, durationSec)
+    this.rampOutputGainForMode(mode, durationSec)
+  }
+
+  /**
+   * Muffled + bass + reverb while inside a canvas space or study-hub menu focus.
+   */
+  setEnclosedAcoustics(
+    active: boolean,
+    opts?: { immediate?: boolean; durationSec?: number; force?: boolean },
+  ): void {
+    this.setAcousticsMode(active ? 'enclosed' : 'open', opts)
   }
 
   /** @deprecated Use setEnclosedAcoustics */

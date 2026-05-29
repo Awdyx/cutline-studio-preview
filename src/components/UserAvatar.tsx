@@ -1,7 +1,8 @@
 import { deriveInitial } from '../profile/profileUtils'
 import ProfileFramedImage from './ProfileFramedImage'
+import ProfileStatusDot from './ProfileStatusDot'
 import { DEFAULT_AVATAR_FRAME } from '../profile/profileMediaFrame'
-import type { ProfileMediaFrame } from '../profile/types'
+import type { ProfileMediaFrame, ProfileStatus } from '../profile/types'
 
 type UserAvatarProps = {
   displayName: string
@@ -10,6 +11,7 @@ type UserAvatarProps = {
   avatarFrame?: ProfileMediaFrame | null
   size?: number
   fontSize?: number
+  status?: ProfileStatus | null
 }
 
 export default function UserAvatar({
@@ -19,31 +21,27 @@ export default function UserAvatar({
   avatarFrame,
   size = 44,
   fontSize,
+  status,
 }: UserAvatarProps) {
   const initial = deriveInitial(displayName)
   const glyphSize = fontSize ?? Math.round(size * 0.4)
 
-  if (avatarImageUrl) {
-    return (
-      <div
-        style={{
-          width: size,
-          height: size,
-          borderRadius: '50%',
-          overflow: 'hidden',
-          flexShrink: 0,
-        }}
-      >
-        <ProfileFramedImage
-          src={avatarImageUrl}
-          frame={avatarFrame ?? DEFAULT_AVATAR_FRAME}
-          shape="circle"
-        />
-      </div>
-    )
-  }
-
-  return (
+  const avatarNode = avatarImageUrl ? (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        overflow: 'hidden',
+      }}
+    >
+      <ProfileFramedImage
+        src={avatarImageUrl}
+        frame={avatarFrame ?? DEFAULT_AVATAR_FRAME}
+        shape="circle"
+      />
+    </div>
+  ) : (
     <span
       style={{
         width: size,
@@ -57,10 +55,25 @@ export default function UserAvatar({
         fontWeight: 700,
         color: '#fff',
         letterSpacing: '0.02em',
-        flexShrink: 0,
       }}
     >
       {initial}
     </span>
+  )
+
+  if (!status) return avatarNode
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: size,
+        height: size,
+        flexShrink: 0,
+      }}
+    >
+      {avatarNode}
+      <ProfileStatusDot status={status} avatarSize={size} />
+    </div>
   )
 }

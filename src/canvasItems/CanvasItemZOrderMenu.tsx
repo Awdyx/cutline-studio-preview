@@ -23,6 +23,7 @@ import { useCanvasItemDragStore } from './canvasItemDragStore'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import { useLassoStore } from '../drawing/useLassoStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { useStickyBringOutStore } from './stickyBringOutStore'
 import TextAlignmentMenuSection from './TextAlignmentMenuSection'
 import StickyColorMenuSection from './StickyColorMenuSection'
 import { resolveItemTextAlignment } from './textAlignment'
@@ -40,10 +41,14 @@ export default function CanvasItemZOrderMenu() {
   )
   const deleteItem = useCanvasItemsStore((s) => s.deleteItem)
   const sendItemToMainCanvas = useCanvasItemsStore((s) => s.sendItemToMainCanvas)
+  const bringImageOutOfSticky = useCanvasItemsStore((s) => s.bringImageOutOfSticky)
   const previewAdjustSpaceId = useCanvasItemsStore((s) => s.previewAdjustSpaceId)
   const setPreviewAdjustSpace = useCanvasItemsStore((s) => s.setPreviewAdjustSpace)
 
   const itemId = getSoleSelectedItemId(selectedIds)
+  const bringOutInProgress = useStickyBringOutStore(
+    (s) => s.bringingOutItemId === itemId,
+  )
   const zMenuSuppressedItemId = useCanvasItemsStore((s) => s.zMenuSuppressedItemId)
   const hasLassoItemSelection = useLassoStore((s) => s.selectedItemIds.length > 0)
   const editingAllowed = useCanvasEditingAllowed()
@@ -88,6 +93,8 @@ export default function CanvasItemZOrderMenu() {
     menuItem != null &&
     menuItem.type !== 'space' &&
     menuItem.mainCanvasOrigin != null
+  const canBringOutOfSticky =
+    menuItem?.type === 'image' && menuItem.stickyId != null
 
   const menuLayout = useCanvasItemZMenuLayout(menuRef, itemId, showMenu)
   const menuScale = isPhone ? PHONE_Z_ORDER_MENU_SCALE : 1
@@ -116,7 +123,7 @@ export default function CanvasItemZOrderMenu() {
             background: glass.bg,
             border: glass.border,
             boxShadow: glass.shadow,
-            pointerEvents: 'auto',
+            pointerEvents: 'none',
             transformOrigin: menuLayout.transformOrigin,
             overflow: 'hidden',
           }}
@@ -151,6 +158,14 @@ export default function CanvasItemZOrderMenu() {
                 icon={CornerUpLeft}
                 label="Send back to main canvas"
                 onClick={() => sendItemToMainCanvas(itemId)}
+              />
+            )}
+            {canBringOutOfSticky && (
+              <MenuRow
+                icon={CornerUpLeft}
+                label="Bring out of sticky"
+                disabled={bringOutInProgress}
+                onClick={() => bringImageOutOfSticky(itemId)}
               />
             )}
             {showRestoreImportSizing && (

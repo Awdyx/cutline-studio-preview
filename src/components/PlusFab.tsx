@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { playSound } from '../sound/playSound'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Plus, StickyNote, Layers, Type, Image, LayoutGrid } from 'lucide-react'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import ChromeTapSqueezeWrap from './ChromeTapSqueezeWrap'
@@ -32,6 +32,12 @@ import StudySubjectMenuRow from './study/StudySubjectMenuRow'
 import { STUDY_SUBJECTS, type StudySubjectId } from './study/studyHubData'
 import UiPinHost from '../uiCustomization/UiPinHost'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
+import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
+import {
+  bottomRightFabPlusAnimate,
+  bottomRightFabPlusTransition,
+  bottomRightFabRightCss,
+} from './bottomRightFabLayout'
 
 export type CanvasAddType = 'space' | 'sticky' | 'text' | 'image'
 
@@ -40,7 +46,7 @@ export const ADD_TO_CANVAS_ITEMS: {
   label: string
   type: CanvasAddType
 }[] = [
-  { icon: Layers, label: 'Space', type: 'space' },
+  { icon: Layers, label: 'Pocket', type: 'space' },
   { icon: StickyNote, label: 'Sticky note', type: 'sticky' },
   { icon: Type, label: 'Text', type: 'text' },
   { icon: Image, label: 'Image', type: 'image' },
@@ -49,7 +55,7 @@ export const ADD_TO_CANVAS_ITEMS: {
 interface PlusFabProps {
   onAddToCanvas: (type: CanvasAddType) => void
   onStudySubjectSelect?: (subjectId: StudySubjectId) => void
-  /** Spaces only exist on the main canvas — hide the option when inside a space. */
+  /** Pockets only exist on the main canvas — hide the option when inside a pocket. */
   showSpaceOption?: boolean
 }
 
@@ -176,12 +182,15 @@ export default function PlusFab({
   showSpaceOption = true,
 }: PlusFabProps) {
   const isPhone = useIsPhoneLayout()
+  const reduceMotion = useReducedMotion()
   const canvasEditEnabled = useCanvasEditStore((s) => s.enabled)
   const showCanvasEditSection = !isPhone || canvasEditEnabled
+  const nearStudioViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
   const [isOpen, setIsOpen] = useState(false)
   const [fabHoverScale, setFabHoverScale] = useState(false)
   const editingUi = useUiCustomizationStore((s) => s.editing)
   const fabHoverLift = fabHoverScale && !editingUi
+  const chromeVisible = editingUi || nearStudioViewport
   const [widgetsComingSoon, setWidgetsComingSoon] = useState(false)
   const spaceWidgetCount = useCanvasItemsStore((s) => countSpaceWidgets(s.items))
 
@@ -264,6 +273,11 @@ export default function PlusFab({
   })
 
   useEffect(() => {
+    if (chromeVisible || !isOpen) return
+    closeMenu()
+  }, [chromeVisible, isOpen])
+
+  useEffect(() => {
     if (!isOpen) return
 
     function handleKeyDown(e: KeyboardEvent) {
@@ -276,12 +290,15 @@ export default function PlusFab({
   }, [isOpen])
 
   return (
-    <div
+    <motion.div
       ref={containerRef}
       data-plus-fab=""
+      aria-hidden={!chromeVisible}
+      animate={bottomRightFabPlusAnimate(chromeVisible, reduceMotion)}
+      transition={bottomRightFabPlusTransition(chromeVisible, reduceMotion)}
       style={{
         ...chromeBottomRightFixed,
-        right: 'calc(16px + env(safe-area-inset-right, 0px))',
+        right: bottomRightFabRightCss(),
         pointerEvents: 'none',
         display: 'flex',
         flexDirection: 'column',
@@ -339,6 +356,7 @@ export default function PlusFab({
           data-ui-anchor="plus-fab"
           aria-label={isOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={isOpen}
+          tabIndex={chromeVisible ? 0 : -1}
           onClick={handleFabTriggerClick}
           onMouseEnter={() => setFabHoverScale(true)}
           onMouseLeave={() => setFabHoverScale(false)}
@@ -350,12 +368,13 @@ export default function PlusFab({
             background: chromeGlassSurfaceBg({ active: isOpen, hoverLift: fabHoverLift }),
             border: glass.border,
             position: 'relative',
+            pointerEvents: chromeVisible ? 'auto' : 'none',
           }}
         >
           <Plus size={22} color="var(--ui-text)" strokeWidth={2} />
           <UiPinHost anchorId="plus-fab" />
         </button>
       </ChromeTapSqueezeWrap>
-    </div>
+    </motion.div>
   )
 }

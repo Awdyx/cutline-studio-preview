@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, RefObject } from 'react'
 import {
   GraduationCap,
   LayoutDashboard,
@@ -6,11 +6,15 @@ import {
   Trophy,
   UsersRound,
 } from 'lucide-react'
+import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
+import { panToAppDestination } from '../navigation/panToAppDestination'
+import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
 import {
   useAppDestinationStore,
   type AppDestination,
 } from '../navigation/appDestinationStore'
 import { chromeLabel, font } from '../styles/tokens'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import { MenuRow } from './MenuRow'
 
 const sectionHeaderStyle: CSSProperties = {
@@ -38,13 +42,29 @@ function ActiveDestinationDot() {
   )
 }
 
-export default function CutlineAppNavSection({ onNavigate }: { onNavigate: () => void }) {
+export default function CutlineAppNavSection({
+  onNavigate,
+  transformRef,
+}: {
+  onNavigate: (opts?: { silent?: boolean }) => void
+  transformRef: RefObject<ReactZoomPanPinchContentRef | null>
+}) {
   const destination = useAppDestinationStore((s) => s.destination)
   const setDestination = useAppDestinationStore((s) => s.setDestination)
+  const nearStudioViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
+  const editingUi = useUiCustomizationStore((s) => s.editing)
+  const studioAtViewport = editingUi || nearStudioViewport
+  const studioActive = destination === 'studio' && studioAtViewport
 
   const goTo = (next: AppDestination) => {
     setDestination(next)
-    onNavigate()
+    panToAppDestination(transformRef, next)
+    onNavigate({ silent: true })
+  }
+
+  const plateAtViewport = (dest: AppDestination) => {
+    if (dest === 'studio') return studioAtViewport
+    return destination === dest && studioAtViewport
   }
 
   return (
@@ -54,14 +74,44 @@ export default function CutlineAppNavSection({ onNavigate }: { onNavigate: () =>
         icon={LayoutDashboard}
         label="Studio"
         inset
-        active={destination === 'studio'}
-        right={destination === 'studio' ? <ActiveDestinationDot /> : undefined}
+        active={studioActive}
+        right={studioActive ? <ActiveDestinationDot /> : undefined}
         onClick={() => goTo('studio')}
       />
-      <MenuRow icon={Trophy} label="Rankings" inset disabled onClick={() => {}} />
-      <MenuRow icon={MessagesSquare} label="Forum" inset disabled onClick={() => {}} />
-      <MenuRow icon={UsersRound} label="Groups" inset disabled onClick={() => {}} />
-      <MenuRow icon={GraduationCap} label="UCAT" inset disabled onClick={() => {}} />
+      <MenuRow
+        icon={Trophy}
+        label="Rankings"
+        inset
+        active={plateAtViewport('leaderboard')}
+        right={
+          plateAtViewport('leaderboard') ? <ActiveDestinationDot /> : undefined
+        }
+        onClick={() => goTo('leaderboard')}
+      />
+      <MenuRow
+        icon={MessagesSquare}
+        label="Forum"
+        inset
+        active={plateAtViewport('forum')}
+        right={plateAtViewport('forum') ? <ActiveDestinationDot /> : undefined}
+        onClick={() => goTo('forum')}
+      />
+      <MenuRow
+        icon={UsersRound}
+        label="Groups"
+        inset
+        active={plateAtViewport('groups')}
+        right={plateAtViewport('groups') ? <ActiveDestinationDot /> : undefined}
+        onClick={() => goTo('groups')}
+      />
+      <MenuRow
+        icon={GraduationCap}
+        label="UCAT"
+        inset
+        active={plateAtViewport('ucat')}
+        right={plateAtViewport('ucat') ? <ActiveDestinationDot /> : undefined}
+        onClick={() => goTo('ucat')}
+      />
     </>
   )
 }

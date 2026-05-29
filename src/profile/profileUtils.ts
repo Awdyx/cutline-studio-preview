@@ -53,6 +53,7 @@ export function profileToTopBarUser(profile: UserProfile): TopBarUser {
     avatarColor: profile.avatarColor,
     avatarImageUrl: profile.avatarImageUrl,
     avatarFrame: profile.avatarFrame,
+    status: profile.status,
   }
 }
 
@@ -73,6 +74,11 @@ function socialsEqual(a: ProfileSocialLink[], b: ProfileSocialLink[]): boolean {
   )
 }
 
+/** True when any profile field changed except `status`. */
+export function profileEditFieldsChanged(a: UserProfile, b: UserProfile): boolean {
+  return !profilesEqual({ ...a, status: b.status }, b)
+}
+
 export function profilesEqual(a: UserProfile, b: UserProfile): boolean {
   return (
     a.displayName === b.displayName &&
@@ -88,7 +94,8 @@ export function profilesEqual(a: UserProfile, b: UserProfile): boolean {
     socialsEqual(a.socials, b.socials) &&
     a.pinnedTrack?.id === b.pinnedTrack?.id &&
     a.pinnedTrack?.startTime === b.pinnedTrack?.startTime &&
-    a.pinnedTrack?.endTime === b.pinnedTrack?.endTime
+    a.pinnedTrack?.endTime === b.pinnedTrack?.endTime &&
+    a.status === b.status
   )
 }
 

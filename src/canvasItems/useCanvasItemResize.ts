@@ -16,7 +16,15 @@ import { playSound } from '../sound/playSound'
 import { MIN_ITEM_HEIGHT, MIN_ITEM_WIDTH } from './grabZone'
 import { canvasEditingAllowed } from '../canvasEdit/layer'
 import { primaryPointerReleased } from './canvasPointerSession'
+import {
+  isItemWithinStudioCentre,
+  showStudioCentreBoundsToast,
+} from '../canvas/studioCentre'
 import { useCanvasItemsStore } from './canvasItemsStore'
+import { triggerBoundsSnapBack } from './canvasItemDragStore'
+import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { isImageInSticky } from './types'
+import { STUDIO_CONTENT_SCALE } from '../drawing/canvasDimensions'
 import {
   setActiveResizeItem,
   triggerResizeSnapBack,
@@ -105,6 +113,25 @@ function rubberBand(value: number, min: number, max: number): number {
   return value
 }
 
+function pointerDeltaToLogical(
+  clientX: number,
+  clientY: number,
+  startClientX: number,
+  startClientY: number,
+  transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
+): { dx: number; dy: number } | null {
+  const ref = transformRef.current
+  if (!ref) return null
+  const scale = ref.state.scale
+  let dx = (clientX - startClientX) / scale
+  let dy = (clientY - startClientY) / scale
+  if (!useCanvasWorkspaceStore.getState().isInsideSpace()) {
+    dx /= STUDIO_CONTENT_SCALE
+    dy /= STUDIO_CONTENT_SCALE
+  }
+  return { dx, dy }
+}
+
 function removeResizeListeners() {
   detachResizeListeners?.()
   detachResizeListeners = null
@@ -181,6 +208,31 @@ function finishResizeSession() {
   }
 
   setActiveResizeItem(null)
+
+  if (!ended.resizeActivated) return
+
+  const items = useCanvasItemsStore.getState().items
+  const item = items.find((i) => i.id === ended.itemId)
+  // Sticky-local coordinates are not canvas coordinates — skip bounds enforcement
+  // while clipped inside a sticky (resize only changes size, not sticky-local origin).
+  if (
+    item &&
+    !isImageInSticky(item) &&
+    !isItemWithinStudioCentre(item, items)
+  ) {
+    useCanvasItemsStore.getState().animateItemRectTo(
+      ended.itemId,
+      {
+        x: ended.startX,
+        y: ended.startY,
+        width: ended.startWidth,
+        height: ended.startHeight,
+      },
+      { persist: true, clampStudyHub: true },
+    )
+    triggerBoundsSnapBack(ended.itemId)
+    showStudioCentreBoundsToast()
+  }
 }
 
 export function cancelCanvasItemResize() {
@@ -206,10 +258,15 @@ function computeCenterUniformRect(
 ): { x: number; y: number; width: number; height: number; beyondBounds: boolean } | null {
   const ref = session.transformRef.current
   if (!ref) return null
-  const scale = ref.state.scale
-
-  const dx = (clientX - session.startClientX) / scale
-  const dy = (clientY - session.startClientY) / scale
+  const delta = pointerDeltaToLogical(
+    clientX,
+    clientY,
+    session.startClientX,
+    session.startClientY,
+    session.transformRef,
+  )
+  if (!delta) return null
+  const { dx, dy } = delta
 
   const minWidth = options.minWidth ?? MIN_ITEM_WIDTH
   const minHeight = options.minHeight ?? MIN_ITEM_HEIGHT
@@ -267,7 +324,6 @@ function applyResizeMove(clientX: number, clientY: number) {
 
   resizeSession.lastClientX = clientX
   resizeSession.lastClientY = clientY
-  updateItemResizeSound(clientX, clientY)
 
   const options = resizeSession.options
   const elastic = options?.mode === 'center-uniform'
@@ -281,6 +337,7 @@ function applyResizeMove(clientX: number, clientY: number) {
       elastic,
     )
     if (!rect) return
+    updateItemResizeSound(clientX, clientY, rect.width / resizeSession.startWidth)
     resizeSession.beyondBounds = rect.beyondBounds
     useCanvasItemsStore.getState().updateItemRect(
       resizeSession.itemId,
@@ -295,15 +352,24 @@ function applyResizeMove(clientX: number, clientY: number) {
 
   const ref = resizeSession.transformRef.current
   if (!ref) return
-  const scale = ref.state.scale
-  const dx = (clientX - resizeSession.startClientX) / scale
-  const dy = (clientY - resizeSession.startClientY) / scale
+  const delta = pointerDeltaToLogical(
+    clientX,
+    clientY,
+    resizeSession.startClientX,
+    resizeSession.startClientY,
+    resizeSession.transformRef,
+  )
+  if (!delta) return
+  const { dx, dy } = delta
   const minWidth = options?.minWidth ?? MIN_ITEM_WIDTH
   const minHeight = options?.minHeight ?? MIN_ITEM_HEIGHT
 
+  const nextWidth = Math.max(minWidth, resizeSession.startWidth + dx)
+  updateItemResizeSound(clientX, clientY, nextWidth / resizeSession.startWidth)
+
   useCanvasItemsStore.getState().updateItemSize(
     resizeSession.itemId,
-    Math.max(minWidth, resizeSession.startWidth + dx),
+    nextWidth,
     Math.max(minHeight, resizeSession.startHeight + dy),
     { persist: false },
   )

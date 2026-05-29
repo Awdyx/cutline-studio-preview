@@ -19,11 +19,22 @@ import {
   lassoLiftedStrokeZIndex,
 } from '../canvasItems/canvasZOrder'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from './canvasDimensions'
+import { strokeExtendsOutsideStudioCentre } from '../canvas/studioCentre'
+import {
+  CANVAS_ORIGINAL_HEIGHT,
+  CANVAS_ORIGINAL_WIDTH,
+  STUDIO_STROKE_BLEED_PAD,
+} from './canvasDimensions'
 
 const HIGHLIGHTER_GLOW_FILTER_ID = 'cutline-highlighter-glow'
 const ANNOTATION_GLOW_FILTER_ID = 'cutline-annotation-highlighter-glow'
 const ACTIVE_STROKE_GLOW_FILTER_ID = 'cutline-active-stroke-highlighter-glow'
+
+const STROKE_LAYER_WRAP_STYLE = {
+  position: 'absolute' as const,
+  inset: 0,
+  pointerEvents: 'none' as const,
+}
 
 const CompletedStrokePath = memo(function CompletedStrokePath({
   stroke,
@@ -49,18 +60,25 @@ const ActiveStrokePath = memo(function ActiveStrokePath({
   return <path d={d} fill={fill} />
 })
 
+function strokeLayerNeedsBleed(strokes: Stroke[], activeStroke: Stroke | null): boolean {
+  if (activeStroke != null && strokeExtendsOutsideStudioCentre(activeStroke)) return true
+  return strokes.some(strokeExtendsOutsideStudioCentre)
+}
+
 function StrokeSvgLayer({
   strokes,
   activeStroke,
   zIndex,
   glowFilterId,
   strokeLayer,
+  bleed,
 }: {
   strokes: Stroke[]
   activeStroke: Stroke | null
   zIndex: number
   glowFilterId: string
   strokeLayer: 'committed' | 'annotation'
+  bleed: boolean
 }) {
   const themeMode = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeMode)
@@ -72,6 +90,12 @@ function StrokeSvgLayer({
   const dragIds = dragOffset ? new Set(dragOffset.ids) : null
   const dx = dragOffset?.canvasDx ?? 0
   const dy = dragOffset?.canvasDy ?? 0
+  const hasDraggedStrokes =
+    dragIds != null && strokes.some((stroke) => dragIds.has(stroke.id))
+  const svgOverflowVisible = bleed || hasDraggedStrokes
+  const bleedPad = svgOverflowVisible ? STUDIO_STROKE_BLEED_PAD : 0
+  const svgWidth = CANVAS_ORIGINAL_WIDTH + bleedPad * 2
+  const svgHeight = CANVAS_ORIGINAL_HEIGHT + bleedPad * 2
 
   const highlighters = strokes.filter((s) => s.tool === 'highlighter')
   const pens = strokes.filter((s) => s.tool === 'pen')
@@ -118,19 +142,20 @@ function StrokeSvgLayer({
 
   return (
     <svg
-      width={CANVAS_WIDTH}
-      height={CANVAS_HEIGHT}
-      viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+      width={svgWidth}
+      height={svgHeight}
+      viewBox={`${-bleedPad} ${-bleedPad} ${svgWidth} ${svgHeight}`}
       aria-hidden
       data-lock-stroke-layer={strokeLayer}
       data-lock-layer={strokeLayer === 'annotation' ? 'annotation' : undefined}
       style={{
         position: 'absolute',
-        top: 0,
-        left: 0,
+        top: -bleedPad,
+        left: -bleedPad,
         zIndex,
         pointerEvents: 'none',
-        willChange: 'transform',
+        willChange: svgOverflowVisible ? 'transform' : undefined,
+        overflow: svgOverflowVisible ? 'visible' : 'hidden',
       }}
     >
       {isDark && highlighters.length + (activeStroke?.tool === 'highlighter' ? 1 : 0) > 0 && (
@@ -219,29 +244,28 @@ export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
   const hideCommittedStrokes =
     shouldFlattenCanvas(isLocked) && flattenReady && strokes.length > 0
 
-  // Mixed lasso selection: strokes + items both selected → lift above-items
-  // strokes above the blur at a z-index that respects their natural ordering.
   const lassoStrokeIds = useLassoStore((s) => s.selectedStrokeIds)
   const lassoItemIds = useLassoStore((s) => s.selectedItemIds)
   const allItems = useCanvasItemsStore((s) => s.items)
   const isMixedLasso = lassoStrokeIds.length > 0 && lassoItemIds.length > 0
-  // Lift ALL lasso-selected strokes so their z-ordering relative to items is
-  // preserved regardless of which plane (below/above items) they live in.
   const liftedIdSet = isMixedLasso ? new Set(lassoStrokeIds) : null
+  const lassoDragActive = useLassoStore((s) => s.dragOffset != null)
+  const strokeLayerWrapStyle = lassoDragActive
+    ? { ...STROKE_LAYER_WRAP_STYLE, overflow: 'visible' as const }
+    : STROKE_LAYER_WRAP_STYLE
 
   if (band === 'annotation') {
     if (annotationStrokes.length === 0) return null
+    const bleed = strokeLayerNeedsBleed(annotationStrokes, null)
     return (
-      <div
-        key={activeCanvasId}
-        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-      >
+      <div key={activeCanvasId} style={strokeLayerWrapStyle}>
         <StrokeSvgLayer
           strokes={annotationStrokes}
           activeStroke={null}
           zIndex={Z_ANNOTATION_STROKES}
           glowFilterId={ANNOTATION_GLOW_FILTER_ID}
           strokeLayer="annotation"
+          bleed={bleed}
         />
       </div>
     )
@@ -250,29 +274,26 @@ export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
   if (band === 'active') {
     if (!activeStroke) return null
     return (
-      <div
-        key={activeCanvasId}
-        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-      >
+      <div key={activeCanvasId} style={strokeLayerWrapStyle}>
         <StrokeSvgLayer
           strokes={[]}
           activeStroke={activeStroke}
           zIndex={Z_ACTIVE_STROKE}
           glowFilterId={ACTIVE_STROKE_GLOW_FILTER_ID}
           strokeLayer={lockActive ? 'annotation' : 'committed'}
+          bleed
         />
       </div>
     )
   }
 
-  // Lasso-lifted: above-items strokes rendered at their correct interleaved
-  // z-index so they preserve their natural ordering relative to selected items.
   if (band === 'lasso-lifted') {
     if (!isMixedLasso || !liftedIdSet || liftedIdSet.size === 0) return null
     const lifted = strokes.filter((s) => liftedIdSet.has(s.id))
     if (lifted.length === 0) return null
+    const bleed = strokeLayerNeedsBleed(lifted, null)
     return (
-      <div key={activeCanvasId} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      <div key={activeCanvasId} style={strokeLayerWrapStyle}>
         {groupCommittedStrokesByZ(lifted).map(([origZ, groupStrokes]) => (
           <StrokeSvgLayer
             key={origZ}
@@ -281,6 +302,7 @@ export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
             zIndex={lassoLiftedStrokeZIndex(allItems, origZ)}
             glowFilterId={`${HIGHLIGHTER_GLOW_FILTER_ID}-lasso-lifted-${origZ}`}
             strokeLayer="committed"
+            bleed={bleed || lassoDragActive}
           />
         ))}
       </div>
@@ -288,14 +310,14 @@ export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
   }
 
   const committedBand = band
-  // Exclude strokes that are lifted above the blur in a mixed lasso selection.
   const filtered = strokes.filter(
     (stroke) => strokeMatchesBand(stroke, committedBand) && (!liftedIdSet || !liftedIdSet.has(stroke.id)),
   )
   if (hideCommittedStrokes || filtered.length === 0) return null
 
+  const bleed = strokeLayerNeedsBleed(filtered, null)
   return (
-    <div key={activeCanvasId} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+    <div key={activeCanvasId} style={strokeLayerWrapStyle}>
       {groupCommittedStrokesByZ(filtered).map(([zIndex, groupStrokes]) => (
         <StrokeSvgLayer
           key={zIndex}
@@ -304,6 +326,7 @@ export default function DrawingLayer({ band }: { band: DrawingLayerBand }) {
           zIndex={zIndex}
           glowFilterId={`${HIGHLIGHTER_GLOW_FILTER_ID}-${committedBand}-${zIndex}`}
           strokeLayer="committed"
+          bleed={bleed || lassoDragActive}
         />
       ))}
     </div>

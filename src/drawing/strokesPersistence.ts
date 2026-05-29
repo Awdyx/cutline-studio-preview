@@ -9,6 +9,7 @@ import {
 import type { DrawTool } from './types'
 
 import { scopedStorageKey } from '../storage/storageScope'
+import { filterStrokesForStudioCentrePersist } from '../canvas/studioCentre'
 
 export const STROKES_STORAGE_KEY = scopedStorageKey('cutline-strokes-v1')
 const STORAGE_VERSION = 2
@@ -74,11 +75,18 @@ export function loadStrokesFromStorage(): {
 
     const parsed = JSON.parse(raw) as PersistedPayload | Stroke[]
     if (Array.isArray(parsed)) {
-      return { strokes: normalizeStrokeList(parsed), annotationStrokes: [] }
+      return {
+        strokes: filterStrokesForStudioCentrePersist(normalizeStrokeList(parsed)),
+        annotationStrokes: [],
+      }
     }
 
-    const strokes = normalizeStrokeList(parsed?.strokes)
-    const annotationStrokes = normalizeStrokeList(parsed?.annotationStrokes)
+    const strokes = filterStrokesForStudioCentrePersist(
+      normalizeStrokeList(parsed?.strokes),
+    )
+    const annotationStrokes = filterStrokesForStudioCentrePersist(
+      normalizeStrokeList(parsed?.annotationStrokes),
+    )
     return { strokes, annotationStrokes }
   } catch (err) {
     console.warn('[DRAW] failed to load strokes from localStorage', err)
@@ -117,9 +125,11 @@ export function saveStrokesToStorage(
 
     const payload: PersistedPayload = {
       version: STORAGE_VERSION,
-      strokes: serialize(strokes),
+      strokes: serialize(filterStrokesForStudioCentrePersist(strokes)),
       annotationStrokes:
-        annotationStrokes.length > 0 ? serialize(annotationStrokes) : undefined,
+        annotationStrokes.length > 0
+          ? serialize(filterStrokesForStudioCentrePersist(annotationStrokes))
+          : undefined,
     }
     const serialized = JSON.stringify(payload)
     if (serialized.length > MAX_BYTES) {

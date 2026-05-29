@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Bell, GraduationCap, LayoutGrid, MessageSquare, Newspaper, Trophy, Users } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
-import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, CHROME_TAP_SQUEEZE_TARGET_CLASS, CHROME_SURFACE_BG_TRANSITION, chromeGlassSurfaceBg, glass, font } from '../styles/tokens'
+import { panToAppDestination } from '../navigation/panToAppDestination'
+import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
+import { CHROME_FROSTED_MENU_CLASS, CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, CHROME_TAP_SQUEEZE_TARGET_CLASS, CHROME_SURFACE_BG_TRANSITION, chromeFrostedMenuStyle, chromeGlassSurfaceBg, glass, font } from '../styles/tokens'
 import { APP_DESTINATION_LABELS, useAppDestinationStore } from '../navigation/appDestinationStore'
+import { playSubmenuTap } from '../sound/submenuSound'
 import { PHONE_HEADER_ROW_GAP } from '../styles/phoneChrome'
 import CanvasSearchBar from './CanvasSearchBar'
 import ChromeTapSqueezeWrap from './ChromeTapSqueezeWrap'
 import UserAvatar from './UserAvatar'
+import ProfileStatusDot from './ProfileStatusDot'
 import UiPinHost from '../uiCustomization/UiPinHost'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
-import type { ProfileMediaFrame } from '../profile/types'
+import type { TopBarUser } from '../profile/types'
 
 // ─── Hold menu data ────────────────────────────────────────────────────────────
 
@@ -23,43 +27,6 @@ const HOLD_ITEMS = [
   { id: 'groups',      label: 'groups',      Icon: Users },
   { id: 'ucat',        label: 'ucat',        Icon: GraduationCap },
 ] as const
-
-// ─── Coming-soon overlay ───────────────────────────────────────────────────────
-
-function ComingSoonOverlay({ onDismiss }: { onDismiss: () => void }) {
-  return createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      onClick={onDismiss}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: '#000',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer',
-      }}
-    >
-      <motion.p
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.22 }}
-        style={{
-          margin: 0,
-          color: '#fff',
-          fontFamily: font.family,
-          fontSize: 20,
-          fontWeight: 500,
-          letterSpacing: '-0.02em',
-        }}
-      >
-        coming soon {'<3'}
-      </motion.p>
-    </motion.div>,
-    document.body,
-  )
-}
 
 const islandBase: React.CSSProperties = {
   display: 'flex',
@@ -72,25 +39,89 @@ const islandBase: React.CSSProperties = {
   userSelect: 'none',
 }
 
+const brandPillLabelEase = [0.22, 1, 0.36, 1] as const
+
+const brandPillDestinationLabelStyle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 400,
+  color: font.colorMuted,
+  letterSpacing: '-0.01em',
+}
+
+function BrandPillDestinationLabel({ label }: { label: string }) {
+  const reduceMotion = useReducedMotion()
+
+  return (
+    <span
+      style={{
+        ...brandPillDestinationLabelStyle,
+        display: 'inline-flex',
+        opacity: 0.75,
+        overflow: 'hidden',
+        minWidth: '3.25em',
+        justifyContent: 'flex-start',
+      }}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={label}
+          initial={
+            reduceMotion
+              ? false
+              : { opacity: 0, y: 5, filter: 'blur(4px)' }
+          }
+          animate={
+            reduceMotion
+              ? undefined
+              : { opacity: 1, y: 0, filter: 'blur(0px)' }
+          }
+          exit={
+            reduceMotion
+              ? undefined
+              : { opacity: 0, y: -4, filter: 'blur(3px)' }
+          }
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : {
+                  opacity: { duration: 0.22, ease: brandPillLabelEase },
+                  y: { duration: 0.28, ease: brandPillLabelEase },
+                  filter: { duration: 0.24, ease: 'easeOut' },
+                }
+          }
+          style={brandPillDestinationLabelStyle}
+        >
+          {label}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  )
+}
+
 // ─── Brand Pill ───────────────────────────────────────────────────────────────
 
 interface BrandPillProps {
   isOpen?: boolean
   onClick?: () => void
+  transformRef: RefObject<ReactZoomPanPinchContentRef | null>
   /** Stretch pill to fill its column (desktop top bar balance). */
   fullWidth?: boolean
 }
 
-export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandPillProps) {
+export function BrandPill({ isOpen = false, onClick, transformRef, fullWidth = false }: BrandPillProps) {
   const destination = useAppDestinationStore((s) => s.destination)
-  const destinationLabel = APP_DESTINATION_LABELS[destination]
+  const setDestination = useAppDestinationStore((s) => s.setDestination)
+  const nearStudioViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
   const [hovered, setHovered] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
-  const [comingSoon, setComingSoon] = useState(false)
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
 
   const editingUi = useUiCustomizationStore((s) => s.editing)
+  const plusFabChromeVisible = editingUi || nearStudioViewport
+  const destinationLabel = plusFabChromeVisible
+    ? APP_DESTINATION_LABELS[destination]
+    : 'canvas'
   const showHoverBackground = hovered && !editingUi
 
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -142,7 +173,11 @@ export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandP
   const onPointerUp = () => {
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
     if (isHoldRef.current) {
-      if (hoveredItem && hoveredItem !== 'studio') setComingSoon(true)
+      if (hoveredItem) {
+        playSubmenuTap()
+        setDestination(hoveredItem as (typeof HOLD_ITEMS)[number]['id'])
+        panToAppDestination(transformRef, hoveredItem as (typeof HOLD_ITEMS)[number]['id'])
+      }
       cancelHold()
     } else {
       onClick?.()
@@ -190,17 +225,7 @@ export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandP
           }}
         />
         <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>Cutline</span>
-        <span
-          style={{
-            fontSize: 14,
-            fontWeight: 400,
-            color: font.colorMuted,
-            opacity: 0.75,
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {destinationLabel}
-        </span>
+        <BrandPillDestinationLabel label={destinationLabel} />
         <UiPinHost anchorId="brand-pill" />
       </button>
 
@@ -213,6 +238,7 @@ export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandP
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.94, y: -4 }}
               transition={{ type: 'spring', stiffness: 420, damping: 28, mass: 0.6 }}
+              className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
               style={{
                 position: 'fixed',
                 top: menuPos.top,
@@ -220,12 +246,7 @@ export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandP
                 zIndex: 9000,
                 pointerEvents: 'none',
                 transformOrigin: 'top left',
-                background: 'var(--card-bg)',
-                border: glass.border,
-                borderRadius: 16,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1)',
-                backdropFilter: 'blur(22px) saturate(1.4)',
-                WebkitBackdropFilter: 'blur(22px) saturate(1.4)',
+                ...chromeFrostedMenuStyle,
                 padding: '6px 0',
                 minWidth: 168,
                 overflow: 'hidden',
@@ -260,10 +281,6 @@ export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandP
         document.body,
       )}
 
-      {/* Coming-soon overlay */}
-      <AnimatePresence>
-        {comingSoon && <ComingSoonOverlay onDismiss={() => setComingSoon(false)} />}
-      </AnimatePresence>
     </>
   )
 }
@@ -338,13 +355,7 @@ function AttentionIcon({
 }
 
 interface UserClusterProps {
-  user: {
-    name: string
-    initial: string
-    avatarColor: string
-    avatarImageUrl?: string | null
-    avatarFrame?: ProfileMediaFrame | null
-  }
+  user: TopBarUser
   unreadCount: number
   newsCount: number
   newsOpen?: boolean
@@ -355,6 +366,8 @@ interface UserClusterProps {
   onProfileClick: () => void
   compact?: boolean
 }
+
+const profilePillEase = [0.22, 1, 0.36, 1] as const
 
 export function UserCluster({
   user,
@@ -368,6 +381,11 @@ export function UserCluster({
   onProfileClick,
   compact = false,
 }: UserClusterProps) {
+  const reduceMotion = useReducedMotion()
+  const statusSlotTransition = reduceMotion
+    ? { duration: 0 }
+    : { type: 'spring' as const, stiffness: 420, damping: 34, mass: 0.72 }
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 6 : 8 }}>
       <ChromeTapSqueezeWrap compact>
@@ -415,26 +433,57 @@ export function UserCluster({
           data-panel-trigger="profile"
           data-ui-anchor="profile"
           islandStyle={{
-            gap: compact ? 0 : 8,
-            padding: compact ? 6 : '6px 12px 6px 8px',
+            gap: 0,
+            padding: compact
+              ? 6
+              : `6px ${profileOpen ? 8 : 12}px 6px 8px`,
+            transition: reduceMotion
+              ? undefined
+              : `${CHROME_SURFACE_BG_TRANSITION}, padding 0.38s cubic-bezier(${profilePillEase.join(', ')})`,
           }}
         >
-          <UserAvatar
-            displayName={user.name}
-            avatarColor={user.avatarColor}
-            avatarImageUrl={user.avatarImageUrl}
-            avatarFrame={user.avatarFrame}
-            size={compact ? 28 : 24}
-            fontSize={11}
-          />
-          {!compact && (
-            <span
-              className={CHROME_PRESERVE_CASE_CLASS}
-              style={{ fontSize: 14, fontWeight: 500, color: font.colorPrimary }}
-            >
-              {user.name}
-            </span>
-          )}
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: compact ? 0 : 8,
+              minWidth: 0,
+            }}
+          >
+            <UserAvatar
+              displayName={user.name}
+              avatarColor={user.avatarColor}
+              avatarImageUrl={user.avatarImageUrl}
+              avatarFrame={user.avatarFrame}
+              size={compact ? 28 : 24}
+              fontSize={11}
+            />
+            {!compact && (
+              <span
+                className={CHROME_PRESERVE_CASE_CLASS}
+                style={{ fontSize: 14, fontWeight: 500, color: font.colorPrimary }}
+              >
+                {user.name}
+              </span>
+            )}
+          </span>
+          <motion.span
+            aria-hidden={profileOpen}
+            animate={{
+              width: profileOpen ? 0 : 8,
+              opacity: profileOpen ? 0 : 1,
+              marginLeft: profileOpen ? 0 : compact ? 6 : 8,
+            }}
+            transition={statusSlotTransition}
+            style={{
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <ProfileStatusDot status={user.status} placement="inline" />
+          </motion.span>
           <UiPinHost anchorId="profile" />
         </ChromeIslandButton>
       </ChromeTapSqueezeWrap>
@@ -526,7 +575,7 @@ export default function TopBar({
           }}
         >
           <div style={{ pointerEvents: 'auto', flexShrink: 0 }}>
-            <BrandPill isOpen={cutlineMenuOpen} onClick={onCutlineClick} />
+            <BrandPill isOpen={cutlineMenuOpen} onClick={onCutlineClick} transformRef={transformRef} />
           </div>
           <div style={{ pointerEvents: 'auto', flexShrink: 0, minWidth: 0 }}>
             <UserCluster
@@ -587,6 +636,7 @@ export default function TopBar({
         <BrandPill
           isOpen={cutlineMenuOpen}
           onClick={onCutlineClick}
+          transformRef={transformRef}
           fullWidth={sideColumnWidth != null}
         />
       </div>

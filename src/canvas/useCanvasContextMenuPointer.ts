@@ -6,6 +6,7 @@ import { canvasEditingAllowed } from '../canvasEdit/layer'
 import { playSound } from '../sound/playSound'
 import { isPointerOnCanvasItem } from './canvasSelectionDismiss'
 import { useCanvasContextMenuStore } from './canvasContextMenuStore'
+import { useCanvasFisheyeStore } from './canvasFisheyeStore'
 
 export function useCanvasContextMenuPointer(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
@@ -13,6 +14,7 @@ export function useCanvasContextMenuPointer(
 ) {
   const tryOpenMenu = useCallback(
     (clientX: number, clientY: number, target: EventTarget | null) => {
+      if (useCanvasFisheyeStore.getState().engaged) return
       if (!canvasEditingAllowed()) return
       if (isPointerOnCanvasItem(target)) return
       if (target instanceof Element && target.closest('[data-canvas-context-menu]')) {

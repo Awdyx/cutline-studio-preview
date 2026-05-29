@@ -8,32 +8,57 @@ import { SFX_ON_GAIN } from './soundLevels'
 import { RESIZE_SFX_LEVEL } from './soundGains'
 import { useSoundStore } from './soundStore'
 
+/**
+ * Resize bed — deliberately *tonal* (a warm triangle + sub-octave sine through a
+ * low-pass) so it reads differently from the noise "scrape" of dragging. The
+ * pitch tracks how big/small the item is: growing it pulls the tone down, while
+ * shrinking it lifts the tone up. Movement speed drives the loudness.
+ */
 const SPEED_MAX_PX = 1200
 const MIN_SPEED_PX = 8
-/** Audible idle floor while the handle is held — distinct from drag's near-silent idle. */
-const GAIN_IDLE = 0.008 * RESIZE_SFX_LEVEL
-const GAIN_MAX = 0.043 * RESIZE_SFX_LEVEL
-const FREQ_MIN = 220
-const FREQ_MAX = 580
-const RAMP_SEC = 0.055
+/** Audible idle so the held handle hums the current-size pitch even when still. */
+const GAIN_IDLE = 0.006 * RESIZE_SFX_LEVEL
+const GAIN_MAX = 0.052 * RESIZE_SFX_LEVEL
+
+/** Pitch at the item's starting size; scaling moves it within the clamp range. */
+const BASE_FREQ = 150
+const FREQ_LOW = 70
+const FREQ_HIGH = 138
+/** How strongly size shifts pitch (per the size ratio, log-ish via pow). */
+const PITCH_SLOPE = 0.65
+
+const RAMP_SEC = 0.05
 const SPEED_SMOOTHING = 0.76
+/** Hold-still detection: after this gap with no real movement, the bed fades out. */
+const IDLE_GRACE_MS = 90
+/** Gentle fade to silence once the handle is held in place. */
+const FADE_OUT_SEC = 0.85
 
 type ResizeNodes = {
-  source: AudioBufferSourceNode
-  filter: BiquadFilterNode
+  osc: OscillatorNode
+  sub: OscillatorNode
+  lowpass: BiquadFilterNode
   gain: GainNode
 }
 
 let nodes: ResizeNodes | null = null
-let noiseBuffer: AudioBuffer | null = null
 let lastClientX = 0
 let lastClientY = 0
 let lastSpeedSampleAt = 0
 let smoothedSpeed = 0
+let currentRatio = 1
+let idleTimer: number | null = null
 
 function canPlay(): boolean {
   const { muted, hydrated } = useSoundStore.getState()
   return hydrated && !muted
+}
+
+function clearIdleTimer() {
+  if (idleTimer !== null) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
 }
 
 function resetMotionTracking(clientX?: number, clientY?: number) {
@@ -41,23 +66,21 @@ function resetMotionTracking(clientX?: number, clientY?: number) {
   lastClientY = clientY ?? 0
   lastSpeedSampleAt = clientX != null ? performance.now() : 0
   smoothedSpeed = 0
+  currentRatio = 1
 }
 
-function getNoiseBuffer(context: AudioContext): AudioBuffer {
-  if (noiseBuffer && noiseBuffer.sampleRate === context.sampleRate) return noiseBuffer
-
-  const duration = 0.32
-  const len = Math.floor(context.sampleRate * duration)
-  const buf = context.createBuffer(1, len, context.sampleRate)
-  const data = buf.getChannelData(0)
-  let pink = 0
-  for (let i = 0; i < len; i++) {
-    const white = Math.random() * 2 - 1
-    pink = pink * 0.93 + white * 0.07
-    data[i] = pink * 0.48
-  }
-  noiseBuffer = buf
-  return buf
+/** Re-arm the hold-still fade; fires only if no further movement arrives. */
+function armIdleFade() {
+  clearIdleTimer()
+  idleTimer = window.setTimeout(() => {
+    idleTimer = null
+    const context = ensureAudioContext()
+    if (!context || !nodes) return
+    const when = context.currentTime
+    nodes.gain.gain.cancelScheduledValues(when)
+    nodes.gain.gain.setValueAtTime(nodes.gain.gain.value, when)
+    nodes.gain.gain.setTargetAtTime(0.0001, when, FADE_OUT_SEC / 5)
+  }, IDLE_GRACE_MS)
 }
 
 function speedToGain(speed: number): number {
@@ -66,10 +89,10 @@ function speedToGain(speed: number): number {
   return GAIN_IDLE + t * (GAIN_MAX - GAIN_IDLE)
 }
 
-function speedToFreq(speed: number): number {
-  if (speed < MIN_SPEED_PX) return FREQ_MIN
-  const t = Math.min(1, (speed - MIN_SPEED_PX) / (SPEED_MAX_PX - MIN_SPEED_PX))
-  return FREQ_MIN + t * (FREQ_MAX - FREQ_MIN)
+function sizeToFreq(ratio: number): number {
+  const r = Math.min(5, Math.max(0.2, ratio))
+  const f = BASE_FREQ * Math.pow(r, -PITCH_SLOPE)
+  return Math.min(FREQ_HIGH, Math.max(FREQ_LOW, f))
 }
 
 function applyMotion(speed: number, when: number) {
@@ -77,15 +100,26 @@ function applyMotion(speed: number, when: number) {
 
   smoothedSpeed = smoothedSpeed * SPEED_SMOOTHING + speed * (1 - SPEED_SMOOTHING)
   const gain = speedToGain(smoothedSpeed)
-  const freq = speedToFreq(smoothedSpeed)
+  const freq = sizeToFreq(currentRatio)
 
   nodes.gain.gain.cancelScheduledValues(when)
   nodes.gain.gain.setValueAtTime(nodes.gain.gain.value, when)
   nodes.gain.gain.linearRampToValueAtTime(gain, when + RAMP_SEC)
 
-  nodes.filter.frequency.cancelScheduledValues(when)
-  nodes.filter.frequency.setValueAtTime(nodes.filter.frequency.value, when)
-  nodes.filter.frequency.linearRampToValueAtTime(freq, when + RAMP_SEC)
+  nodes.osc.frequency.cancelScheduledValues(when)
+  nodes.osc.frequency.setValueAtTime(nodes.osc.frequency.value, when)
+  nodes.osc.frequency.linearRampToValueAtTime(freq, when + RAMP_SEC)
+
+  nodes.sub.frequency.cancelScheduledValues(when)
+  nodes.sub.frequency.setValueAtTime(nodes.sub.frequency.value, when)
+  nodes.sub.frequency.linearRampToValueAtTime(freq / 2, when + RAMP_SEC)
+
+  nodes.lowpass.frequency.cancelScheduledValues(when)
+  nodes.lowpass.frequency.setValueAtTime(nodes.lowpass.frequency.value, when)
+  nodes.lowpass.frequency.linearRampToValueAtTime(
+    Math.min(2400, freq * 4),
+    when + RAMP_SEC,
+  )
 }
 
 export function startItemResizeSound(clientX?: number, clientY?: number): void {
@@ -107,33 +141,52 @@ async function startItemResizeSoundAsync(
   await resumeAudioContext()
   setMasterOutputGain(SFX_ON_GAIN)
 
-  const source = context.createBufferSource()
-  source.buffer = getNoiseBuffer(context)
-  source.loop = true
+  const osc = context.createOscillator()
+  osc.type = 'triangle'
+  osc.frequency.value = BASE_FREQ
 
-  const filter = context.createBiquadFilter()
-  filter.type = 'bandpass'
-  filter.Q.value = 0.72
-  filter.frequency.value = FREQ_MIN
+  const sub = context.createOscillator()
+  sub.type = 'sine'
+  sub.frequency.value = BASE_FREQ / 2
+
+  const subGain = context.createGain()
+  subGain.gain.value = 0.5
+
+  const lowpass = context.createBiquadFilter()
+  lowpass.type = 'lowpass'
+  lowpass.Q.value = 0.6
+  lowpass.frequency.value = BASE_FREQ * 4
 
   const gain = context.createGain()
   gain.gain.value = GAIN_IDLE
 
-  source.connect(filter)
-  filter.connect(gain)
+  osc.connect(lowpass)
+  sub.connect(subGain)
+  subGain.connect(lowpass)
+  lowpass.connect(gain)
   gain.connect(master)
 
   const when = context.currentTime
-  source.start(when)
-  nodes = { source, filter, gain }
+  osc.start(when)
+  sub.start(when)
+  nodes = { osc, sub, lowpass, gain }
   resetMotionTracking(clientX, clientY)
+  armIdleFade()
 }
 
-export function updateItemResizeSound(clientX: number, clientY: number): void {
+export function updateItemResizeSound(
+  clientX: number,
+  clientY: number,
+  sizeRatio?: number,
+): void {
   if (!nodes) return
 
   const context = ensureAudioContext()
   if (!context) return
+
+  if (sizeRatio != null && Number.isFinite(sizeRatio) && sizeRatio > 0) {
+    currentRatio = sizeRatio
+  }
 
   const now = performance.now()
   if (lastSpeedSampleAt === 0) {
@@ -147,30 +200,34 @@ export function updateItemResizeSound(clientX: number, clientY: number): void {
   if (dt < 0.01) return
 
   const dist = Math.hypot(clientX - lastClientX, clientY - lastClientY)
-  const speed = dist < 1 ? 0 : dist / dt
 
   lastClientX = clientX
   lastClientY = clientY
   lastSpeedSampleAt = now
 
-  applyMotion(speed, context.currentTime)
+  if (dist <= 1) return
+
+  armIdleFade()
+  applyMotion(dist / dt, context.currentTime)
 }
 
 export function stopItemResizeSound(): void {
   const context = ensureAudioContext()
   const active = nodes
   nodes = null
+  clearIdleTimer()
   resetMotionTracking()
 
   if (!active || !context) return
 
   const when = context.currentTime
   active.gain.gain.cancelScheduledValues(when)
-  active.gain.gain.setValueAtTime(active.gain.gain.value, when)
-  active.gain.gain.linearRampToValueAtTime(0.0001, when + 0.08)
+  active.gain.gain.setValueAtTime(Math.max(active.gain.gain.value, 0.0001), when)
+  active.gain.gain.setTargetAtTime(0.0001, when, FADE_OUT_SEC / 5)
 
   try {
-    active.source.stop(when + 0.09)
+    active.osc.stop(when + FADE_OUT_SEC + 0.15)
+    active.sub.stop(when + FADE_OUT_SEC + 0.15)
   } catch {
     // already stopped
   }

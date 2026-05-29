@@ -1,16 +1,18 @@
 import { motion } from 'framer-motion'
 import { isTouchFirstDevice } from './platform/compositor'
-import { vignetteIsVisible } from './canvasPanVignette'
+import { PAN_EDGE_KEYS, panEdgeOverlayStyle } from './canvas/panEdgeOverlay'
 import { usePanMotionStore } from './panMotionStore'
+import { useThemeStore } from './theme/themeStore'
+import { useEffectiveMode } from './theme/useEffectiveMode'
 
-const EDGE_KEYS = ['left', 'right', 'top', 'bottom'] as const
-
-const EDGE_OPACITY_GAIN = 1.42
-const VIGNETTE_OPACITY = 0.6375
+const EDGE_OPACITY_GAIN = 1.12
+const VIGNETTE_OPACITY = 0.5
+const VIGNETTE_OPACITY_MAX = 0.62
+const DARK_MODE_GLOW_STRENGTH = 0.5
 
 const fadeTransition = (active: boolean) => ({
-  duration: active ? 0.55 : 0.45,
-  ease: active ? ('easeOut' as const) : ('easeInOut' as const),
+  duration: active ? 0.55 : 0.22,
+  ease: active ? ('easeOut' as const) : ('easeIn' as const),
 })
 
 const directionTransition = {
@@ -18,25 +20,8 @@ const directionTransition = {
   ease: 'easeOut' as const,
 }
 
-function edgeGradient(key: (typeof EDGE_KEYS)[number]): string {
-  const base = 'var(--vignette-rgba)'
-  const mid = 'var(--vignette-rgba-mid)'
-  const soft = 'var(--vignette-rgba-soft)'
-
-  switch (key) {
-    case 'left':
-      return `linear-gradient(to right, ${base} 0%, ${mid} 4%, ${soft} 10%, transparent 22%)`
-    case 'right':
-      return `linear-gradient(to left, ${base} 0%, ${mid} 4%, ${soft} 10%, transparent 22%)`
-    case 'top':
-      return `linear-gradient(to bottom, ${base} 0%, ${mid} 4%, ${soft} 10%, transparent 24%)`
-    case 'bottom':
-      return `linear-gradient(to top, ${base} 0%, ${mid} 4%, ${soft} 10%, transparent 24%)`
-  }
-}
-
 function edgeOpacity(strength: number): number {
-  return Math.min(1, strength * EDGE_OPACITY_GAIN * VIGNETTE_OPACITY)
+  return Math.min(VIGNETTE_OPACITY_MAX, strength * EDGE_OPACITY_GAIN * VIGNETTE_OPACITY)
 }
 
 const ZOOM_EDGE_VIGNETTE_GAIN = 0.72
@@ -44,41 +29,33 @@ const ZOOM_EDGE_VIGNETTE_GAIN = 0.72
 export default function TrailingVignette() {
   const edges = usePanMotionStore((s) => s.edges)
   const zoomEdgeStrength = usePanMotionStore((s) => s.zoomEdgeStrength)
-  const visible = vignetteIsVisible(edges) || zoomEdgeStrength > 0
+  const themeMode = useThemeStore((s) => s.mode)
+  const effectiveMode = useEffectiveMode(themeMode)
+  const glowStrength = effectiveMode === 'dark' ? DARK_MODE_GLOW_STRENGTH : 1
 
   if (isTouchFirstDevice()) return null
 
   return (
-    <motion.div
-      aria-hidden
-      style={{
-        position: 'fixed',
-        inset: 0,
-        pointerEvents: 'none',
-        zIndex: 9,
-        overflow: 'hidden',
-      }}
-      animate={{ opacity: visible ? 1 : 0 }}
-      transition={fadeTransition(visible)}
-    >
-      {EDGE_KEYS.map((key) => (
-        <motion.div
-          key={key}
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: edgeGradient(key),
-            willChange: 'opacity',
-          }}
-          animate={{ opacity: edgeOpacity(Math.max(edges[key], zoomEdgeStrength * ZOOM_EDGE_VIGNETTE_GAIN)) }}
-          transition={
-            edges[key] > 0 || zoomEdgeStrength > 0
-              ? directionTransition
-              : fadeTransition(false)
-          }
-        />
-      ))}
-    </motion.div>
+    <>
+      {PAN_EDGE_KEYS.map((key) => {
+        const strength = Math.max(
+          edges[key],
+          zoomEdgeStrength * ZOOM_EDGE_VIGNETTE_GAIN,
+        )
+        const opacity = edgeOpacity(strength) * glowStrength
+        const active = strength > 0.02
+
+        return (
+          <motion.div
+            key={key}
+            aria-hidden
+            style={panEdgeOverlayStyle(key)}
+            initial={false}
+            animate={{ opacity: active ? opacity : 0 }}
+            transition={active ? directionTransition : fadeTransition(false)}
+          />
+        )
+      })}
+    </>
   )
 }

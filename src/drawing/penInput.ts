@@ -2,7 +2,7 @@ import { isPhoneLayout } from '../platform/layoutProfile'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { useToolStore } from './toolStore'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from './canvasDimensions'
+import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from './canvasDimensions'
 
 let stylusInputSeen = false
 let spaceDrawHeld = false
@@ -109,8 +109,8 @@ export function isFingerTouch(touch: Touch): boolean {
 export function isCanvasCoordSane(
   x: number,
   y: number,
-  width: number = CANVAS_WIDTH,
-  height: number = CANVAS_HEIGHT,
+  width: number = CANVAS_ORIGINAL_WIDTH,
+  height: number = CANVAS_ORIGINAL_HEIGHT,
 ): boolean {
   return (
     Number.isFinite(x) &&

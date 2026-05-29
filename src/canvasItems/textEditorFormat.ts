@@ -36,6 +36,35 @@ function restoreSelectionRange(editor: HTMLElement, range: Range | null): void {
   selection.addRange(fallback)
 }
 
+/**
+ * Temporarily makes the editor contenteditable, selects all text, applies the
+ * format, reads the resulting HTML, then resets — all without changing React
+ * `isEditing` state so no editing UI is shown.
+ */
+export function applyTextFormatToAll(
+  editor: HTMLElement,
+  kind: TextFormatKind,
+): string | null {
+  if (!editor.textContent?.trim() && editor.innerHTML === '') return null
+
+  const prevCE = editor.contentEditable
+  editor.contentEditable = 'true'
+  editor.focus({ preventScroll: true })
+
+  const range = document.createRange()
+  range.selectNodeContents(editor)
+  const sel = window.getSelection()
+  sel?.removeAllRanges()
+  sel?.addRange(range)
+
+  document.execCommand(EXEC_COMMAND[kind], false)
+  const html = editor.innerHTML
+
+  sel?.removeAllRanges()
+  editor.contentEditable = prevCE
+  return html
+}
+
 export function applyTextFormat(editor: HTMLElement, kind: TextFormatKind): boolean {
   editor.focus({ preventScroll: true })
   const savedRange = cloneSelectionRange()

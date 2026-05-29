@@ -6,9 +6,14 @@ import {
   CANVAS_MAX_SCALE,
   CANVAS_WIDTH,
   CANVAS_ZOOM_EDGE_PADDING,
+  canvasLayoutHeight,
+  canvasLayoutWidth,
   getCanvasMinScale,
+  getCanvasHardMinScale,
 } from '../drawing/canvasDimensions'
 import type { SpaceCamera } from '../spaces/types'
+import { logicalMainCanvasPlateToLayoutRect } from '../drawing/canvasCoords'
+import { canvasItemTransformRect } from '../spaces/spaceCardRect'
 
 export type FocusItemRect = {
   x: number
@@ -32,6 +37,11 @@ export type FocusItemOptions = {
   bypassMaxScale?: boolean
   /** Allow pan past canvas edges so edge items can center (study-hub menu focus). */
   bypassPanBounds?: boolean
+  /** Rect is a main-canvas plate in logical 15k space (not a studio-local item). */
+  mainCanvasPlate?: boolean
+  /** Per animation frame — screen-space pan delta (px), for motion/sfx hooks. */
+  onMotionFrame?: (dx: number, dy: number) => void
+  onComplete?: () => void
 }
 
 const FOCUS_FIT_PADDING_X = 40
@@ -235,6 +245,7 @@ function animateCameraTo(
     curved?: boolean
     animationMs?: number
     onComplete?: () => void
+    onMotionFrame?: (dx: number, dy: number) => void
     bypassMaxScale?: boolean
     bypassPanBounds?: boolean
     restoreTransformMaxScale?: boolean
@@ -268,6 +279,8 @@ function animateCameraTo(
   const perpY = panLen > 0 ? (panDx / panLen) * arcStrength : 0
   const ctrlX = midX + perpX
   const ctrlY = midY + perpY
+  let prevX = start.positionX
+  let prevY = start.positionY
 
   const tick = (now: number) => {
     const rawT = Math.min(1, (now - startTime) / duration)
@@ -279,6 +292,10 @@ function animateCameraTo(
     const nextY = options?.curved
       ? quadraticPoint(start.positionY, ctrlY, target.positionY, t)
       : start.positionY + (target.positionY - start.positionY) * t
+
+    options?.onMotionFrame?.(nextX - prevX, nextY - prevY)
+    prevX = nextX
+    prevY = nextY
 
     ref.setTransform(nextX, nextY, nextScale, 0)
 
@@ -378,6 +395,27 @@ export function cancelLibraryAnimation(ref: ReactZoomPanPinchContentRef): void {
   instance.velocityTime = null
 }
 
+/** Apply a trackpad wheel delta to the canvas camera (screen-space pan). */
+export function applyCanvasTrackpadPanDelta(
+  ref: ReactZoomPanPinchContentRef,
+  deltaX: number,
+  deltaY: number,
+  sensitivity = 1,
+): boolean {
+  if (deltaX === 0 && deltaY === 0) return false
+
+  cancelLibraryAnimation(ref)
+  const { positionX, positionY, scale } = ref.state
+  const nextX = positionX - deltaX * sensitivity
+  const nextY = positionY - deltaY * sensitivity
+  if (nextX === positionX && nextY === positionY) return false
+
+  ref.setTransform(nextX, nextY, scale, 0)
+  syncLibraryBounds(ref)
+  clampToLibraryBounds(ref)
+  return true
+}
+
 type PanBounds = {
   minPositionX: number
   maxPositionX: number
@@ -391,8 +429,8 @@ function canvasPanBoundsForScale(
   wrapperHeight: number,
   scale: number,
 ): PanBounds {
-  const contentWidth = CANVAS_WIDTH * scale
-  const contentHeight = CANVAS_HEIGHT * scale
+  const contentWidth = canvasLayoutWidth() * scale
+  const contentHeight = canvasLayoutHeight() * scale
 
   // disablePadding + content fully visible inside wrapper
   if (wrapperWidth >= contentWidth && wrapperHeight >= contentHeight) {
@@ -463,7 +501,7 @@ function enforceCoverFit(
   const size = wrapperSize(ref)
   if (!size) return null
 
-  const minScale = getCanvasMinScale(size.width, size.height)
+  const minScale = getCanvasHardMinScale(size.width, size.height)
   const { positionX, positionY, scale } = ref.state
   const nextScale = Math.max(scale, minScale)
 
@@ -524,6 +562,13 @@ export function applyAnchoredWheelZoom(
   return true
 }
 
+/** Re-sync + clamp to library bounds (used after manual setTransform animations). */
+export function settleCanvasBounds(ref: ReactZoomPanPinchContentRef | null): void {
+  if (!ref) return
+  syncLibraryBounds(ref)
+  clampToLibraryBounds(ref)
+}
+
 /** Read the camera from transform state. */
 export function readCameraFromRef(
   ref: ReactZoomPanPinchContentRef | null,
@@ -549,9 +594,9 @@ export function isCameraPlausible(
   const size = ref ? wrapperSize(ref) : null
   const width = size?.width ?? window.innerWidth
   const height = size?.height ?? window.innerHeight
-  const minScale = getCanvasMinScale(width, height)
+  const hardMin = getCanvasHardMinScale(width, height)
 
-  if (camera.scale < minScale * 0.85 || camera.scale > CANVAS_MAX_SCALE * 1.05) {
+  if (camera.scale < hardMin * 0.85 || camera.scale > CANVAS_MAX_SCALE * 1.05) {
     return false
   }
 
@@ -604,7 +649,7 @@ export function applyCameraToRef(
     return
   }
 
-  const minScale = getCanvasMinScale(size.width, size.height)
+  const minScale = getCanvasHardMinScale(size.width, size.height)
   const scale = Math.min(
     CANVAS_MAX_SCALE,
     Math.max(minScale, camera.scale),
@@ -615,7 +660,65 @@ export function applyCameraToRef(
   clampToLibraryBounds(ref)
 }
 
+/** Apply a saved camera verbatim — used when leaving a pocket back to the main canvas. */
+export function applyCameraExact(
+  ref: ReactZoomPanPinchContentRef | null,
+  camera: SpaceCamera,
+): void {
+  if (!ref) return
+  if (
+    !Number.isFinite(camera.scale) ||
+    !Number.isFinite(camera.positionX) ||
+    !Number.isFinite(camera.positionY) ||
+    camera.scale <= 0
+  ) {
+    return
+  }
+  ref.setTransform(camera.positionX, camera.positionY, camera.scale, 0)
+  syncLibraryBounds(ref)
+  clampToLibraryBounds(ref)
+}
+
+/** Wait for expanded canvas dimensions, then restore the pre-pocket main camera. */
+export function restoreMainCameraAfterPocketExit(
+  ref: ReactZoomPanPinchContentRef | null,
+  camera: SpaceCamera,
+  options?: { onComplete?: () => void; attempt?: number },
+): void {
+  if (!ref) return
+  const attempt = options?.attempt ?? 0
+  const content = ref.instance.contentComponent
+  const contentWidth = content?.offsetWidth ?? 0
+  const contentHeight = content?.offsetHeight ?? 0
+  const expandedReady =
+    contentWidth >= canvasLayoutWidth() - 1 &&
+    contentHeight >= canvasLayoutHeight() - 1
+
+  if (expandedReady || attempt >= 16) {
+    applyCameraExact(ref, camera)
+    options?.onComplete?.()
+    return
+  }
+
+  requestAnimationFrame(() =>
+    restoreMainCameraAfterPocketExit(ref, camera, {
+      ...options,
+      attempt: attempt + 1,
+    }),
+  )
+}
+
 /** Pan the viewport so the item is centered; optionally fit and animate with a curve. */
+function focusRectForOptions(
+  item: FocusItemRect,
+  options?: FocusItemOptions,
+): FocusItemRect {
+  if (options?.mainCanvasPlate) {
+    return logicalMainCanvasPlateToLayoutRect(item)
+  }
+  return canvasItemTransformRect(item)
+}
+
 export function focusItemOnCanvas(
   ref: ReactZoomPanPinchContentRef | null,
   item: FocusItemRect,
@@ -625,21 +728,25 @@ export function focusItemOnCanvas(
   const size = wrapperSize(ref)
   if (!size) return
 
+  const canvasItem = focusRectForOptions(item, options)
+
   if (options?.fit) {
-    const target = computeCameraToFitItem(ref, item, options)
+    const target = computeCameraToFitItem(ref, canvasItem, options)
     if (!target) return
     animateCameraTo(ref, target, {
       curved: options.curved,
       animationMs: options.animationMs,
       bypassMaxScale: options.bypassMaxScale,
       bypassPanBounds: options.bypassPanBounds,
+      onMotionFrame: options.onMotionFrame,
+      onComplete: options.onComplete,
     })
     return
   }
 
   const scale = options?.scale ?? ref.state.scale
-  const cx = item.x + item.width / 2
-  const cy = item.y + item.height / 2
+  const cx = canvasItem.x + canvasItem.width / 2
+  const cy = canvasItem.y + canvasItem.height / 2
   const animationMs = options?.animationMs ?? 420
   const screenOffsetY = options?.screenOffsetY ?? 0
 
@@ -654,7 +761,12 @@ export function focusItemOnCanvas(
     animateCameraTo(
       ref,
       { positionX, positionY, scale },
-      { curved: true, animationMs },
+      {
+        curved: true,
+        animationMs,
+        onMotionFrame: options.onMotionFrame,
+        onComplete: options.onComplete,
+      },
     )
     return
   }

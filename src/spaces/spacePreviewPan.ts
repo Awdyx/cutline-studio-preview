@@ -1,4 +1,4 @@
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
+import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
 
 export type SpacePreviewPan = {
   x: number
@@ -52,8 +52,8 @@ export function canvasItemToPreviewScreenRect(
   const cx = containerWidth / 2
   const cy = containerHeight / 2
   return {
-    left: cx + (item.x - CANVAS_WIDTH / 2 - pan.x) * renderScale,
-    top: cy + (item.y - CANVAS_HEIGHT / 2 - pan.y) * renderScale,
+    left: cx + (item.x - CANVAS_ORIGINAL_WIDTH / 2 - pan.x) * renderScale,
+    top: cy + (item.y - CANVAS_ORIGINAL_HEIGHT / 2 - pan.y) * renderScale,
     width: item.width * renderScale,
     height: item.height * renderScale,
   }
@@ -65,8 +65,8 @@ export function previewSliceScale(
 ): number {
   if (containerWidth <= 0 || containerHeight <= 0) return 1
   return Math.max(
-    containerWidth / CANVAS_WIDTH,
-    containerHeight / CANVAS_HEIGHT,
+    containerWidth / CANVAS_ORIGINAL_WIDTH,
+    containerHeight / CANVAS_ORIGINAL_HEIGHT,
   )
 }
 
@@ -86,8 +86,8 @@ export function computePreviewPanBounds(
   const scale = previewRenderScale(containerWidth, containerHeight, zoom)
   const visibleWidth = containerWidth / scale
   const visibleHeight = containerHeight / scale
-  const maxPanX = Math.max(0, (CANVAS_WIDTH - visibleWidth) / 2)
-  const maxPanY = Math.max(0, (CANVAS_HEIGHT - visibleHeight) / 2)
+  const maxPanX = Math.max(0, (CANVAS_ORIGINAL_WIDTH - visibleWidth) / 2)
+  const maxPanY = Math.max(0, (CANVAS_ORIGINAL_HEIGHT - visibleHeight) / 2)
   return {
     minX: -maxPanX,
     maxX: maxPanX,
@@ -137,8 +137,8 @@ export function canvasPointUnderPreviewPointer(
   const cx = containerWidth / 2
   const cy = containerHeight / 2
   return {
-    x: CANVAS_WIDTH / 2 + view.x + (pointerX - cx) / scale,
-    y: CANVAS_HEIGHT / 2 + view.y + (pointerY - cy) / scale,
+    x: CANVAS_ORIGINAL_WIDTH / 2 + view.x + (pointerX - cx) / scale,
+    y: CANVAS_ORIGINAL_HEIGHT / 2 + view.y + (pointerY - cy) / scale,
   }
 }
 
@@ -154,15 +154,15 @@ export function panForCanvasPointAtPointer(
   const cx = containerWidth / 2
   const cy = containerHeight / 2
   return {
-    x: canvasPoint.x - CANVAS_WIDTH / 2 - (pointerX - cx) / scale,
-    y: canvasPoint.y - CANVAS_HEIGHT / 2 - (pointerY - cy) / scale,
+    x: canvasPoint.x - CANVAS_ORIGINAL_WIDTH / 2 - (pointerX - cx) / scale,
+    y: canvasPoint.y - CANVAS_ORIGINAL_HEIGHT / 2 - (pointerY - cy) / scale,
   }
 }
 
 export function previewTransform(view: SpacePreviewPan): string {
   const pan = resolveSpacePreviewPan(view)
-  const cx = CANVAS_WIDTH / 2
-  const cy = CANVAS_HEIGHT / 2
+  const cx = CANVAS_ORIGINAL_WIDTH / 2
+  const cy = CANVAS_ORIGINAL_HEIGHT / 2
   return `translate(${cx + pan.x} ${cy + pan.y}) scale(${pan.scale}) translate(${-cx} ${-cy})`
 }
 

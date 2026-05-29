@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
+import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
 import { playSound } from '../sound/playSound'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import {
   DEFAULT_SPACE_NAME,
+  DEFAULT_SPACE_NAME_PLACEHOLDER,
   SPACE_NAME_MAX_LENGTH,
   clampSpaceName,
+  isDefaultSpaceName,
 } from '../spaces/types'
 import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import { useCanvasItemAreaPointer } from '../canvas/useCanvasItemAreaPointer'
@@ -68,9 +70,8 @@ export default function SpaceItem({
   const frozen = isItemFrozen(item, isLocked)
   const spaceMeta = useCanvasWorkspaceStore((s) => s.spaces[item.id])
   const displayName = spaceMeta?.name ?? item.name
-  const isDefaultName =
-    displayName.trim().toLowerCase() === DEFAULT_SPACE_NAME.toLowerCase()
-  const titleLabel = isDefaultName ? 'untitled space' : displayName
+  const isDefaultName = isDefaultSpaceName(displayName)
+  const titleLabel = isDefaultName ? DEFAULT_SPACE_NAME_PLACEHOLDER : displayName
   const hasPreviewContent =
     !!spaceMeta &&
     (spaceMeta.items.length > 0 ||
@@ -85,6 +86,9 @@ export default function SpaceItem({
   const isPreviewAdjusting = previewAdjustSpaceId === item.id
 
   const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id)
+  const boundsSnapPulse = useCanvasItemDragStore((s) =>
+    s.boundsSnapBackItemId === item.id ? s.boundsSnapBackNonce : 0,
+  )
   const selectSelf = useCallback(
     () => useCanvasItemsStore.getState().selectItem(item.id),
     [item.id],
@@ -320,8 +324,8 @@ export default function SpaceItem({
         item.y,
         item.width,
         item.height,
-        CANVAS_WIDTH,
-        CANVAS_HEIGHT,
+        CANVAS_ORIGINAL_WIDTH,
+        CANVAS_ORIGINAL_HEIGHT,
         handleHitSize,
       ),
     [item.x, item.y, item.width, item.height, handleHitSize],
@@ -331,6 +335,7 @@ export default function SpaceItem({
       ref={cardRef}
       data-canvas-item="space"
       data-item-id={item.id}
+      className={boundsSnapPulse ? 'canvas-item-bounds-snap-pulse' : undefined}
       data-active={lifted || undefined}
       data-selected={isSelected || undefined}
       exit={{
@@ -449,7 +454,7 @@ export default function SpaceItem({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
-                aria-label={`Rename space: ${displayName}`}
+                aria-label={`Rename pocket: ${displayName}`}
                 style={{
                   width: '100%',
                   background: 'transparent',
@@ -485,7 +490,7 @@ export default function SpaceItem({
                       e.stopPropagation()
                       beginTitleEdit()
                     }}
-                    aria-label={`Rename space: ${displayName}`}
+                    aria-label={`Rename pocket: ${displayName}`}
                     style={{
                       display: 'inline-block',
                       background: 'transparent',
@@ -532,8 +537,8 @@ export default function SpaceItem({
             .join(' ') || undefined}
           aria-label={
             isPreviewAdjusting
-              ? `Adjust preview for space: ${displayName}`
-              : `Open space: ${displayName}`
+              ? `Adjust preview for pocket: ${displayName}`
+              : `Open pocket: ${displayName}`
           }
           onPointerDown={handlePreviewPointerDown}
           onPointerMove={handlePreviewPointerMove}

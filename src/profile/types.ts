@@ -12,6 +12,8 @@ export type ProfileSocialLink = {
   value: string
 }
 
+export type ProfileStatus = 'online' | 'offline' | 'dnd'
+
 export type PinnedTrack = {
   id: number
   title: string
@@ -38,6 +40,7 @@ export type UserProfile = {
   bannerFrame: ProfileMediaFrame | null
   socials: ProfileSocialLink[]
   pinnedTrack: PinnedTrack | null
+  status: ProfileStatus
 }
 
 export type TopBarUser = {
@@ -46,4 +49,5 @@ export type TopBarUser = {
   avatarColor: string
   avatarImageUrl: string | null
   avatarFrame?: ProfileMediaFrame | null
+  status: ProfileStatus
 }

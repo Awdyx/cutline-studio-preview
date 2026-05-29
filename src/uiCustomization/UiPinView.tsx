@@ -331,14 +331,15 @@ function UiPinViewInner({ pin, editing, selected, anchorId }: UiPinViewProps) {
             width: '100%',
             height: '100%',
             transform: `rotate(${pin.rotation}deg)`,
-            pointerEvents: editing ? 'auto' : 'none',
+            // Pointer events are driven by CSS: inert while editing unfocused
+            // anchors; interactive on focused anchors and in normal (live) mode.
             // touchAction: 'none' is required so pointer capture works correctly
             // for both single-finger drag and two-finger pinch on iPad.
             touchAction: editing ? 'none' : 'auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: selected ? 'grab' : 'pointer',
+            cursor: selected ? 'grab' : undefined,
           }}
         >
           <div

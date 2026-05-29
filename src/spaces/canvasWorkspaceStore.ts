@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { clearHistory } from '../canvasHistory/canvasHistory'
+import { useFeaturePlatePositionStore } from '../canvas/featurePlatePositionStore'
+import { useStudioCentrePositionStore } from '../canvas/studioCentrePositionStore'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import type { CanvasItem } from '../canvasItems/types'
 import { useStrokesStore } from '../drawing/strokesStore'
@@ -26,16 +28,21 @@ import {
 import { putSnapshotFromDataUrl } from '../media/mediaBlobStore'
 import { normalizeLoadedWorkspace } from './normalizeWorkspace'
 import {
+  ensureNotInFisheyeOverview,
+  updateCanvasBarrelAfterCamera,
+} from '../canvas/canvasBarrelPostProcess'
+import {
   applyCameraToRef,
   isCameraPlausible,
   isUninitializedMainCamera,
   readCameraFromRef,
   resetToCoverFit,
+  restoreMainCameraAfterPocketExit,
 } from '../canvas/canvasCamera'
 import { hardClampScale } from '../canvas/canvasZoomEdgeEase'
-import { getCanvasMinScale } from '../drawing/canvasDimensions'
+import { getCanvasHardMinScale } from '../drawing/canvasDimensions'
 import { captureCanvasSnapshot } from './spaceSnapshot'
-import { syncBackgroundMusicEnclosedAcoustics } from '../sound/backgroundMusicAcoustics'
+import { syncBackgroundMusicEnclosedAcoustics, invalidateBackgroundMusicAcousticsViewportSample } from '../sound/backgroundMusicAcoustics'
 import type { SpaceCanvasItem } from '../canvasItems/types'
 import {
   DEFAULT_SPACE_CAMERA,
@@ -112,6 +119,9 @@ let mainItemsCache: CanvasItem[] = []
 let mainStrokesCache: Stroke[] = []
 let mainAnnotationStrokesCache: Stroke[] = []
 let mainCameraCache: SpaceCamera | null = null
+/** Main pan/zoom captured the moment a pocket is opened — restored on exit. */
+let mainCameraBeforePocket: SpaceCamera | null = null
+let pendingMainCameraRestore = false
 
 function patchMainSpaceItem(
   spaceId: string,
@@ -135,6 +145,11 @@ function workspaceSnapshot(
     spaces: state.spaces,
     activeCanvasId: state.activeCanvasId,
     mainCamera: mainCameraCache,
+    studioCentrePosition: {
+      x: useStudioCentrePositionStore.getState().x,
+      y: useStudioCentrePositionStore.getState().y,
+    },
+    featurePlatePositions: useFeaturePlatePositionStore.getState().positions,
     storageVersion: WORKSPACE_STORAGE_VERSION,
   }
 }
@@ -278,6 +293,13 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     mainStrokesCache = normalized.mainStrokes
     mainAnnotationStrokesCache = normalized.mainAnnotationStrokes
     mainCameraCache = normalized.mainCamera
+
+    useStudioCentrePositionStore
+      .getState()
+      .hydrate(normalized.studioCentrePosition)
+    useFeaturePlatePositionStore
+      .getState()
+      .hydrate(normalized.featurePlatePositions)
 
     set({
       spaces,
@@ -493,16 +515,19 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     get().spaces[spaceId]?.camera ?? DEFAULT_SPACE_CAMERA,
 
   enterSpace: (spaceId, transformRef) => {
+    pendingMainCameraRestore = false
+    const savedMain = readCameraFromRef(transformRef)
+    if (savedMain) {
+      mainCameraCache = savedMain
+      mainCameraBeforePocket = savedMain
+    }
+
     runCanvasSpaceSwap(set, get, 'enter', () => {
       useCanvasItemsStore.getState().clearSelection({ silent: true })
-
-      const savedMain = readCameraFromRef(transformRef)
-      if (savedMain) mainCameraCache = savedMain
-
       get().flushActiveToSlot()
       get().loadActiveFromSlot(spaceId)
       clearHistory()
-      get().applyCameraForActiveCanvas(transformRef)
+      // Pocket camera runs from App after pocket canvas dimensions paint.
       get().flushPersistWorkspace()
     })
   },
@@ -514,12 +539,24 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
 
     const wrapper = transformRef.instance.wrapperComponent
     const hardMin = wrapper
-      ? getCanvasMinScale(wrapper.offsetWidth, wrapper.offsetHeight)
+      ? getCanvasHardMinScale(wrapper.offsetWidth, wrapper.offsetHeight)
       : camera.scale
 
-    mainCameraCache = {
+    const next = {
       ...camera,
       scale: hardClampScale(camera.scale, hardMin),
+    }
+
+    const prev = mainCameraCache
+    mainCameraCache = next
+
+    if (
+      !prev ||
+      prev.positionX !== next.positionX ||
+      prev.positionY !== next.positionY ||
+      prev.scale !== next.scale
+    ) {
+      get().persistWorkspace()
     }
   },
 
@@ -528,6 +565,19 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     if (!transformRef) return
 
     if (activeCanvasId === 'main') {
+      if (pendingMainCameraRestore && mainCameraBeforePocket) {
+        pendingMainCameraRestore = false
+        const snapshot = mainCameraBeforePocket
+        restoreMainCameraAfterPocketExit(transformRef, snapshot, {
+          onComplete: () => {
+            if (!transformRef) return
+            updateCanvasBarrelAfterCamera(transformRef, { silent: true })
+          },
+        })
+        mainCameraCache = snapshot
+        return
+      }
+
       const cached = mainCameraCache ?? DEFAULT_SPACE_CAMERA
       if (
         isUninitializedMainCamera(cached) ||
@@ -537,8 +587,11 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
       } else {
         applyCameraToRef(transformRef, cached)
       }
+      ensureNotInFisheyeOverview(transformRef)
       const synced = readCameraFromRef(transformRef)
       if (synced) mainCameraCache = synced
+      invalidateBackgroundMusicAcousticsViewportSample()
+      updateCanvasBarrelAfterCamera(transformRef, { silent: true })
       return
     }
 
@@ -556,9 +609,13 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
 
     if (isDefaultCamera && isEmpty) {
       resetToCoverFit(transformRef)
+      ensureNotInFisheyeOverview(transformRef)
+      updateCanvasBarrelAfterCamera(transformRef, { silent: true })
       requestAnimationFrame(() => {
+        ensureNotInFisheyeOverview(transformRef)
         const synced = readCameraFromRef(transformRef)
         if (synced) get().saveCameraForActive(synced)
+        updateCanvasBarrelAfterCamera(transformRef, { silent: true })
       })
     } else {
       applyCameraToRef(
@@ -566,6 +623,8 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
         isCameraPlausible(camera, transformRef) ? camera : DEFAULT_SPACE_CAMERA,
         { centerIfUninitialized: true },
       )
+      ensureNotInFisheyeOverview(transformRef)
+      updateCanvasBarrelAfterCamera(transformRef, { silent: true })
     }
   },
 
@@ -576,6 +635,8 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     const spaceId = activeCanvasId
     const camera = readCameraFromRef(transformRef)
     if (camera) get().saveCameraForActive(camera)
+
+    pendingMainCameraRestore = mainCameraBeforePocket != null
 
     const swapDoneMs = CANVAS_SWAP_FADE_OUT_MS + CANVAS_SWAP_FADE_IN_MS
     if (canvasEl) {
@@ -592,19 +653,7 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
       get().flushActiveToSlot()
       get().loadActiveFromSlot('main')
       clearHistory()
-
-      const cached = mainCameraCache ?? DEFAULT_SPACE_CAMERA
-      if (
-        isUninitializedMainCamera(cached) ||
-        !isCameraPlausible(cached, transformRef)
-      ) {
-        resetToCoverFit(transformRef)
-      } else {
-        applyCameraToRef(transformRef, cached)
-      }
-      const synced = readCameraFromRef(transformRef)
-      if (synced) mainCameraCache = synced
-
+      // Camera restore runs from App after expanded canvas dimensions paint.
       get().flushPersistWorkspace()
     }, { exitSpaceId: spaceId })
   },

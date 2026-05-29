@@ -1,5 +1,6 @@
 import type { CanvasLayer } from '../canvasLock/layer'
 import type { CanvasItem } from './types'
+import { isImageInSticky } from './types'
 
 /** Global committed pen/highlighter strokes render at this stacking level. */
 export const Z_STROKES = 1000
@@ -44,8 +45,22 @@ export function committedItemZRank(items: CanvasItem[], id: string): number {
   return rank >= 0 ? rank : 0
 }
 
+export function stickyHasSelectedEmbeddedImage(
+  items: readonly CanvasItem[],
+  stickyId: string,
+  selectedIds: readonly string[],
+): boolean {
+  if (selectedIds.length === 0) return false
+  return items.some(
+    (entry) =>
+      entry.type === 'image' &&
+      isImageInSticky(entry) &&
+      entry.stickyId === stickyId &&
+      selectedIds.includes(entry.id),
+  )
+}
+
 /**
- * Lift selected items (and any explicit force-lift item, e.g. a space being
  * hovered as a drop target) above the dim overlay while keeping their relative
  * z-order. Unselected, non-lifted items keep their natural z-index so the dim
  * overlay can blur them.
@@ -60,7 +75,13 @@ export function displayZIndexForCanvasItem(
   selectedIds: readonly string[],
   options?: { forceLift?: boolean; isActiveDrag?: boolean },
 ): number {
-  if (selectedIds.includes(item.id) || options?.isActiveDrag === true) {
+  const liftAboveDim =
+    selectedIds.includes(item.id) ||
+    (item.type === 'sticky' &&
+      stickyHasSelectedEmbeddedImage(items, item.id, selectedIds)) ||
+    options?.isActiveDrag === true
+
+  if (liftAboveDim) {
     // Use rank * 2 (even slots) so lasso-lifted strokes can occupy the odd
     // slots in between and maintain their natural z-ordering relative to items.
     return Z_SELECTION_ABOVE_DIM + committedItemZRank(items, item.id) * 2

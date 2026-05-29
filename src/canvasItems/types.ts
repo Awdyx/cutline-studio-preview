@@ -57,6 +57,15 @@ export type ImageCanvasItem = CanvasItemBase & {
   /** Display size at import — used to restore aspect ratio after resize. */
   importWidth?: number
   importHeight?: number
+  /** When set, x/y are local to the sticky interior (top-left origin). */
+  stickyId?: string
+}
+
+/** Image clipped inside a sticky — x/y are sticky-local coordinates. */
+export function isImageInSticky(
+  item: CanvasItem | undefined,
+): item is ImageCanvasItem & { stickyId: string } {
+  return item?.type === 'image' && typeof item.stickyId === 'string'
 }
 
 export type VideoCanvasItem = CanvasItemBase & {
@@ -93,6 +102,16 @@ export function isStickyItem(item: CanvasItem): item is StickyCanvasItem {
   return item.type === 'sticky'
 }
 
+/** Ink on a sticky — same stroke sources rendered by StickyStrokesSvg. */
+export function stickyHasInk(
+  sticky: StickyCanvasItem,
+  activeStroke?: Stroke | null,
+): boolean {
+  if (sticky.strokes.length > 0) return true
+  if ((sticky.annotationStrokes?.length ?? 0) > 0) return true
+  return activeStroke != null && activeStroke.points.length > 0
+}
+
 export function isDrawableSurface(item: CanvasItem): item is DrawableSurfaceItem {
   return item.type === 'sticky' || item.type === 'study_hub'
 }
@@ -105,23 +124,29 @@ export type CanvasItem =
   | SpaceCanvasItem
   | StudyHubCanvasItem
 
-export const STICKY_WIDTH = 200
-export const STICKY_HEIGHT = 200
+/** Cumulative spawn footprint vs original design (×1.3, then +20%). */
+export const STUDIO_SPAWN_SIZE_SCALE = 1.3 * 1.2
 
-export const SPACE_WIDTH = 240
-export const SPACE_HEIGHT = 240
-export const MAX_SPACE_WIDGETS = 3
+export const STICKY_WIDTH = Math.round(200 * STUDIO_SPAWN_SIZE_SCALE)
+export const STICKY_HEIGHT = Math.round(200 * STUDIO_SPAWN_SIZE_SCALE)
+/** Inner text inset for sticky editors and empty hint. */
+export const STICKY_TEXT_INSET = Math.round(14 * STUDIO_SPAWN_SIZE_SCALE)
+
+export const SPACE_WIDTH = Math.round(240 * STUDIO_SPAWN_SIZE_SCALE)
+export const SPACE_HEIGHT = Math.round(240 * STUDIO_SPAWN_SIZE_SCALE)
+export const MAX_SPACE_WIDGETS = 4
 /** Initial spawn size — grows to fit content while editing. */
-export const TEXT_BOX_INSET_X = 15
-export const TEXT_BOX_INSET_Y = 15
-/** Minimum outer box — 30px inset plus empty caret / one text line. */
+export const TEXT_BOX_INSET_X = Math.round(15 * STUDIO_SPAWN_SIZE_SCALE)
+export const TEXT_BOX_INSET_Y = Math.round(15 * STUDIO_SPAWN_SIZE_SCALE)
+/** Minimum outer box — inset plus empty caret / one text line. */
 export const TEXT_MIN_WIDTH = TEXT_BOX_INSET_X * 2 + 2
-export const TEXT_MIN_HEIGHT = TEXT_BOX_INSET_Y * 2 + 24
+export const TEXT_MIN_HEIGHT =
+  TEXT_BOX_INSET_Y * 2 + Math.round(24 * STUDIO_SPAWN_SIZE_SCALE)
 /** Comfortable starting rectangle when spawning new text from the menu. */
-export const TEXT_WIDTH = 320
-export const TEXT_HEIGHT = 120
+export const TEXT_WIDTH = Math.round(320 * STUDIO_SPAWN_SIZE_SCALE)
+export const TEXT_HEIGHT = Math.round(120 * STUDIO_SPAWN_SIZE_SCALE)
 /** Max width while auto-fitting content during the first edit. */
-export const TEXT_MAX_AUTO_WIDTH = 320
+export const TEXT_MAX_AUTO_WIDTH = Math.round(320 * STUDIO_SPAWN_SIZE_SCALE)
 export const TEXT_BOX_PADDING = `${TEXT_BOX_INSET_Y}px ${TEXT_BOX_INSET_X}px`
 export const STUDY_HUB_WIDTH = 460
 export const STUDY_HUB_HEIGHT = 580

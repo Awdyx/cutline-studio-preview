@@ -83,6 +83,7 @@ export function useCanvasZoomEdgeEase(minScale: number) {
         snapTimerRef.current = setTimeout(() => {
           snapTimerRef.current = null
           useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+          useCanvasWorkspaceStore.getState().flushPersistWorkspace()
         }, snapMs + 32)
         return
       }

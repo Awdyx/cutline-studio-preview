@@ -1,6 +1,22 @@
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
+import { isImageInSticky } from '../canvasItems/types'
 import { useLassoStore } from '../drawing/useLassoStore'
 import { useCanvasNavigationStore } from './canvasNavigationStore'
+
+function embeddedImageStickyId(itemId: string): string | null {
+  const item = useCanvasItemsStore.getState().items.find((entry) => entry.id === itemId)
+  if (!item || !isImageInSticky(item)) return null
+  return item.stickyId
+}
+
+/** True when itemId is an image embedded in a sticky that is already selected. */
+export function isEmbeddedInSelectedSticky(
+  itemId: string,
+  selectedIds: readonly string[],
+): boolean {
+  const stickyId = embeddedImageStickyId(itemId)
+  return stickyId != null && selectedIds.includes(stickyId)
+}
 
 /** True when the pointer target is on a space card preview for the given space id. */
 export function isPointerOnSpacePreview(
@@ -34,7 +50,9 @@ export function isPointerOnSelectedItem(
   if (!itemEl) return false
 
   const itemId = itemEl.getAttribute('data-item-id')
-  return itemId != null && selectedIds.includes(itemId)
+  if (itemId == null) return false
+  if (selectedIds.includes(itemId)) return true
+  return isEmbeddedInSelectedSticky(itemId, selectedIds)
 }
 
 /** True when the pointer target is on the floating z-order menu for the selection. */
@@ -66,7 +84,10 @@ export function dismissCanvasSelection(): void {
 /** Item tap handlers skip selection when another item is selected — canvas dismisses instead. */
 export function shouldSkipItemSelectForOutsideDismiss(itemId: string): boolean {
   const { selectedIds } = useCanvasItemsStore.getState()
-  return selectedIds.length > 0 && !selectedIds.includes(itemId)
+  if (selectedIds.length === 0 || selectedIds.includes(itemId)) return false
+  // Narrowing from sticky → its embedded image is not an outside tap.
+  if (isEmbeddedInSelectedSticky(itemId, selectedIds)) return false
+  return true
 }
 
 /** Clear selection when tapping a non-selected item while something else is selected. */

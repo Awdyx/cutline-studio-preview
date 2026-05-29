@@ -3,9 +3,11 @@ import {
 } from '../media/compressImage'
 import { shouldSkipImageCompression } from '../media/imageCompressCore'
 import { putMediaBlob } from '../media/mediaBlobStore'
+import { STUDIO_SPAWN_SIZE_SCALE } from './types'
 
 export const MAX_MEDIA_BYTES = 5 * 1024 * 1024
-export const MAX_MEDIA_DIMENSION = 400
+/** Longest edge for imported images/videos on canvas — scaled with studio spawn footprint. */
+export const MAX_MEDIA_DIMENSION = Math.round(400 * STUDIO_SPAWN_SIZE_SCALE)
 
 export type PreparedMedia = {
   kind: 'image' | 'video'

@@ -1,6 +1,6 @@
 import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { clientToCanvas } from '../drawing/canvasCoords'
+import { clientToCanvas, clientToFullCanvas } from '../drawing/canvasCoords'
 import { PHONE_HEADER_BLOCK_HEIGHT } from '../styles/phoneChrome'
 import { readEditablePlacementRect } from '../platform/viewportSize'
 
@@ -53,6 +53,37 @@ export function viewportCenterCanvas(
   canvasEl?: HTMLElement | null,
 ): { x: number; y: number } | null {
   return viewportPointCanvas(transformRef, viewportHost, 0.5, 0.5, canvasEl)
+}
+
+/** Viewport centre in full expanded canvas space — for zone checks while panning in the void. */
+export function viewportPointFullCanvas(
+  transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
+  viewportHost?: HTMLElement | null,
+  verticalRatio = 0.5,
+  horizontalRatio = 0.5,
+): { x: number; y: number } | null {
+  const clampedVertical = Math.min(1, Math.max(0, verticalRatio))
+  const clampedHorizontal = Math.min(1, Math.max(0, horizontalRatio))
+
+  const host =
+    viewportHost ?? transformRef.current?.instance.wrapperComponent ?? null
+  if (!host) return null
+
+  const rect = host.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return null
+
+  return clientToFullCanvas(
+    rect.left + rect.width * clampedHorizontal,
+    rect.top + rect.height * clampedVertical,
+    transformRef,
+  )
+}
+
+export function viewportCenterFullCanvas(
+  transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
+  viewportHost?: HTMLElement | null,
+): { x: number; y: number } | null {
+  return viewportPointFullCanvas(transformRef, viewportHost, 0.5, 0.5)
 }
 
 /** Center spawn in the visible canvas band — clears top chrome and bottom FAB. */

@@ -130,6 +130,7 @@ function ShortcutRow({
   const [hovered, setHovered] = useState(false)
   const reduceMotion = useReducedMotion()
   const overrides = useShortcutCustomStore((s) => s.overrides)
+  const disabled = useShortcutCustomStore((s) => s.disabled)
   const [keycapScope, animateKeycap] = useAnimate()
   const prevNonce = useRef(0)
 
@@ -146,8 +147,11 @@ function ShortcutRow({
   }, [shakeNonce, reduceMotion])
 
   const isEditing = editState?.id === shortcut.id
-  const isCustomized = Boolean(overrides[shortcut.id])
-  const effectiveKeys = overrides[shortcut.id]?.display ?? shortcut.keys
+  const isDisabled = Boolean(disabled[shortcut.id])
+  const isCustomized = Boolean(overrides[shortcut.id]) || isDisabled
+  const effectiveKeys = isDisabled
+    ? []
+    : overrides[shortcut.id]?.display ?? shortcut.keys
   const isEditable = !NON_CUSTOMIZABLE_IDS.has(shortcut.id)
 
   const canClick = isEditable && !isEditing
@@ -433,16 +437,19 @@ export default function ShortcutsSubmenu({
   const grouped = shortcutsByCategory()
 
   const overrides = useShortcutCustomStore((s) => s.overrides)
+  const disabled = useShortcutCustomStore((s) => s.disabled)
   const setOverride = useShortcutCustomStore((s) => s.setOverride)
+  const disableShortcut = useShortcutCustomStore((s) => s.disableShortcut)
   const resetOverride = useShortcutCustomStore((s) => s.resetOverride)
 
   // ── Computed reset state ──────────────────────────────────────────────────
 
   const editingDef = editState ? SHORTCUTS_BY_ID[editState.id] : null
   const hasOverride = editState ? Boolean(overrides[editState.id]) : false
+  const isEditingDisabled = editState ? Boolean(disabled[editState.id]) : false
   const defaultCombo = editingDef ? displayToCombo(editingDef.keys) : null
 
-  const resetEnabled = hasOverride
+  const resetEnabled = hasOverride || isEditingDisabled
 
   // ── Key capture — auto-saves on valid combo ───────────────────────────────
 
@@ -460,6 +467,7 @@ export default function ShortcutsSubmenu({
       e.stopImmediatePropagation()
 
       if (e.key === 'Escape') {
+        disableShortcut(editState.id)
         setEditState(null)
         return
       }
@@ -482,7 +490,7 @@ export default function ShortcutsSubmenu({
       }
       setEditState(null)
     },
-    [editState, defaultCombo, setOverride, resetOverride],
+    [editState, defaultCombo, setOverride, resetOverride, disableShortcut],
   )
 
   useEffect(() => {

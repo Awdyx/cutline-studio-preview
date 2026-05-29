@@ -10,16 +10,14 @@ import { ChevronLeft } from 'lucide-react'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import {
   DEFAULT_SPACE_NAME,
+  DEFAULT_SPACE_NAME_PLACEHOLDER,
   SPACE_NAME_MAX_LENGTH,
   clampSpaceName,
+  isDefaultSpaceName,
 } from '../spaces/types'
 import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, glass, font } from '../styles/tokens'
 
-const SPACE_NAME_PLACEHOLDER = 'untitled space'
-
-function isDefaultSpaceName(name: string): boolean {
-  return name.trim().toLowerCase() === DEFAULT_SPACE_NAME.toLowerCase()
-}
+const SPACE_NAME_PLACEHOLDER = DEFAULT_SPACE_NAME_PLACEHOLDER
 
 const nameFontStyle: CSSProperties = {
   fontSize: 14,
@@ -219,7 +217,7 @@ export default function SpaceBackPill({
                   setEditing(false)
                 }
               }}
-              aria-label="Space name"
+              aria-label="Pocket name"
               className={CHROME_PRESERVE_CASE_CLASS}
               style={nameInputStyle}
             />
@@ -233,7 +231,7 @@ export default function SpaceBackPill({
                 setDraft(isDefaultSpaceName(name) ? '' : clampSpaceName(name))
                 setEditing(true)
               }}
-              aria-label={`Rename space: ${name}`}
+              aria-label={`Rename pocket: ${name}`}
               style={{
                 ...nameButtonStyle,
                 color: showingPlaceholder ? font.colorFaint : font.colorPrimary,

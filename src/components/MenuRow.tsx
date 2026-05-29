@@ -3,16 +3,49 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 import { chromeLabel, font } from '../styles/tokens'
 import { useSubmenuSoundScope } from './SubmenuSoundScope'
+import ProfileStatusDot from './ProfileStatusDot'
+import type { ProfileStatus } from '../profile/types'
+
+function MenuRowLabel({
+  label,
+  labelSuffix,
+  preserveCase,
+}: {
+  label: string
+  labelSuffix?: string
+  preserveCase?: boolean
+}) {
+  const primary = preserveCase ? label : chromeLabel(label)
+  if (!labelSuffix) return <>{primary}</>
+
+  return (
+    <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+      <span>{primary}</span>
+      <span
+        style={{
+          fontWeight: 400,
+          color: font.colorMuted,
+          opacity: 0.75,
+          letterSpacing: '-0.01em',
+        }}
+      >
+        {labelSuffix}
+      </span>
+    </span>
+  )
+}
 
 export function MenuRow({
   icon: Icon,
   label,
+  labelSuffix,
   right,
   onClick,
   onMouseEnter,
   submenuSounds,
   submenuClickSound = true,
   dotColor,
+  status,
   destructive = false,
   disabled = false,
   dimmed = false,
@@ -25,6 +58,8 @@ export function MenuRow({
 }: {
   icon?: React.ElementType
   label: string
+  /** Muted companion text beside the label (e.g. current status beside “activity status”). */
+  labelSuffix?: string
   right?: React.ReactNode
   onClick: () => void
   onMouseEnter?: () => void
@@ -32,6 +67,8 @@ export function MenuRow({
   submenuSounds?: boolean
   submenuClickSound?: boolean
   dotColor?: string
+  /** Profile status dot — same slot size as row icons, with DND minus when applicable. */
+  status?: ProfileStatus
   destructive?: boolean
   disabled?: boolean
   /** Greyed appearance without blocking clicks (e.g. study shortcut hints). */
@@ -174,16 +211,28 @@ export function MenuRow({
           }}
         />
       )}
-      {dotColor ? (
+      {status ? (
+        <ProfileStatusDot status={status} placement="menu" compact={compact} />
+      ) : dotColor ? (
         <span
           style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            backgroundColor: dotColor,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: compact ? 15 : 16,
+            height: compact ? 15 : 16,
             flexShrink: 0,
           }}
-        />
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              backgroundColor: dotColor,
+            }}
+          />
+        </span>
       ) : Icon ? (
         <Icon
           size={compact ? 15 : 16}
@@ -216,14 +265,22 @@ export function MenuRow({
             minWidth: 0,
           }}
         >
-          {preserveCase ? label : chromeLabel(label)}
+          <MenuRowLabel
+            label={label}
+            labelSuffix={labelSuffix}
+            preserveCase={preserveCase}
+          />
         </motion.span>
       ) : (
         <span
           className={preserveCase ? 'ui-chrome-preserve-case' : undefined}
           style={{ flex: 1, fontSize: compact ? 13 : 14 }}
         >
-          {preserveCase ? label : chromeLabel(label)}
+          <MenuRowLabel
+            label={label}
+            labelSuffix={labelSuffix}
+            preserveCase={preserveCase}
+          />
         </span>
       )}
       {right}

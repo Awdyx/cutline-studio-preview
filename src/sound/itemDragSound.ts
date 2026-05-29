@@ -8,7 +8,7 @@ import { SFX_ON_GAIN } from './soundLevels'
 import { CONTINUOUS_SFX_LEVEL } from './soundGains'
 import { useSoundStore } from './soundStore'
 
-const SPEED_MAX_PX = 1400
+const SPEED_MAX_PX = 4200
 const MIN_SPEED_PX = 20
 const GAIN_MIN = 0.001872 * CONTINUOUS_SFX_LEVEL
 const GAIN_MAX = 0.03744 * CONTINUOUS_SFX_LEVEL
@@ -16,6 +16,10 @@ const FREQ_MIN = 300
 const FREQ_MAX = 720
 const RAMP_SEC = 0.05
 const SPEED_SMOOTHING = 0.75
+/** Hold-still detection: after this gap with no real movement, the bed fades out. */
+const IDLE_GRACE_MS = 90
+/** Gentle fade to silence once the item is held in place. */
+const FADE_OUT_SEC = 0.85
 
 type DragNodes = {
   source: AudioBufferSourceNode
@@ -29,10 +33,18 @@ let lastClientX = 0
 let lastClientY = 0
 let lastSpeedSampleAt = 0
 let smoothedSpeed = 0
+let idleTimer: number | null = null
 
 function canPlay(): boolean {
   const { muted, hydrated } = useSoundStore.getState()
   return hydrated && !muted
+}
+
+function clearIdleTimer() {
+  if (idleTimer !== null) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
 }
 
 function resetMotionTracking() {
@@ -40,6 +52,19 @@ function resetMotionTracking() {
   lastClientY = 0
   lastSpeedSampleAt = 0
   smoothedSpeed = 0
+}
+
+function armIdleFade() {
+  clearIdleTimer()
+  idleTimer = window.setTimeout(() => {
+    idleTimer = null
+    const context = ensureAudioContext()
+    if (!context || !nodes) return
+    const when = context.currentTime
+    nodes.gain.gain.cancelScheduledValues(when)
+    nodes.gain.gain.setValueAtTime(nodes.gain.gain.value, when)
+    nodes.gain.gain.setTargetAtTime(0.0001, when, FADE_OUT_SEC / 5)
+  }, IDLE_GRACE_MS)
 }
 
 function getNoiseBuffer(context: AudioContext): AudioBuffer {
@@ -123,6 +148,7 @@ async function startItemDragSoundAsync(): Promise<void> {
   source.start(when)
   nodes = { source, filter, gain }
   resetMotionTracking()
+  armIdleFade()
 }
 
 export function updateItemDragSound(clientX: number, clientY: number): void {
@@ -143,30 +169,33 @@ export function updateItemDragSound(clientX: number, clientY: number): void {
   if (dt < 0.012) return
 
   const dist = Math.hypot(clientX - lastClientX, clientY - lastClientY)
-  const speed = dist < 1.5 ? 0 : dist / dt
 
   lastClientX = clientX
   lastClientY = clientY
   lastSpeedSampleAt = now
 
-  applyMotion(speed, context.currentTime)
+  if (dist < 1.5) return
+
+  armIdleFade()
+  applyMotion(dist / dt, context.currentTime)
 }
 
 export function stopItemDragSound(): void {
   const context = ensureAudioContext()
   const active = nodes
   nodes = null
+  clearIdleTimer()
   resetMotionTracking()
 
   if (!active || !context) return
 
   const when = context.currentTime
   active.gain.gain.cancelScheduledValues(when)
-  active.gain.gain.setValueAtTime(active.gain.gain.value, when)
-  active.gain.gain.linearRampToValueAtTime(0.0001, when + 0.07)
+  active.gain.gain.setValueAtTime(Math.max(active.gain.gain.value, 0.0001), when)
+  active.gain.gain.setTargetAtTime(0.0001, when, FADE_OUT_SEC / 5)
 
   try {
-    active.source.stop(when + 0.08)
+    active.source.stop(when + FADE_OUT_SEC + 0.15)
   } catch {
     // already stopped
   }

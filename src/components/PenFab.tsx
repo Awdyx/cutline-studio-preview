@@ -36,13 +36,25 @@ import { useCanvasMeshPauseWhile } from '../canvas/useCanvasMeshPause'
 import UiPinHost from '../uiCustomization/UiPinHost'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import { useLassoStore, type LassoTargetType } from '../drawing/useLassoStore'
+import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
+import {
+  bottomRightFabPenSlideTransition,
+  bottomRightFabRightCss,
+  BOTTOM_RIGHT_FAB_SLOT_SHIFT_PX,
+  usePenFabSlideStretch,
+} from './bottomRightFabLayout'
 
-const FAB_SIZE = 52
-const FAB_GAP = 12
-/** Left of the + FAB: 16px margin + 52px FAB + 12px gap */
-const PEN_FAB_RIGHT = 16 + FAB_SIZE + FAB_GAP
-const PEN_FAB_MENU_TRANSITION_MS = 180
 const PEN_FAB_HOST_TRANSITION_MS = 160
+const PEN_FAB_MENU_BRIDGE_PX = 320
+const DESKTOP_HOVER_OPEN_MS = 120
+const DESKTOP_HOVER_CLOSE_MS = 180
+
+const PEN_FAB_MENU_MOTION = {
+  initial: { opacity: 0, filter: 'blur(4px)' },
+  animate: { opacity: 1, filter: 'blur(0px)' },
+  exit: { opacity: 0, filter: 'blur(4px)' },
+  transition: CHROME_MENU_TRANSITION,
+}
 
 /** Dissolve shared by color-popover and lasso-panel — opacity + blur only, no movement. */
 const SUBMENU_SWITCH_MOTION = {
@@ -333,11 +345,13 @@ export default function PenFab() {
   const setMode = useToolStore((s) => s.setMode)
 
   const [isOpen, setIsOpen] = useState(false)
-  const [menuMounted, setMenuMounted] = useState(false)
-  const [menuVisible, setMenuVisible] = useState(false)
   const [fabHoverScale, setFabHoverScale] = useState(false)
+  const reduceMotion = useReducedMotion()
   const editingUi = useUiCustomizationStore((s) => s.editing)
+  const nearStudioViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
+  const plusSlotOccupied = editingUi || nearStudioViewport
   const fabHoverLift = fabHoverScale && !editingUi
+  const penSlideStretch = usePenFabSlideStretch(plusSlotOccupied, reduceMotion)
   const [colorPopover, setColorPopover] = useState<'pen' | 'highlighter' | null>(
     null,
   )
@@ -347,17 +361,30 @@ export default function PenFab() {
   const [hasClearableContent, setHasClearableContent] = useState(false)
   const [hostMounted, setHostMounted] = useState(penFabActive)
   const [hostVisible, setHostVisible] = useState(penFabActive)
-  const reduceMotion = useReducedMotion()
 
   const containerRef = useRef<HTMLDivElement>(null)
+  const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isOpenRef = useRef(isOpen)
   isOpenRef.current = isOpen
   const colorPopoverRef = useRef(colorPopover)
   colorPopoverRef.current = colorPopover
 
+  function clearHoverTimers() {
+    if (hoverOpenTimerRef.current !== null) {
+      clearTimeout(hoverOpenTimerRef.current)
+      hoverOpenTimerRef.current = null
+    }
+    if (hoverCloseTimerRef.current !== null) {
+      clearTimeout(hoverCloseTimerRef.current)
+      hoverCloseTimerRef.current = null
+    }
+  }
+
   useCanvasMeshPauseWhile(isOpen)
 
   function closeMenu(opts?: ChromeMenuSoundOpts) {
+    clearHoverTimers()
     if (
       !opts?.silent &&
       (isOpenRef.current || colorPopoverRef.current)
@@ -373,10 +400,41 @@ export default function PenFab() {
 
   function openMenu() {
     if (useUiCustomizationStore.getState().editing) return
+    clearHoverTimers()
     playSound('menuOpen')
     setFabHoverScale(false)
     setIsOpen(true)
     useShortcutUiStore.getState().setToolPaletteOpen(true)
+  }
+
+  function handleHoverZoneEnter() {
+    if (isPhone || editingUi) return
+    if (hoverCloseTimerRef.current !== null) {
+      clearTimeout(hoverCloseTimerRef.current)
+      hoverCloseTimerRef.current = null
+    }
+    if (isOpenRef.current) return
+    if (hoverOpenTimerRef.current !== null) return
+    hoverOpenTimerRef.current = setTimeout(() => {
+      hoverOpenTimerRef.current = null
+      if (isOpenRef.current) return
+      useShortcutUiStore.getState().dismissPeerChromeForFab('pen')
+      openMenu()
+    }, DESKTOP_HOVER_OPEN_MS)
+  }
+
+  function handleHoverZoneLeave() {
+    if (isPhone) return
+    if (hoverOpenTimerRef.current !== null) {
+      clearTimeout(hoverOpenTimerRef.current)
+      hoverOpenTimerRef.current = null
+    }
+    if (!isOpenRef.current) return
+    if (hoverCloseTimerRef.current !== null) return
+    hoverCloseTimerRef.current = setTimeout(() => {
+      hoverCloseTimerRef.current = null
+      closeMenu()
+    }, DESKTOP_HOVER_CLOSE_MS)
   }
 
   function handleFabTriggerClick() {
@@ -386,6 +444,13 @@ export default function PenFab() {
       return
     }
     useShortcutUiStore.getState().dismissPeerChromeForFab('pen')
+    const { items, selectedIds } = useCanvasItemsStore.getState()
+    if (selectedIds.length === 1) {
+      const sel = items.find((i) => i.id === selectedIds[0])
+      if (sel?.type === 'text') {
+        useCanvasItemsStore.getState().clearSelection({ silent: true })
+      }
+    }
     openMenu()
   }
 
@@ -412,21 +477,9 @@ export default function PenFab() {
     return () => window.clearTimeout(timer)
   }, [penFabActive, isPhone])
 
-  useLayoutEffect(() => {
-    if (isOpen) {
-      setMenuMounted(true)
-      setMenuVisible(false)
-      const id = requestAnimationFrame(() => setMenuVisible(true))
-      return () => cancelAnimationFrame(id)
-    }
-    // Mirror entry: hold visible one frame, then run the reverse CSS transition.
-    const id = requestAnimationFrame(() => setMenuVisible(false))
-    const timer = window.setTimeout(() => setMenuMounted(false), PEN_FAB_MENU_TRANSITION_MS)
-    return () => {
-      cancelAnimationFrame(id)
-      window.clearTimeout(timer)
-    }
-  }, [isOpen])
+  useEffect(() => {
+    return () => clearHoverTimers()
+  }, [])
 
   useEffect(() => {
     if (!isOpen) return
@@ -566,135 +619,178 @@ export default function PenFab() {
   if (!hostMounted) return null
 
   return (
-    <div
+    <motion.div
       ref={containerRef}
       data-pen-fab=""
       className={hostVisible ? 'pen-fab-host--visible' : ''}
+      animate={{ x: plusSlotOccupied ? -BOTTOM_RIGHT_FAB_SLOT_SHIFT_PX : 0 }}
+      transition={bottomRightFabPenSlideTransition(plusSlotOccupied, reduceMotion)}
       style={{
         ...chromeBottomRightFixed,
-        right: `calc(${PEN_FAB_RIGHT}px + env(safe-area-inset-right, 0px))`,
+        right: bottomRightFabRightCss(),
         zIndex: 21,
         pointerEvents: 'none',
+        overflow: 'visible',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        willChange: 'transform',
       }}
     >
-      {menuMounted && (
-        <div
-          data-pen-fab-menu=""
-          className={`pen-fab-menu ${
-            menuVisible ? 'pen-fab-menu--visible' : ''
-          } ${isPhone ? 'pen-fab-menu--phone' : ''}`}
-          style={{
-            fontFamily: font.family,
-            color: font.colorPrimary,
-            pointerEvents: isOpen ? (isPhone ? 'none' : 'auto') : 'none',
-          }}
-        >
-          <SubmenuSoundScope>
-            {/* Height shell: snaps instantly, opacity fades — no spatial movement */}
+      <div
+        className="pen-fab-hover-zone"
+        onMouseEnter={handleHoverZoneEnter}
+        onMouseLeave={handleHoverZoneLeave}
+        style={{
+          position: 'relative',
+          pointerEvents: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          marginLeft: isOpen && !isPhone ? -PEN_FAB_MENU_BRIDGE_PX : 0,
+          paddingLeft: isOpen && !isPhone ? PEN_FAB_MENU_BRIDGE_PX : 0,
+        }}
+      >
+        <AnimatePresence initial={false}>
+          {isOpen && (
             <motion.div
-              animate={{
-                height: colorPopover || lassoTargetOpen ? SUBMENU_PANEL_HEIGHT : 0,
-                opacity: colorPopover || lassoTargetOpen ? 1 : 0,
+              key="pen-fab-menu"
+              data-pen-fab-menu=""
+              className={`pen-fab-menu pen-fab-menu--visible ${
+                isPhone ? 'pen-fab-menu--phone' : ''
+              }`}
+              style={{
+                fontFamily: font.family,
+                color: font.colorPrimary,
+                pointerEvents: isPhone ? 'none' : 'auto',
               }}
-              transition={{
-                // Opening: height snaps open instantly so opacity can fade into the space.
-                // Closing: opacity fades out first, then height collapses after.
-                height: {
-                  duration: 0,
-                  delay: colorPopover || lassoTargetOpen ? 0 : CHROME_MENU_TRANSITION.duration,
-                },
-                opacity: CHROME_MENU_TRANSITION,
-              }}
-              className="pen-fab-settings-shell"
-              style={{ position: 'relative' }}
+              {...(reduceMotion
+                ? {
+                    initial: { opacity: 0 },
+                    animate: { opacity: 1 },
+                    exit: { opacity: 0 },
+                    transition: { duration: 0.12 },
+                  }
+                : PEN_FAB_MENU_MOTION)}
             >
-              <AnimatePresence initial={false}>
-                {colorPopover && (
-                  <motion.div
-                    key="pen-fab-tool-settings"
-                    className={`pen-fab-tool-settings theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
-                    style={{ ...chromeFrostedMenuStyle, position: 'absolute', inset: 0 }}
-                    {...(reduceMotion
-                      ? {
-                          initial: { opacity: 0 },
-                          animate: { opacity: 1 },
-                          exit: { opacity: 0 },
-                          transition: { duration: 0.12 },
-                        }
-                      : SUBMENU_SWITCH_MOTION)}
-                  >
-                    <ToolColorPopover tool={colorPopover} />
-                  </motion.div>
-                )}
-                {lassoTargetOpen && (
-                  <motion.div
-                    key="lasso-target-panel"
-                    className={`pen-fab-lasso-panel theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
-                    style={{ ...chromeFrostedMenuStyle, position: 'absolute', inset: 0 }}
-                    {...(reduceMotion
-                      ? {
-                          initial: { opacity: 0 },
-                          animate: { opacity: 1 },
-                          exit: { opacity: 0 },
-                          transition: { duration: 0.12 },
-                        }
-                      : SUBMENU_SWITCH_MOTION)}
-                  >
-                    <LassoTargetPanel
-                      targets={lassoTargetTypes}
-                      onToggle={toggleLassoTarget}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <SubmenuSoundScope>
+                {/* Height shell: snaps instantly, opacity fades — no spatial movement */}
+                <motion.div
+                  animate={{
+                    height: colorPopover || lassoTargetOpen ? SUBMENU_PANEL_HEIGHT : 0,
+                    opacity: colorPopover || lassoTargetOpen ? 1 : 0,
+                  }}
+                  transition={{
+                    // Opening: height snaps open instantly so opacity can fade into the space.
+                    // Closing: opacity fades out first, then height collapses after.
+                    height: {
+                      duration: 0,
+                      delay: colorPopover || lassoTargetOpen ? 0 : CHROME_MENU_TRANSITION.duration,
+                    },
+                    opacity: CHROME_MENU_TRANSITION,
+                  }}
+                  className="pen-fab-settings-shell"
+                  style={{ position: 'relative' }}
+                >
+                  <AnimatePresence initial={false}>
+                    {colorPopover && (
+                      <motion.div
+                        key="pen-fab-tool-settings"
+                        className={`pen-fab-tool-settings theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+                        style={{ ...chromeFrostedMenuStyle, position: 'absolute', inset: 0 }}
+                        {...(reduceMotion
+                          ? {
+                              initial: { opacity: 0 },
+                              animate: { opacity: 1 },
+                              exit: { opacity: 0 },
+                              transition: { duration: 0.12 },
+                            }
+                          : SUBMENU_SWITCH_MOTION)}
+                      >
+                        <ToolColorPopover tool={colorPopover} />
+                      </motion.div>
+                    )}
+                    {lassoTargetOpen && (
+                      <motion.div
+                        key="lasso-target-panel"
+                        className={`pen-fab-lasso-panel theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+                        style={{ ...chromeFrostedMenuStyle, position: 'absolute', inset: 0 }}
+                        {...(reduceMotion
+                          ? {
+                              initial: { opacity: 0 },
+                              animate: { opacity: 1 },
+                              exit: { opacity: 0 },
+                              transition: { duration: 0.12 },
+                            }
+                          : SUBMENU_SWITCH_MOTION)}
+                      >
+                        <LassoTargetPanel
+                          targets={lassoTargetTypes}
+                          onToggle={toggleLassoTarget}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+                <div
+                  className={`pen-fab-toolbar theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+                  style={{ ...chromeFrostedMenuStyle }}
+                >
+                  <PenFabMenuContent
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    hasClearableContent={hasClearableContent}
+                    mode={mode}
+                    onUndo={undo}
+                    onRedo={redo}
+                    onPenClick={handlePenClick}
+                    onHighlighterClick={handleHighlighterClick}
+                    onEraserClick={handleEraserClick}
+                    onLassoClick={handleLassoClick}
+                    onClearLayer={clearLayer}
+                    compact={isPhone}
+                  />
+                </div>
+              </SubmenuSoundScope>
             </motion.div>
-            <div
-              className={`pen-fab-toolbar theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
-              style={{ ...chromeFrostedMenuStyle }}
-            >
-              <PenFabMenuContent
-                canUndo={canUndo}
-                canRedo={canRedo}
-                hasClearableContent={hasClearableContent}
-                mode={mode}
-                onUndo={undo}
-                onRedo={redo}
-                onPenClick={handlePenClick}
-                onHighlighterClick={handleHighlighterClick}
-                onEraserClick={handleEraserClick}
-                onLassoClick={handleLassoClick}
-                onClearLayer={clearLayer}
-                compact={isPhone}
-              />
-            </div>
-          </SubmenuSoundScope>
-        </div>
-      )}
+          )}
+        </AnimatePresence>
 
-      <ChromeTapSqueezeWrap>
-        <button
-          type="button"
-          data-pen-fab-trigger
-          data-ui-anchor="pen-fab"
-          aria-label={isOpen ? 'Close drawing tools' : 'Open drawing tools'}
-          aria-expanded={isOpen}
-          onClick={handleFabTriggerClick}
-          onMouseEnter={() => setFabHoverScale(true)}
-          onMouseLeave={() => setFabHoverScale(false)}
-          className={`chrome-fab-trigger theme-surface ${CHROME_GLASS_CLASS} ${
-            isOpen ? 'chrome-fab-trigger--pen-open' : ''
-          } ${fabHoverScale ? 'chrome-fab-trigger--hover' : ''}`}
+        <motion.div
           style={{
-            transition: editingUi ? undefined : CHROME_SURFACE_BG_TRANSITION,
-            background: chromeGlassSurfaceBg({ active: isOpen, hoverLift: fabHoverLift }),
-            border: glass.border,
-            position: 'relative',
+            scaleX: penSlideStretch.scaleX,
+            scaleY: penSlideStretch.scaleY,
+            transformOrigin: penSlideStretch.transformOrigin,
+            display: 'inline-flex',
+            willChange: 'transform',
           }}
         >
-          <Pen size={22} color="var(--ui-text)" strokeWidth={2} />
-          <UiPinHost anchorId="pen-fab" />
-        </button>
-      </ChromeTapSqueezeWrap>
-    </div>
+          <ChromeTapSqueezeWrap>
+            <button
+              type="button"
+              data-pen-fab-trigger
+              data-ui-anchor="pen-fab"
+              aria-label={isOpen ? 'Close drawing tools' : 'Open drawing tools'}
+              aria-expanded={isOpen}
+              onClick={handleFabTriggerClick}
+              onMouseEnter={() => setFabHoverScale(true)}
+              onMouseLeave={() => setFabHoverScale(false)}
+              className={`chrome-fab-trigger theme-surface ${CHROME_GLASS_CLASS} ${
+                isOpen ? 'chrome-fab-trigger--pen-open' : ''
+              } ${fabHoverScale ? 'chrome-fab-trigger--hover' : ''}`}
+              style={{
+                transition: editingUi ? undefined : CHROME_SURFACE_BG_TRANSITION,
+                background: chromeGlassSurfaceBg({ active: isOpen, hoverLift: fabHoverLift }),
+                border: glass.border,
+                position: 'relative',
+              }}
+            >
+              <Pen size={22} color="var(--ui-text)" strokeWidth={2} />
+              <UiPinHost anchorId="pen-fab" />
+            </button>
+          </ChromeTapSqueezeWrap>
+        </motion.div>
+      </div>
+    </motion.div>
   )
 }

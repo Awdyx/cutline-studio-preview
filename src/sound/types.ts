@@ -1,6 +1,8 @@
 export type SoundId =
   | 'itemDrop'
   | 'itemGrab'
+  | 'studioCentreDrop'
+  | 'studioCentreGrab'
   | 'itemSelect'
   | 'itemDeselect'
   | 'spawn'
@@ -24,3 +26,9 @@ export type SoundId =
   | 'zOrderFront'
   | 'zOrderBack'
   | 'aspectSnap'
+  | 'fisheyeEnter'
+  | 'fisheyeExit'
+  | 'minimapOpen'
+  | 'minimapClose'
+  | 'textCommit'
+  | 'plateFocus'

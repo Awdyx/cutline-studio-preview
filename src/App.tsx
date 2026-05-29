@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import type { RefObject } from 'react'
 import {
   TransformComponent,
@@ -6,16 +6,18 @@ import {
   type ReactZoomPanPinchContentRef,
 } from 'react-zoom-pan-pinch'
 import DrawingLayer from './drawing/DrawingLayer'
+import { useStudioCentreStrokeBleed } from './canvas/useStudioCentreStrokeBleed'
 import { useDrawing } from './drawing/useDrawing'
 import { usePenToolMenu } from './drawing/usePenToolMenu'
 import PenToolPillMenu from './components/PenToolPillMenu'
 import LassoOverlay from './drawing/LassoOverlay'
+import LassoSelectionChrome from './drawing/LassoSelectionChrome'
 import { AnimatePresence } from 'framer-motion'
-import MotionIndicator from './MotionIndicator'
 import TrailingVignette from './TrailingVignette'
 import { usePanMotionHandler } from './usePanMotionHandler'
 import { usePanMotionStore } from './panMotionStore'
 import { useCanvasMotionBlur } from './canvas/useCanvasMotionBlur'
+import { useCanvasPanSound } from './canvas/useCanvasPanSound'
 import {
   canvasPanExcludedClasses,
   canvasTrackpadPanExcludedClasses,
@@ -33,8 +35,10 @@ import PlusFab from './components/PlusFab'
 import PenFab from './components/PenFab'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useChromeTapPulse } from './hooks/useChromeTapPulse'
+import { useSuppressChromeContextMenu } from './hooks/useSuppressChromeContextMenu'
 import { useTouchUndoRedoGestures } from './hooks/useTouchUndoRedoGestures'
 import { useBackgroundMusic } from './hooks/useBackgroundMusic'
+import { useBackgroundMusicStudioZoneAcoustics } from './hooks/useBackgroundMusicStudioZoneAcoustics'
 import { usePanelSounds } from './hooks/usePanelSounds'
 import { useThemeChangeFeedback } from './hooks/useThemeChangeFeedback'
 import { useSoundStore } from './sound/soundStore'
@@ -44,10 +48,13 @@ import ThemeChangePulse from './components/ThemeChangePulse'
 import { clearHistory } from './canvasHistory/canvasHistory'
 import { useStrokesStore } from './drawing/strokesStore'
 import { useCanvasItemsStore } from './canvasItems/canvasItemsStore'
+import { useLassoStore } from './drawing/useLassoStore'
 import { useCanvasItemDragStore } from './canvasItems/canvasItemDragStore'
 import CanvasItemsLayer from './canvasItems/CanvasItemsLayer'
 import CanvasItemZOrderMenu from './canvasItems/CanvasItemZOrderMenu'
+import TextFontSizeFloatingMenu from './canvasItems/TextFontSizeFloatingMenu'
 import SelectionBlurOverlay from './canvasItems/SelectionBlurOverlay'
+import SelectionBlurCanvasBackdrop from './canvasItems/SelectionBlurCanvasBackdrop'
 import LassoSelectionBlur from './canvasItems/LassoSelectionBlur'
 import CanvasContextMenu from './components/CanvasContextMenu'
 import { useCanvasFileHandlers } from './canvasItems/useCanvasFileHandlers'
@@ -61,7 +68,6 @@ import SpaceBackPill, { SPACE_BACK_PILL_MOTION, SPACE_BACK_PILL_PHONE_CLASS } fr
 import CutlineMenu from './components/CutlineMenu'
 import { NEWS_POSTS } from './content/news'
 import type { Notification, NotificationTab, NewsTab } from './types'
-import { meshBlobVisibilities } from './theme/paletteGenerator'
 import { useThemeCssVars } from './theme/useThemeCssVars'
 import { useThemeStore } from './theme/themeStore'
 import { useToolStore } from './drawing/toolStore'
@@ -69,20 +75,54 @@ import { useEffectiveMode } from './theme/useEffectiveMode'
 import { useProfileStore } from './profile/profileStore'
 import { profileToTopBarUser } from './profile/profileUtils'
 import {
+  CANVAS_EDGE_BLEED,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   CANVAS_MAX_SCALE,
   CANVAS_ZOOM_EDGE_PADDING,
   CANVAS_ZOOM_MIN_EDGE_PADDING,
+  SPACE_CANVAS_HEIGHT,
+  SPACE_CANVAS_WIDTH,
+  canvasLayoutHeight,
+  canvasLayoutWidth,
+  getCanvasHardMinScale,
 } from './drawing/canvasDimensions'
 import { CANVAS_WHEEL_ZOOM_STEP } from './canvas/canvasCamera'
+import { closeCanvasMinimap } from './canvas/canvasMinimapOpen'
 import { useBlockPagePinchZoom } from './canvas/useBlockPagePinchZoom'
 import { useCanvasCursorWheelZoom } from './canvas/useCanvasCursorWheelZoom'
 import { useCanvasViewport } from './canvas/useCanvasViewport'
+import { useCanvasCameraPersist } from './canvas/useCanvasCameraPersist'
 import { useCanvasZoomEdgeEase } from './canvas/useCanvasZoomEdgeEase'
 import { useCanvasPanBounce } from './canvas/useCanvasPanBounce'
 import { useCanvasCompositorWarmup } from './canvas/useCanvasCompositorWarmup'
 import CanvasSwapVeil from './canvas/CanvasSwapVeil'
+import CanvasPlateBoundsOverlay from './canvas/CanvasPlateBoundsOverlay'
+import StudioCentreTitle from './canvas/StudioCentreTitle'
+import StudioCentreDragHandle from './canvas/StudioCentreDragHandle'
+import CanvasPlateRepositionButton from './canvas/CanvasPlateRepositionButton'
+import CanvasNavigationMinimap from './canvas/CanvasNavigationMinimap'
+import { useCanvasMinimapMenuPointerGuard } from './canvas/useCanvasMinimapMenuPointerGuard'
+import { useCanvasMinimapTrackpadPan } from './canvas/useCanvasMinimapTrackpadPan'
+import { useCanvasZMenuTrackpadPan } from './canvas/useCanvasZMenuTrackpadPan'
+import { useCanvasSelectionViewportPark } from './canvas/useCanvasSelectionViewportPark'
+import CanvasBarrelLayer from './canvas/CanvasBarrelLayer'
+import {
+  CANVAS_BARREL_HOST_ATTR,
+  updateCanvasBarrelAfterCamera,
+} from './canvas/canvasBarrelPostProcess'
+import { useCanvasFisheyeStore } from './canvas/canvasFisheyeStore'
+import { useCanvasFisheyeExitGestures } from './canvas/useCanvasFisheyeExitGestures'
+import { useCanvasFisheyeMinimapOpen } from './canvas/useCanvasFisheyeMinimapOpen'
+import FeaturePlatesLayer from './canvas/FeaturePlatesLayer'
+import { useFeaturePlatePositionCssVars } from './canvas/useFeaturePlatePositionCssVars'
+import { useAppDestinationHighlightSound } from './navigation/useAppDestinationHighlightSound'
+import { useAppDestinationActive } from './navigation/useAppDestinationActive'
+import { useStudioCentrePositionCssVars } from './canvas/useStudioCentrePositionCssVars'
+import { useStudioCentreHoldDrag } from './canvas/useStudioCentreHoldDrag'
+import { useStudioCentreDragStore } from './canvas/studioCentreDragStore'
+import { registerStudioCentreDrawTarget } from './canvas/studioCentreVisualDrag'
+import { useCanvasMinimapStore } from './canvas/canvasMinimapStore'
 import { blurStrayTextFocus } from './platform/textFocus'
 import { idleAfterFirstPaint, isTouchFirstDevice } from './platform/compositor'
 import { useLayoutProfile } from './hooks/useLayoutProfile'
@@ -92,59 +132,6 @@ import { clientToCanvas } from './drawing/canvasCoords'
 import type { StudySubjectId } from './canvasItems/types'
 import { useUiCustomizationStore } from './uiCustomization/uiCustomizationStore'
 import UiCustomizationLayer from './uiCustomization/UiCustomizationLayer'
-
-const meshBlobMotion = [
-  {
-    period: 14,
-    size: 1600,
-    path: [
-      [8, 12],
-      [32, 28],
-      [22, 48],
-      [8, 12],
-    ],
-  },
-  {
-    period: 18,
-    size: 1700,
-    path: [
-      [88, 10],
-      [72, 38],
-      [92, 55],
-      [88, 10],
-    ],
-  },
-  {
-    period: 22,
-    size: 1800,
-    path: [
-      [48, 45],
-      [62, 58],
-      [38, 52],
-      [48, 45],
-    ],
-  },
-  {
-    period: 26,
-    size: 1650,
-    path: [
-      [12, 82],
-      [28, 68],
-      [18, 90],
-      [12, 82],
-    ],
-  },
-  {
-    period: 30,
-    size: 1750,
-    path: [
-      [85, 78],
-      [70, 88],
-      [92, 65],
-      [85, 78],
-    ],
-  },
-] as const
 
 const INITIAL_NOTIFICATIONS: Notification[] = [
   {
@@ -294,6 +281,7 @@ function App() {
   useLayoutProfile()
   const { onPanning, onPanningStop } = usePanMotionHandler()
   useCanvasMotionBlur()
+  useCanvasPanSound()
 
   // Drive data-canvas-panning from both pan `active` and zoom `zoomActive` so all
   // canvas gesture types get the CSS simplification treatment.
@@ -318,19 +306,23 @@ function App() {
   const transformRef = useRef<ReactZoomPanPinchContentRef | null>(null)
   useCanvasNavigationTracking()
   const canvasSelectionPointer = useCanvasSelectionPointer(transformRef)
-  const palette = useThemeStore((s) => s.palette)
   const themeModeStore = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeModeStore)
-  const { generated } = useThemeCssVars()
+  useThemeCssVars()
+  useStudioCentrePositionCssVars()
+  useFeaturePlatePositionCssVars()
+  useAppDestinationHighlightSound()
   useThemeChangeFeedback(effectiveMode, themeModeStore)
-  const meshColors = generated.meshColors
-  const meshBlobVisibility = meshBlobVisibilities(palette.blobDepth)
-  const meshLayerOpacity = effectiveMode === 'light' ? 0.92 : 0.88
-  const showMeshBlobs = !isTouchFirstDevice()
 
   const pinchStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { viewportRef, viewportSize, minScale, onTransformInit, onHydrated } =
     useCanvasViewport(transformRef)
+  const { scheduleCameraSync, syncAndFlushCamera } =
+    useCanvasCameraPersist(transformRef)
+  const hardMinScale = useMemo(
+    () => getCanvasHardMinScale(viewportSize.width, viewportSize.height),
+    [viewportSize.width, viewportSize.height],
+  )
   useStudyHubCanvasPanCoordination()
   const trackpadPanLockActive = useCanvasNavigationStore((s) => s.trackpadPanLockActive)
   const panExcluded = useMemo(
@@ -341,7 +333,7 @@ function App() {
     () => canvasTrackpadPanExcludedClasses(trackpadPanLockActive),
     [trackpadPanLockActive],
   )
-  const zoomEdgeEase = useCanvasZoomEdgeEase(minScale)
+  const zoomEdgeEase = useCanvasZoomEdgeEase(hardMinScale)
   const panBounce = useCanvasPanBounce()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const canvasContextMenuPointer = useCanvasContextMenuPointer(transformRef, canvasRef)
@@ -350,6 +342,7 @@ function App() {
   const [penDown, setPenDown] = useState(false)
   const penMenu = usePenToolMenu(transformRef)
   useDrawing(canvasRef, transformRef, setPenDown, penMenu.bridgeRef, canvasMount)
+  const strokeBleed = useStudioCentreStrokeBleed()
   useTouchUndoRedoGestures(penMenu.bridgeRef)
 
   const {
@@ -365,6 +358,12 @@ function App() {
   } = useCanvasFileHandlers(transformRef, viewportRef, canvasRef)
 
   const isInsideSpace = useCanvasWorkspaceStore((s) => s.activeCanvasId !== 'main')
+  const studioZoneActive = useAppDestinationActive('studio')
+  const activeCanvasWidth = isInsideSpace ? SPACE_CANVAS_WIDTH : CANVAS_WIDTH
+  const activeCanvasHeight = isInsideSpace ? SPACE_CANVAS_HEIGHT : CANVAS_HEIGHT
+  const activeLayoutWidth = isInsideSpace ? activeCanvasWidth : canvasLayoutWidth()
+  const activeLayoutHeight = isInsideSpace ? activeCanvasHeight : canvasLayoutHeight()
+  const canvasEdgeBleed = isInsideSpace ? 0 : CANVAS_EDGE_BLEED
   const canvasSwapMode = useCanvasWorkspaceStore((s) => s.canvasSwapMode)
   const canvasSwapPhase = useCanvasWorkspaceStore((s) => s.canvasSwapPhase)
   const canvasFadeOpacity = useCanvasWorkspaceStore((s) => s.canvasFadeOpacity)
@@ -378,6 +377,46 @@ function App() {
 
   const showSpaceBackPill = isInsideSpace
 
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    if (isInsideSpace) {
+      root.setAttribute('data-inside-space', '')
+      root.style.setProperty('--canvas-edge-bleed', '0px')
+      root.style.setProperty('--canvas-width', `${SPACE_CANVAS_WIDTH}px`)
+      root.style.setProperty('--canvas-height', `${SPACE_CANVAS_HEIGHT}px`)
+    } else {
+      root.removeAttribute('data-inside-space')
+      root.style.setProperty('--canvas-edge-bleed', `${CANVAS_EDGE_BLEED}px`)
+      root.style.setProperty('--canvas-width', `${canvasLayoutWidth()}px`)
+      root.style.setProperty('--canvas-height', `${canvasLayoutHeight()}px`)
+    }
+
+    if (!appHydrated) return
+
+    let cancelled = false
+    const id = requestAnimationFrame(() => {
+      if (cancelled) return
+      const ref = transformRef.current
+      if (!ref) return
+      useCanvasWorkspaceStore.getState().applyCameraForActiveCanvas(ref)
+      updateCanvasBarrelAfterCamera(ref, { silent: true })
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(id)
+    }
+  }, [isInsideSpace, activeCanvasWidth, activeCanvasHeight, activeLayoutWidth, activeLayoutHeight, appHydrated, transformRef])
+
+  useEffect(() => {
+    if (!isInsideSpace) return
+    useCanvasFisheyeStore.getState().setEngaged(false, { silent: true })
+    closeCanvasMinimap()
+  }, [isInsideSpace])
+
+  useEffect(() => {
+    registerStudioCentreDrawTarget(isInsideSpace ? null : canvasRef.current)
+  }, [isInsideSpace, canvasMount])
+
   useCanvasCompositorWarmup(canvasRef, appHydrated && canvasMount !== null)
 
   const handleExitSpace = () => {
@@ -388,7 +427,34 @@ function App() {
       .exitSpace(transformRef.current, canvasRef.current)
   }
 
+  const fisheyeEngaged = useCanvasFisheyeStore((s) => s.engaged)
+  useCanvasFisheyeExitGestures(transformRef)
+  useCanvasFisheyeMinimapOpen()
+  const studioCentreHoldDrag = useStudioCentreHoldDrag(transformRef)
+  const studioCentrePanSuppressed = useStudioCentreDragStore((s) => s.panSuppressed)
+  const expandedMinimapOpen = useCanvasMinimapStore((s) => s.expandedOpen)
+  useCanvasMinimapMenuPointerGuard()
+  // Lock canvas-item interaction (panning still works) while overview is engaged.
+  // The transition SFX is owned by the fisheye store so programmatic camera moves
+  // (page load, entering/leaving spaces) stay silent.
+  useEffect(() => {
+    const el = document.documentElement
+    if (fisheyeEngaged) el.setAttribute('data-fisheye-engaged', '')
+    else el.removeAttribute('data-fisheye-engaged')
+
+    // Entering overview dismisses drawing-tool chrome and any current selection.
+    if (fisheyeEngaged) {
+      useShortcutUiStore.getState().toolPalette?.close({ silent: true })
+      const lasso = useLassoStore.getState()
+      if (lasso.selectedStrokeIds.length > 0 || lasso.selectedItemIds.length > 0) {
+        lasso.clearSelection()
+      }
+      useCanvasItemsStore.getState().clearSelection({ silent: true })
+    }
+  }, [fisheyeEngaged])
+
   const itemDragActive = useCanvasItemDragStore((s) => s.activeItemId !== null)
+  const lassoDragActive = useLassoStore((s) => s.dragOffset != null)
   const toolPaletteOpen = useShortcutUiStore((s) => s.toolPaletteOpen)
   const uiEditing = useUiCustomizationStore((s) => s.editing)
 
@@ -417,15 +483,55 @@ function App() {
     onZoom: (ref) => {
       zoomEdgeEase.onZoom(ref)
       usePanMotionStore.getState().setZoomActive(true)
+      updateCanvasBarrelAfterCamera(ref)
+      scheduleCameraSync(ref)
     },
     onZoomStop: (ref) => {
       zoomEdgeEase.onZoomStop(ref)
-      useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+      syncAndFlushCamera(ref)
       usePanMotionStore.getState().setZoomActive(false)
+      updateCanvasBarrelAfterCamera(ref)
     },
     disabled: isPenDown,
     step: CANVAS_WHEEL_ZOOM_STEP,
   })
+  useCanvasMinimapTrackpadPan({
+    transformRef,
+    disabled: isPenDown || studyHubMenuFocusEngaged || lassoDragActive,
+    excluded: trackpadPanExcluded,
+    onPanFrame: (ref) => {
+      onPanning(ref)
+      panBounce.onPanning(ref)
+      scheduleCameraSync(ref)
+    },
+    onPanStop: (ref) => {
+      onPanningStop(ref)
+      panBounce.onPanningStop()
+      syncAndFlushCamera(ref)
+    },
+  })
+  useCanvasZMenuTrackpadPan({
+    transformRef,
+    disabled:
+      isPenDown ||
+      studyHubMenuFocusEngaged ||
+      lassoDragActive ||
+      expandedMinimapOpen,
+    onPanFrame: (ref) => {
+      onPanning(ref)
+      panBounce.onPanning(ref)
+      scheduleCameraSync(ref)
+    },
+    onPanStop: (ref) => {
+      onPanningStop(ref)
+      panBounce.onPanningStop()
+      syncAndFlushCamera(ref)
+    },
+  })
+  useCanvasSelectionViewportPark(
+    transformRef,
+    isPenDown || studyHubMenuFocusEngaged || lassoDragActive || canvasSwapBusy,
+  )
   const isCanvasLocked = useCanvasLockStore((s) => s.isLocked)
   const lockCanvas = useCanvasLockStore((s) => s.lockCanvas)
   const requestUnlock = useCanvasLockStore((s) => s.requestUnlock)
@@ -471,18 +577,6 @@ function App() {
       }
     })()
 
-    const flushWorkspace = () => {
-      useCanvasWorkspaceStore.getState().flushPersistWorkspace()
-    }
-    window.addEventListener('pagehide', flushWorkspace)
-    window.addEventListener('beforeunload', flushWorkspace)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') flushWorkspace()
-    })
-    return () => {
-      window.removeEventListener('pagehide', flushWorkspace)
-      window.removeEventListener('beforeunload', flushWorkspace)
-    }
   }, [])
 
   const themeMode = useThemeStore((s) => s.mode)
@@ -529,7 +623,9 @@ function App() {
   useKeyboardShortcuts(openPanel, closePanel, transformRef)
   usePanelSounds(openPanel, suppressPanelSoundRef)
   useBackgroundMusic()
+  useBackgroundMusicStudioZoneAcoustics(transformRef, viewportRef)
   useChromeTapPulse()
+  useSuppressChromeContextMenu()
 
   useEffect(() => {
     useShortcutUiStore.getState().registerAppPanels({ close: closePanel })
@@ -666,16 +762,18 @@ function App() {
       className="cutline-app-shell"
       data-ready={appHydrated || undefined}
     >
+      <CanvasBarrelLayer />
       <div ref={viewportRef} className="cutline-canvas-viewport">
         <div
           ref={panBounce.bounceRef}
-          style={{ width: '100%', height: '100%' }}
+          {...{ [CANVAS_BARREL_HOST_ATTR]: '' }}
+          style={{ width: '100%', height: '100%', position: 'relative' }}
         >
           <TransformWrapper
             ref={transformRef}
             disabled={isPenDown}
             initialScale={minScale}
-            minScale={Math.max(minScale - CANVAS_ZOOM_MIN_EDGE_PADDING, 0.05)}
+            minScale={Math.max(hardMinScale - CANVAS_ZOOM_MIN_EDGE_PADDING, 0.05)}
             maxScale={CANVAS_MAX_SCALE + CANVAS_ZOOM_EDGE_PADDING}
             limitToBounds
             disablePadding
@@ -684,19 +782,24 @@ function App() {
             onPanning={(ref) => {
               onPanning(ref)
               panBounce.onPanning(ref)
+              scheduleCameraSync(ref)
             }}
             onPanningStop={(ref) => {
               onPanningStop(ref)
               panBounce.onPanningStop()
-              useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+              syncAndFlushCamera(ref)
             }}
             onZoom={(ref) => {
               zoomEdgeEase.onZoom(ref)
               usePanMotionStore.getState().setZoomActive(true)
+              updateCanvasBarrelAfterCamera(ref)
+              scheduleCameraSync(ref)
             }}
             onPinch={(ref) => {
               zoomEdgeEase.onPinch(ref)
               usePanMotionStore.getState().setZoomActive(true)
+              updateCanvasBarrelAfterCamera(ref)
+              scheduleCameraSync(ref)
               // Safety fallback: iPad touch events don't always fire onPinchStop
               // reliably. Reset a countdown on every pinch frame so blur always clears.
               if (pinchStopTimer.current) clearTimeout(pinchStopTimer.current)
@@ -704,22 +807,25 @@ function App() {
                 pinchStopTimer.current = null
                 usePanMotionStore.getState().setZoomActive(false)
                 usePanMotionStore.getState().setPanStopped()
+                syncAndFlushCamera(ref)
               }, 300)
             }}
             onZoomStop={(ref) => {
               zoomEdgeEase.onZoomStop(ref)
-              useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+              syncAndFlushCamera(ref)
               usePanMotionStore.getState().setZoomActive(false)
+              updateCanvasBarrelAfterCamera(ref)
             }}
             onPinchStop={(ref) => {
               zoomEdgeEase.onZoomStop(ref)
-              useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+              syncAndFlushCamera(ref)
               if (pinchStopTimer.current) {
                 clearTimeout(pinchStopTimer.current)
                 pinchStopTimer.current = null
               }
               usePanMotionStore.getState().setZoomActive(false)
               usePanMotionStore.getState().setPanStopped()
+              updateCanvasBarrelAfterCamera(ref)
             }}
             wheel={{
               step: CANVAS_WHEEL_ZOOM_STEP,
@@ -729,12 +835,21 @@ function App() {
                 keys.includes('Control') || keys.includes('Meta'),
             }}
             trackPadPanning={{
-              disabled: isPenDown || studyHubMenuFocusEngaged,
+              disabled:
+                isPenDown ||
+                studyHubMenuFocusEngaged ||
+                lassoDragActive ||
+                expandedMinimapOpen,
               excluded: trackpadPanExcluded,
             }}
             panning={{
               velocityDisabled: false,
-              disabled: canvasGestureLocked || studyHubMenuFocusEngaged,
+              disabled:
+                canvasGestureLocked ||
+                studyHubMenuFocusEngaged ||
+                lassoDragActive ||
+                studioCentrePanSuppressed ||
+                expandedMinimapOpen,
               excluded: panExcluded,
             }}
             pinch={{
@@ -756,63 +871,99 @@ function App() {
                 overflow: 'hidden',
                 touchAction: 'none',
               }}
-              contentStyle={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
+              contentStyle={{
+                width: activeLayoutWidth,
+                height: activeLayoutHeight,
+              }}
             >
               <div
-                ref={(node) => {
-                  canvasRef.current = node
-                  setCanvasMount(node)
-                }}
-                className="cutline-draw-target draw-target cutline-canvas-bg"
-                onPointerDown={canvasSelectionPointer.onPointerDown}
-                onPointerMove={canvasSelectionPointer.onPointerMove}
-                onPointerUp={canvasSelectionPointer.onPointerUp}
-                onPointerCancel={canvasSelectionPointer.onPointerCancel}
-                onContextMenu={canvasContextMenuPointer.onContextMenu}
-                onDoubleClick={canvasContextMenuPointer.onDoubleClick}
+                className={
+                  isInsideSpace
+                    ? 'cutline-canvas-bg cutline-canvas-pocket'
+                    : 'cutline-canvas-bg cutline-canvas-expanded'
+                }
                 style={{
-                  width: CANVAS_WIDTH,
-                  height: CANVAS_HEIGHT,
+                  width: activeLayoutWidth,
+                  height: activeLayoutHeight,
                   position: 'relative',
                   opacity: canvasFadeOpacity,
                   transition: canvasSwapBusy ? swapTransition : undefined,
                   pointerEvents: canvasSwapBusy ? 'none' : undefined,
                 }}
               >
-                {showMeshBlobs &&
-                  meshColors.map((color, index) => {
-                  const visibility = meshBlobVisibility[index] ?? 0
-                  if (visibility <= 0) return null
-
-                  return (
+                <div
+                  className="cutline-canvas-logical"
+                  style={{
+                    position: 'absolute',
+                    left: canvasEdgeBleed,
+                    top: canvasEdgeBleed,
+                    width: activeCanvasWidth,
+                    height: activeCanvasHeight,
+                  }}
+                >
+                {!isInsideSpace && <div className="cutline-canvas-void-grid" aria-hidden />}
+                {!isInsideSpace && <SelectionBlurCanvasBackdrop />}
+                {!isInsideSpace && (
+                  <FeaturePlatesLayer transformRef={transformRef} />
+                )}
+                <div
+                  ref={(node) => {
+                    canvasRef.current = node
+                    setCanvasMount(node)
+                  }}
+                  className={
+                    isInsideSpace
+                      ? 'cutline-draw-target cutline-draw-target--pocket draw-target'
+                      : [
+                          'cutline-draw-target cutline-draw-target--positioned draw-target',
+                          studioZoneActive ? 'cutline-draw-target--zone-active' : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' ')
+                  }
+                  data-strokes-bleed={strokeBleed ? '' : undefined}
+                  onPointerDown={canvasSelectionPointer.onPointerDown}
+                  onPointerMove={canvasSelectionPointer.onPointerMove}
+                  onPointerUp={canvasSelectionPointer.onPointerUp}
+                  onPointerCancel={canvasSelectionPointer.onPointerCancel}
+                  onContextMenu={canvasContextMenuPointer.onContextMenu}
+                  onDoubleClick={canvasContextMenuPointer.onDoubleClick}
+                >
+                  {!isInsideSpace && <StudioCentreDragHandle transformRef={transformRef} />}
+                  {!isInsideSpace && <StudioCentreTitle />}
+                  <div
+                    className="cutline-studio-centre-surface"
+                    onPointerDown={
+                      isInsideSpace ? undefined : studioCentreHoldDrag.onSurfacePointerDown
+                    }
+                  >
                     <div
-                      key={index}
-                      data-mesh-blob
-                      aria-hidden
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        backgroundImage: `radial-gradient(circle, ${color} 0%, transparent 62%)`,
-                        opacity: meshLayerOpacity * visibility,
-                        backgroundSize: `${meshBlobMotion[index].size}px ${meshBlobMotion[index].size}px`,
-                        backgroundRepeat: 'no-repeat',
-                        backgroundPosition: `${meshBlobMotion[index].path[0][0]}% ${meshBlobMotion[index].path[0][1]}%`,
-                        pointerEvents: 'none',
-                      }}
-                    />
-                  )
-                })}
-                <CanvasLockFlattenLayer />
-                <CanvasItemsLayer plane="below" transformRef={transformRef} />
-                <DrawingLayer band="committed-below" />
-                <CanvasItemsLayer plane="above" transformRef={transformRef} />
-                <DrawingLayer band="committed-above" />
-                <CanvasItemsLayer plane="annotation" transformRef={transformRef} />
-                <DrawingLayer band="annotation" />
-                <DrawingLayer band="active" />
-                <LassoSelectionBlur />
-                <DrawingLayer band="lasso-lifted" />
-                <SelectionBlurOverlay />
+                      className={
+                        isInsideSpace
+                          ? 'studio-centre-content-inner'
+                          : 'studio-centre-content-scale'
+                      }
+                    >
+                      {!isInsideSpace && (
+                        <CanvasPlateBoundsOverlay destination="studio" />
+                      )}
+                      <CanvasLockFlattenLayer />
+                      <CanvasItemsLayer plane="below" transformRef={transformRef} />
+                      <DrawingLayer band="committed-below" />
+                      <CanvasItemsLayer plane="above" transformRef={transformRef} />
+                      <DrawingLayer band="committed-above" />
+                      <CanvasItemsLayer plane="annotation" transformRef={transformRef} />
+                      <DrawingLayer band="annotation" />
+                      <DrawingLayer band="active" />
+                      <LassoSelectionBlur />
+                      <DrawingLayer band="lasso-lifted" />
+                      <LassoSelectionChrome canvasRef={canvasRef} />
+                      <SelectionBlurOverlay />
+                    </div>
+                  </div>
+                  {!isInsideSpace && <CanvasPlateRepositionButton />}
+                </div>
+                </div>
               </div>
             </TransformComponent>
           </TransformWrapper>
@@ -828,7 +979,12 @@ function App() {
         />
       )}
 
-      <MotionIndicator />
+      {!isInsideSpace && (
+        <CanvasNavigationMinimap
+          transformRef={transformRef}
+          viewportRef={viewportRef}
+        />
+      )}
       <TrailingVignette />
       <ActionToast />
 
@@ -853,6 +1009,7 @@ function App() {
       <PenToolPillMenu state={penMenu.state} />
       <LassoOverlay canvasRef={canvasRef} />
       <CanvasItemZOrderMenu />
+      <TextFontSizeFloatingMenu />
 
       <CanvasContextMenu
         showSpaceOption={!isInsideSpace}
@@ -915,6 +1072,7 @@ function App() {
             onModeChange={setMode}
             isCanvasLocked={isCanvasLocked}
             showCanvasLock={!isInsideSpace}
+            transformRef={transformRef}
             onToggleCanvasLock={() => {
               if (isCanvasLocked) requestUnlock()
               else lockCanvas()

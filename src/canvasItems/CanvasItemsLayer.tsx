@@ -22,6 +22,7 @@ import VideoItem from './VideoItem'
 import SpaceItem from './SpaceItem'
 import StudyHubItem from './StudyHubItem'
 import type { CanvasItem, StickyCanvasItem } from './types'
+import { isImageInSticky } from './types'
 
 const EMPTY_ITEMS: readonly CanvasItem[] = []
 const EMPTY_DRAWABLES: readonly StickyCanvasItem[] = []
@@ -101,6 +102,7 @@ export default function CanvasItemsLayer({
       return <TextItem key={item.id} item={item} {...shellProps} />
     }
     if (item.type === 'image') {
+      if (isImageInSticky(item)) return null
       return <ImageItem key={item.id} item={item} {...shellProps} />
     }
     if (item.type === 'space') {

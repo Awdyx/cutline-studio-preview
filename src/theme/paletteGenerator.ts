@@ -69,6 +69,11 @@ function neutral(l: number, chroma = 0): string {
   return formatHex({ mode: 'oklch', l, c: chroma, h: NEUTRAL_HUE }) ?? '#888888'
 }
 
+/** Achromatic grey — no hue/chroma tint (for void, etc.). */
+function monotone(l: number): string {
+  return formatHex({ mode: 'oklch', l, c: 0, h: 0 }) ?? '#888888'
+}
+
 export function hexToRgba(hex: string, alpha: number): string {
   const parsed = parse(hex)
   if (!parsed) return `rgba(26, 26, 26, ${alpha})`
@@ -160,10 +165,54 @@ export function canvasBackgroundColor(
   config: PaletteConfig,
   mode: 'light' | 'dark',
 ): string {
+  return neutral(studioCenterLightness(config, mode))
+}
+
+function studioCenterLightness(config: PaletteConfig, mode: 'light' | 'dark'): number {
   const depth = clampBlobDepth(config.blobDepth)
   const spread = depth * MAX_BLOB_LIGHTNESS_DELTA
   const baseCanvasL = mode === 'light' ? 0.965 : 0.2
-  return neutral(baseCanvasL + BLOB_LIGHTNESS_STOPS[2] * spread * 0.35)
+  return baseCanvasL + BLOB_LIGHTNESS_STOPS[2] * spread * 0.35
+}
+
+const CANVAS_MARGIN_DARKEN = { light: 0.042, dark: 0.034 } as const
+
+/** Expanded canvas margin — slightly darker than studio centre. */
+export function canvasOuterBackgroundColor(
+  config: PaletteConfig,
+  mode: 'light' | 'dark',
+): string {
+  const centerL = studioCenterLightness(config, mode)
+  if (mode === 'dark') return monotone(centerL - CANVAS_MARGIN_DARKEN.dark)
+  return neutral(centerL - CANVAS_MARGIN_DARKEN.light)
+}
+
+/** Mid tone between studio centre and outer margin for smooth ramps. */
+export function canvasBlendMidBackgroundColor(
+  config: PaletteConfig,
+  mode: 'light' | 'dark',
+): string {
+  const centerL = studioCenterLightness(config, mode)
+  if (mode === 'dark') {
+    return monotone(centerL - CANVAS_MARGIN_DARKEN.dark * 0.48)
+  }
+  return neutral(centerL - CANVAS_MARGIN_DARKEN.light * 0.48)
+}
+
+/** Viewport fill visible when panning past the full canvas edge. */
+export function canvasVoidBackgroundColor(
+  config: PaletteConfig,
+  mode: 'light' | 'dark',
+): string {
+  if (mode === 'light') return canvasBackgroundColor(config, mode)
+  return monotone(0.14)
+}
+
+/** Opaque pan-edge glow — animated via opacity, not alpha gradients. */
+export function panEdgeGlowColor(mode: 'light' | 'dark'): string {
+  return mode === 'light'
+    ? neutral(0.76, uiChroma(0.005))
+    : neutral(0.46, uiChroma(0.01))
 }
 
 /** Sticky note surface — warm paper in light mode; lifted light grey on dark canvas. */

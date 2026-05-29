@@ -57,6 +57,13 @@ export const CANVAS_PAN_EXCLUDED = [
   'canvas-item-resize-handle',
   'canvas-item-selected-focus',
   'canvas-item-hold-drag-pending',
+  'studio-centre-drag-handle',
+  'studio-centre-drag-handle-wrapper',
+  'studio-centre-hold-drag-pending',
+  'canvas-plate-reposition-btn',
+  'feature-plate-drag-handle',
+  'feature-plate-drag-handle-wrapper',
+  'canvas-feature-plate',
   'space-preview-adjust',
   'study-hub-scroll',
   'study-hub-practice',
@@ -65,11 +72,12 @@ export const CANVAS_PAN_EXCLUDED = [
 ] as const
 
 /**
- * Trackpad two-finger pan excluded classes — intentionally excludes drag/resize handles
- * so hovering the cursor over a handle doesn't block trackpad panning.
+ * Trackpad two-finger pan excluded classes — nodes listed here block trackpad pan
+ * when the cursor sits over them. Drag/resize handles are omitted so pan still
+ * works while hovering handles; selected item bodies are omitted so pan works
+ * over a selected sticky/image too.
  */
 const CANVAS_TRACKPAD_PAN_EXCLUDED = [
-  'canvas-item-selected-focus',
   'space-preview-adjust',
   'study-hub-scroll',
   'study-hub-practice',

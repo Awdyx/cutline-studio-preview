@@ -39,11 +39,11 @@ const RELEASES: ReleaseSource[] = [
     highlights: [
       'Text blocks auto-grow width and height while you type, without breaking words across lines',
       'Text shrinks back to a tight bounding box when you click away from the block',
-      'Z-order menu adds horizontal and vertical alignment controls for stickies, text, and spaces',
+      'Z-order menu adds horizontal and vertical alignment controls for stickies, text, and pockets',
       'Restore original import sizing for images and videos from the item menu',
-      'Send an item back to the main canvas when you opened it inside a space',
+      'Send an item back to the main canvas when you opened it inside a pocket',
       'Grab handles flip to the side with more room near screen edges; larger hit targets on phone',
-      'Plus FAB split into Add to canvas (with live space counter), Widgets flyout, and Study subjects',
+      'Plus FAB split into Add to canvas (with live pocket counter), Widgets flyout, and Study subjects',
       'Widgets submenu with preview cards: MCQ, SAQ, tutor, exam countdown, todo, leaderboard, forum, UCAT, and more',
       'Canvas right-click in shortcut mode mirrors Plus FAB add options plus the widgets flyout',
       'Z-order menu stays hidden while a lasso selection includes canvas items so controls do not overlap',
@@ -116,7 +116,7 @@ const RELEASES: ReleaseSource[] = [
     highlights: [
       'Cutline 2.0 dropdown with frosted-glass panels and flyout submenus',
       'Theme picker (light, dark, auto), shortcuts cheat sheet, and sound controls',
-      'Canvas search in the top bar to jump to stickies, text, and spaces',
+      'Canvas search in the top bar to jump to stickies, text, and pockets',
       'Sound effects plus optional background music',
       'Action toasts when you use keyboard shortcuts',
     ],
@@ -133,10 +133,10 @@ const RELEASES: ReleaseSource[] = [
   },
   {
     version: '1.3',
-    title: 'Canvas items & spaces',
+    title: 'Canvas items & pockets',
     highlights: [
       'Sticky notes, text blocks, and images you can drag and resize',
-      'Spaces — nested boards you can open, work inside, and exit with a transition',
+      'Pockets — nested boards you can open, work inside, and exit with a transition',
       'Canvas lock: pin the board and sketch on an annotation layer',
       'Duplicate, select-all, delete, and z-order menu for items',
       'Find on canvas via keyboard shortcut',
@@ -205,9 +205,9 @@ const BLOG_POSTS: NewsPost[] = [
     isNew: true,
   },
   {
-    id: 'study-spaces',
+    id: 'study-pockets',
     category: 'blog',
-    title: 'How we designed study spaces',
+    title: 'How we designed study pockets',
     summary:
       'Why nested boards beat infinite canvases when you are revising for exams.',
     date: 'May 12, 2026',
@@ -218,7 +218,7 @@ const BLOG_POSTS: NewsPost[] = [
     category: 'blog',
     title: 'Sound design on the canvas',
     summary:
-      'Subtle audio cues for menus, tools, and space transitions without breaking focus.',
+      'Subtle audio cues for menus, tools, and pocket transitions without breaking focus.',
     date: 'Apr 28, 2026',
   },
 ]

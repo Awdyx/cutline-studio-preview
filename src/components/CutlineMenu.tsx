@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { playSound } from '../sound/playSound'
 import { motion, AnimatePresence } from 'framer-motion'
+import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { Download, Keyboard, Settings, ChevronRight, Sparkles, Upload } from 'lucide-react'
 import {
   downloadCutlineBackupFile,
@@ -36,6 +37,7 @@ interface CutlineMenuProps {
   onToggleCanvasLock: () => void
   /** Lock is main-canvas-only; hidden inside a space. */
   showCanvasLock?: boolean
+  transformRef: RefObject<ReactZoomPanPinchContentRef | null>
 }
 
 export default function CutlineMenu({
@@ -46,6 +48,7 @@ export default function CutlineMenu({
   isCanvasLocked,
   onToggleCanvasLock,
   showCanvasLock = true,
+  transformRef,
 }: CutlineMenuProps) {
   const isPhone = useIsPhoneLayout()
   const panelRef = useRef<HTMLDivElement>(null)
@@ -133,7 +136,7 @@ export default function CutlineMenu({
       if (!file) return
 
       const confirmed = window.confirm(
-        'Import will replace your current canvas, spaces, menu layout, shortcuts, theme, and profile images. Continue?',
+        'Import will replace your current canvas, pockets, menu layout, shortcuts, theme, and profile images. Continue?',
       )
       if (!confirmed) return
 
@@ -199,7 +202,7 @@ export default function CutlineMenu({
           v1.21
         </span>
         <SubmenuSoundScope>
-        <CutlineAppNavSection onNavigate={onClose} />
+        <CutlineAppNavSection onNavigate={onClose} transformRef={transformRef} />
         <div style={menuDividerStyle} />
         <input
           ref={importInputRef}
@@ -224,7 +227,7 @@ export default function CutlineMenu({
         />
           <MenuRow
           icon={Sparkles}
-          label="Customize Menu"
+          label="Customize Cutline"
           inset
           submenuClickSound={false}
           right={<ChevronRight size={14} strokeWidth={2} color={font.colorMuted} />}

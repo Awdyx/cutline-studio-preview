@@ -5,6 +5,7 @@ import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { font } from '../styles/tokens'
 import { useCanvasItemsStore, useItemSelected } from './canvasItemsStore'
+import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import CanvasItemShell from './CanvasItemShell'
 import {
   ensureEditorCaretAnchor,
@@ -14,11 +15,15 @@ import {
   storedContentToHtml,
 } from './textEditorContent'
 import { handleTextFormatShortcutEvent } from './textEditorFormat'
+import { prepareEditorForTyping, TEXT_ITEM_DEFAULT_FONT_SIZE } from './textEditorFontSize'
+import { useTextEditorShortcuts } from './useTextEditorShortcuts'
+import { applyTextFormatToAll, formatKindFromShortcutKey } from './textEditorFormat'
 import { useTextFormatShortcuts } from './useTextFormatShortcuts'
 import {
   textAlignmentContainerStyle,
   textAlignmentEditorStyle,
 } from './textAlignment'
+import { playSound } from '../sound/playSound'
 import { useEditableCanvasTap } from '../canvas/useEditableCanvasTap'
 import { useCanvasItemAreaPointer } from '../canvas/useCanvasItemAreaPointer'
 import { dismissSelectionForOutsideItemTap } from '../canvas/canvasSelectionDismiss'
@@ -49,6 +54,8 @@ export default function TextItem({
   const editorRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const shouldFocusRef = useRef(false)
+  const selectAllOnFocusRef = useRef(false)
+  const pendingInitialCharRef = useRef<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editorEmpty, setEditorEmpty] = useState(item.text.length === 0)
   const [isEditing, setIsEditing] = useState(false)
@@ -133,7 +140,11 @@ export default function TextItem({
   const focusEditor = useCallback((atEnd = true) => {
     const el = editorRef.current
     if (!el) return
-    ensureEditorCaretAnchor(el)
+    if (isEditorEmpty(el)) {
+      prepareEditorForTyping(el, TEXT_ITEM_DEFAULT_FONT_SIZE)
+      el.focus({ preventScroll: true })
+      return
+    }
     el.focus({ preventScroll: true })
     if (!atEnd) return
     const range = document.createRange()
@@ -174,6 +185,12 @@ export default function TextItem({
   }, [scheduleSave, syncAutoSize])
 
   useTextFormatShortcuts(editorRef, isEditing, notifyFormatApplied)
+  useTextEditorShortcuts(
+    editorRef,
+    isEditing,
+    TEXT_ITEM_DEFAULT_FONT_SIZE,
+    notifyFormatApplied,
+  )
 
   useEffect(() => {
     return () => {
@@ -243,18 +260,111 @@ export default function TextItem({
   useLayoutEffect(() => {
     if (!isEditing || !shouldFocusRef.current) return
     shouldFocusRef.current = false
-    focusEditor()
-  }, [focusEditor, isEditing])
+    if (selectAllOnFocusRef.current) {
+      selectAllOnFocusRef.current = false
+      const el = editorRef.current
+      if (!el) return
+      ensureEditorCaretAnchor(el)
+      el.focus({ preventScroll: true })
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+    } else if (pendingInitialCharRef.current) {
+      const char = pendingInitialCharRef.current
+      pendingInitialCharRef.current = null
+      const el = editorRef.current
+      if (!el) return
+      prepareEditorForTyping(el, TEXT_ITEM_DEFAULT_FONT_SIZE)
+      el.focus({ preventScroll: true })
+      document.execCommand('insertText', false, char)
+    } else {
+      focusEditor()
+    }
+  }, [focusEditor, isEditing, notifyFormatApplied])
 
   useLayoutEffect(() => {
     syncAutoSize()
   }, [editorEmpty, isEditing, syncAutoSize])
 
   useEffect(() => {
+    if (!isSelected || isEditing || frozen) return
+
+    function onKeyDown(e: KeyboardEvent) {
+      // Don't intercept when the pen/tool palette is open
+      if (useShortcutUiStore.getState().toolPaletteOpen) return
+
+      const mod = e.metaKey || e.ctrlKey
+      const key = e.key
+
+      // Always pass through: modifier-only, Escape, Delete/Backspace, Tab
+      if (['Meta', 'Control', 'Shift', 'Alt'].includes(key)) return
+      if (key === 'Escape' || key === 'Tab') return
+      if (!mod && (key === 'Delete' || key === 'Backspace')) return
+
+      // Pass through item-level canvas shortcuts
+      if (mod) {
+        const k = key.toLowerCase()
+        if (k === 'z') return          // undo / redo
+        if (k === 'd') return          // duplicate
+        if (k === 'c' || k === 'x') return  // copy / cut
+        if (k === 'l') return          // toggle lock
+
+        // ⌘A → enter edit mode + select all
+        if (k === 'a') {
+          e.preventDefault()
+          e.stopPropagation()
+          selectAllOnFocusRef.current = true
+          beginEditing(true)
+          return
+        }
+
+        // ⌘B / ⌘I / ⌘U / ⌘⇧X → apply format to all text silently (no edit mode)
+        const formatKind = formatKindFromShortcutKey(k, e.shiftKey)
+        if (formatKind) {
+          e.preventDefault()
+          e.stopPropagation()
+          const el = editorRef.current
+          if (el) {
+            const html = applyTextFormatToAll(el, formatKind)
+            if (html != null) {
+              useCanvasItemsStore.getState().updateTextItemText(item.id, html)
+            }
+          }
+          return
+        }
+
+        // All other ⌘ combos (⌘I, ⌘E, ⌘S, ⌘K, ⌘F …) → swallow
+        e.stopPropagation()
+        return
+      }
+
+      // Plain printable character → start typing immediately
+      if (key.length === 1 && !e.altKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        pendingInitialCharRef.current = key
+        beginEditing(true)
+        return
+      }
+
+      // Everything else (P, D, H, L, E …) → swallow so canvas shortcuts don't fire
+      e.stopPropagation()
+    }
+
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [isSelected, isEditing, frozen, beginEditing])
+
+  const pendingEditorFocusId = useCanvasItemsStore((s) => s.pendingEditorFocusId)
+
+  useEffect(() => {
     if (frozen) return
+    if (pendingEditorFocusId !== item.id) return
     if (!useCanvasItemsStore.getState().takePendingEditorFocus(item.id)) return
     beginEditing(true)
-  }, [beginEditing, frozen, item.id])
+  }, [beginEditing, frozen, item.id, pendingEditorFocusId])
 
   useEffect(() => {
     const el = editorRef.current
@@ -359,6 +469,7 @@ export default function TextItem({
             }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
+              playSound('textCommit')
               flushSaveAndCommit()
               const el = containerRef.current
               if (el) {
@@ -371,7 +482,7 @@ export default function TextItem({
           }}
             style={{
               padding: TEXT_BOX_PADDING,
-              fontSize: 16,
+              fontSize: TEXT_ITEM_DEFAULT_FONT_SIZE,
               lineHeight: 1.45,
               fontFamily: font.family,
               color: font.colorPrimary,

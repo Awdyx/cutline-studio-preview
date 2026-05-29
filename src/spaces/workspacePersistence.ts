@@ -1,8 +1,18 @@
 import { loadCanvasItemsFromStorage } from '../canvasItems/canvasItemsPersistence'
 import type { CanvasItem } from '../canvasItems/types'
 import { stripLegacyMediaFromItems } from '../media/stripLegacyMediaFields'
+import {
+  filterItemsForStudioCentrePersist,
+  filterStrokesForStudioCentrePersist,
+} from '../canvas/studioCentre'
 import { loadStrokesFromStorage } from '../drawing/strokesPersistence'
 import type { Stroke } from '../drawing/types'
+import {
+  normalizeFeaturePlatePositions,
+  type FeaturePlatePositions,
+} from '../canvas/featurePlatePositionStore'
+import type { StudioCentrePosition } from '../canvas/studioCentrePosition'
+import { normalizeStudioCentrePosition } from '../canvas/studioCentrePosition'
 import { isUninitializedMainCamera } from '../canvas/canvasCamera'
 import { CANVAS_MAX_SCALE } from '../drawing/canvasDimensions'
 import {
@@ -38,6 +48,8 @@ type PersistedPayload = {
   spaces: Record<string, PersistedSpace>
   activeCanvasId: ActiveCanvasId
   mainCamera?: SpaceCamera
+  studioCentrePosition?: StudioCentrePosition
+  featurePlatePositions?: FeaturePlatePositions
 }
 
 export type LoadedWorkspace = {
@@ -47,6 +59,8 @@ export type LoadedWorkspace = {
   spaces: Record<string, SpaceCanvasData & { snapshot?: string }>
   activeCanvasId: ActiveCanvasId
   mainCamera: SpaceCamera | null
+  studioCentrePosition: StudioCentrePosition | null
+  featurePlatePositions: FeaturePlatePositions | null
   /** True when assembled from legacy per-layer storage keys. */
   migratedFromLegacy?: boolean
   storageVersion: number
@@ -89,7 +103,7 @@ export function scheduleSaveWorkspace(getSnapshot: () => LoadedWorkspace): void 
     const snapshot = pendingSnapshot
     pendingSnapshot = null
     if (snapshot) saveWorkspaceToStorage(snapshot())
-  }, 500)
+  }, 200)
 }
 
 /** Immediately persist the latest workspace snapshot (e.g. on page unload). */
@@ -137,14 +151,28 @@ function serializeWorkspace(data: LoadedWorkspace): string | null {
 
   const payload: PersistedPayload = {
     version: WORKSPACE_STORAGE_VERSION,
-    mainItems: stripLegacyMediaFromItems(data.mainItems),
-    mainStrokes: data.mainStrokes,
+    mainItems: filterItemsForStudioCentrePersist(
+      stripLegacyMediaFromItems(data.mainItems),
+    ),
+    mainStrokes: filterStrokesForStudioCentrePersist(data.mainStrokes),
     mainAnnotationStrokes:
       data.mainAnnotationStrokes.length > 0
-        ? data.mainAnnotationStrokes
+        ? filterStrokesForStudioCentrePersist(data.mainAnnotationStrokes)
         : undefined,
     spaces,
     activeCanvasId: data.activeCanvasId,
+  }
+
+  if (data.studioCentrePosition) {
+    payload.studioCentrePosition = data.studioCentrePosition
+  }
+
+  if (data.featurePlatePositions) {
+    payload.featurePlatePositions = data.featurePlatePositions
+  }
+
+  if (data.mainCamera && !isUninitializedMainCamera(data.mainCamera)) {
+    payload.mainCamera = data.mainCamera
   }
 
   const serialized = JSON.stringify(payload)
@@ -208,13 +236,25 @@ export function loadWorkspaceFromStorage(): LoadedWorkspace {
         }
       }
       const mainCamera = normalizeMainCamera(parsed.mainCamera)
+      const studioCentrePosition = normalizeStudioCentrePosition(
+        parsed.studioCentrePosition,
+      )
+      const featurePlatePositions = normalizeFeaturePlatePositions(
+        parsed.featurePlatePositions,
+      )
 
       return {
-        mainItems: Array.isArray(parsed.mainItems) ? parsed.mainItems : [],
-        mainStrokes: Array.isArray(parsed.mainStrokes) ? parsed.mainStrokes : [],
-        mainAnnotationStrokes: Array.isArray(parsed.mainAnnotationStrokes)
-          ? parsed.mainAnnotationStrokes
-          : [],
+        mainItems: filterItemsForStudioCentrePersist(
+          Array.isArray(parsed.mainItems) ? parsed.mainItems : [],
+        ),
+        mainStrokes: filterStrokesForStudioCentrePersist(
+          Array.isArray(parsed.mainStrokes) ? parsed.mainStrokes : [],
+        ),
+        mainAnnotationStrokes: filterStrokesForStudioCentrePersist(
+          Array.isArray(parsed.mainAnnotationStrokes)
+            ? parsed.mainAnnotationStrokes
+            : [],
+        ),
         spaces,
         activeCanvasId:
           parsed.activeCanvasId === 'main' ||
@@ -223,6 +263,8 @@ export function loadWorkspaceFromStorage(): LoadedWorkspace {
             ? parsed.activeCanvasId
             : 'main',
         mainCamera,
+        studioCentrePosition,
+        featurePlatePositions,
         storageVersion,
       }
     }
@@ -259,12 +301,14 @@ function migrateLegacyStorage(): LoadedWorkspace {
   }
 
   return {
-    mainItems,
-    mainStrokes: strokes,
-    mainAnnotationStrokes: annotationStrokes,
+    mainItems: filterItemsForStudioCentrePersist(mainItems),
+    mainStrokes: filterStrokesForStudioCentrePersist(strokes),
+    mainAnnotationStrokes: filterStrokesForStudioCentrePersist(annotationStrokes),
     spaces,
     activeCanvasId: 'main',
     mainCamera: null,
+    studioCentrePosition: null,
+    featurePlatePositions: null,
     migratedFromLegacy: true,
     storageVersion: 1,
   }

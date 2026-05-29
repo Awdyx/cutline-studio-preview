@@ -1,5 +1,5 @@
 import html2canvas from 'html2canvas'
-import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../drawing/canvasDimensions'
+import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
 import type { FlattenSegmentPlan } from './flattenPlan'
 
 function isMeshElement(el: HTMLElement, canvasEl: HTMLElement): boolean {
@@ -51,8 +51,8 @@ export async function captureFlattenSegment(
 ): Promise<string | null> {
   try {
     const canvas = await html2canvas(canvasEl, {
-      width: CANVAS_WIDTH,
-      height: CANVAS_HEIGHT,
+      width: CANVAS_ORIGINAL_WIDTH,
+      height: CANVAS_ORIGINAL_HEIGHT,
       scale: 1,
       useCORS: true,
       logging: false,

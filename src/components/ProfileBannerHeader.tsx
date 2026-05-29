@@ -1,7 +1,7 @@
 import UserAvatar from './UserAvatar'
 import ProfileFramedImage from './ProfileFramedImage'
 import { DEFAULT_BANNER_FRAME } from '../profile/profileMediaFrame'
-import type { ProfileMediaFrame } from '../profile/types'
+import type { ProfileMediaFrame, ProfileStatus } from '../profile/types'
 
 const AVATAR_RING_PX = 3
 const CONTENT_GAP_PX = 10
@@ -32,6 +32,7 @@ export default function ProfileBannerHeader({
   fullBleed = false,
   contentGap,
   contentPaddingBottom,
+  status,
   children,
 }: {
   bannerImageUrl: string | null
@@ -49,6 +50,7 @@ export default function ProfileBannerHeader({
   /** Space between avatar bottom and header content (edit profile). */
   contentGap?: number
   contentPaddingBottom?: number
+  status?: ProfileStatus | null
   children?: React.ReactNode
 }) {
   const contentPadX = edgeToEdge || fullBleed ? 16 : 0
@@ -107,6 +109,7 @@ export default function ProfileBannerHeader({
             avatarFrame={avatarFrame}
             size={avatarSize}
             fontSize={Math.max(14, Math.round(avatarSize * 0.4))}
+            status={status}
           />
         </div>
       </div>

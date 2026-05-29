@@ -88,6 +88,10 @@ function resetEdgeRuntime(key: EdgeKey): void {
   edgeRuntime[key].idleStartedAt = null
 }
 
+export function resetPanVignetteRuntime(): void {
+  for (const key of EDGE_KEYS) resetEdgeRuntime(key)
+}
+
 function updateEdgeStrength(
   key: EdgeKey,
   atEdge: boolean,
@@ -139,6 +143,12 @@ function computeEdges(
   vy: number,
   now: number,
 ): EdgeStrengths {
+  const moving = Math.abs(vx) > MOTION_EPS || Math.abs(vy) > MOTION_EPS
+  if (!moving) {
+    resetPanVignetteRuntime()
+    return EMPTY_EDGE_STRENGTHS
+  }
+
   const motion = motionEdgeStrengths(vx, vy)
   const contact = readEdgeContact(ref)
 

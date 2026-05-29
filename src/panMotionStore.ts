@@ -68,8 +68,22 @@ export const usePanMotionStore = create<PanMotionState>((set, get) => ({
 
   setPanStopped: () => {
     const s = get()
-    if (!s.active && s.intensity === 0 && s.vx === 0 && s.vy === 0) return
-    set({ active: false, intensity: 0, vx: 0, vy: 0 })
+    if (
+      !s.active &&
+      s.intensity === 0 &&
+      s.vx === 0 &&
+      s.vy === 0 &&
+      edgesEqual(s.edges, EMPTY_EDGE_STRENGTHS)
+    ) {
+      return
+    }
+    set({
+      active: false,
+      intensity: 0,
+      vx: 0,
+      vy: 0,
+      edges: EMPTY_EDGE_STRENGTHS,
+    })
   },
 
   setZoomActive: (active: boolean) => {

@@ -3,6 +3,7 @@ import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
 import {
   computePanVignetteEdges,
   EDGE_HOLD_MOTION_EPS,
+  resetPanVignetteRuntime,
   shouldContinueHoldFade,
   shouldRunHoldFadeLoop,
   stepPanVignetteHoldFade,
@@ -115,10 +116,12 @@ export function usePanMotionHandler() {
 
       if (stopTimer.current) clearTimeout(stopTimer.current)
       stopTimer.current = setTimeout(() => {
+        stopHoldFadeLoop()
+        resetPanVignetteRuntime()
         setPanStopped()
       }, PAN_STOP_DEBOUNCE_MS)
     },
-    [syncPanMotion, setPanStopped],
+    [syncPanMotion, setPanStopped, stopHoldFadeLoop],
   )
 
   const onPanningStop = useCallback(
@@ -130,10 +133,12 @@ export function usePanMotionHandler() {
         pendingSync.current = null
       }
       if (stopTimer.current) clearTimeout(stopTimer.current)
+      stopHoldFadeLoop()
+      resetPanVignetteRuntime()
       flushPanSync(ref, 0, 0)
       setPanStopped()
     },
-    [flushPanSync, setPanStopped],
+    [flushPanSync, setPanStopped, stopHoldFadeLoop],
   )
 
   useEffect(

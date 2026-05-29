@@ -8,6 +8,7 @@ import {
   Image,
   Lasso,
   Lock,
+  Map as MapIcon,
   Pen,
   Plus,
   Redo2,
@@ -75,6 +76,20 @@ export const SHORTCUTS: ShortcutDef[] = [
     category: 'Edit',
     keys: ['Esc'],
   },
+  {
+    id: 'text-font-size-increase',
+    label: 'Increase font size',
+    category: 'Edit',
+    keys: modKeys(']'),
+    skipToast: true,
+  },
+  {
+    id: 'text-font-size-decrease',
+    label: 'Decrease font size',
+    category: 'Edit',
+    keys: modKeys('['),
+    skipToast: true,
+  },
   // ── Create ────────────────────────────────────────────────────────────────
   {
     id: 'add-text',
@@ -111,6 +126,7 @@ export const SHORTCUTS: ShortcutDef[] = [
     label: 'Select all',
     category: 'Canvas',
     keys: modKeys('A'),
+    icon: Lasso,
   },
   {
     id: 'toggle-lock',
@@ -162,6 +178,14 @@ export const SHORTCUTS: ShortcutDef[] = [
     category: 'Navigation',
     keys: modKeys('F'),
     icon: Search,
+    skipToast: true,
+  },
+  {
+    id: 'open-canvas-map',
+    label: 'Open canvas map',
+    category: 'Navigation',
+    keys: modKeys('⇧', 'V'),
+    icon: MapIcon,
     skipToast: true,
   },
   // ── Panels ────────────────────────────────────────────────────────────────

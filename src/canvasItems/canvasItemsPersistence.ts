@@ -6,6 +6,7 @@ import {
   DEFAULT_SPACE_PREVIEW_PAN,
   resolveSpacePreviewPan,
 } from '../spaces/spacePreviewPan'
+import { DEFAULT_SPACE_NAME } from '../spaces/types'
 import { DEFAULT_SPACE_NAME_ALIGNMENT, normalizeTextAlignment } from './textAlignment'
 import type { CanvasItem, StickyColorId } from './types'
 
@@ -16,6 +17,7 @@ function normalizeStickyColor(value: unknown): StickyColorId | undefined {
 import { studyHubDimensionsForWidth } from './studyHubBounds'
 
 import { scopedStorageKey } from '../storage/storageScope'
+import { filterItemsForStudioCentrePersist } from '../canvas/studioCentre'
 
 export const CANVAS_ITEMS_STORAGE_KEY = scopedStorageKey('cutline-canvas-items-v1')
 const STORAGE_VERSION = 1
@@ -134,6 +136,24 @@ function normalizeItem(raw: unknown): CanvasItem | null {
     if (!mediaId) return null
     const importWidth = (o as { importWidth?: number }).importWidth
     const importHeight = (o as { importHeight?: number }).importHeight
+    const stickyIdRaw = (o as { stickyId?: unknown }).stickyId
+    const stickyId =
+      typeof stickyIdRaw === 'string' && stickyIdRaw.length > 0
+        ? stickyIdRaw
+        : undefined
+    const originRaw = (o as { mainCanvasOrigin?: unknown }).mainCanvasOrigin
+    const mainCanvasOrigin =
+      originRaw &&
+      typeof originRaw === 'object' &&
+      typeof (originRaw as { x?: unknown }).x === 'number' &&
+      typeof (originRaw as { y?: unknown }).y === 'number' &&
+      typeof (originRaw as { zIndex?: unknown }).zIndex === 'number'
+        ? {
+            x: (originRaw as { x: number }).x,
+            y: (originRaw as { y: number }).y,
+            zIndex: (originRaw as { zIndex: number }).zIndex,
+          }
+        : undefined
     return {
       id: o.id,
       type: o.type,
@@ -145,6 +165,8 @@ function normalizeItem(raw: unknown): CanvasItem | null {
       mediaId,
       ...(typeof importWidth === 'number' ? { importWidth } : {}),
       ...(typeof importHeight === 'number' ? { importHeight } : {}),
+      ...(stickyId ? { stickyId } : {}),
+      ...(mainCanvasOrigin ? { mainCanvasOrigin } : {}),
       ...(layer ? { layer } : {}),
       ...(legacySrc ? { src: legacySrc } : {}),
     } as CanvasItem
@@ -154,7 +176,7 @@ function normalizeItem(raw: unknown): CanvasItem | null {
     const name =
       typeof (o as { name?: string }).name === 'string'
         ? (o as { name: string }).name
-        : 'Untitled space'
+        : DEFAULT_SPACE_NAME
     const snapshotIdRaw = (o as { snapshotId?: unknown }).snapshotId
     const snapshotRaw = (o as { snapshot?: unknown }).snapshot
     const snapshotId =
@@ -257,9 +279,11 @@ export function loadCanvasItemsFromStorage(): CanvasItem[] {
         ? parsed.items
         : []
 
-    return list
-      .map(normalizeItem)
-      .filter((item): item is CanvasItem => item !== null)
+    return filterItemsForStudioCentrePersist(
+      list
+        .map(normalizeItem)
+        .filter((item): item is CanvasItem => item !== null),
+    )
   } catch (err) {
     console.warn('[canvas] failed to load canvas items from localStorage', err)
     return []
@@ -278,7 +302,7 @@ export function scheduleSaveCanvasItems(items: CanvasItem[]): void {
 
 export function saveCanvasItemsToStorage(items: CanvasItem[]): void {
   try {
-    const kept = items.filter((item) => {
+    const kept = filterItemsForStudioCentrePersist(items).filter((item) => {
       if (itemByteSize(item) > MAX_ITEM_BYTES) {
         console.warn(`[canvas] skipped oversize item ${item.id} on save`)
         return false

@@ -199,7 +199,7 @@ export default function CutlineMenu({
             userSelect: 'none',
           }}
         >
-          v1.21
+          v1.7 alpha
         </span>
         <SubmenuSoundScope>
         <CutlineAppNavSection onNavigate={onClose} transformRef={transformRef} />

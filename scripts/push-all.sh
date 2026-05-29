@@ -11,6 +11,7 @@ COMPANY_BRANCH="${COMPANY_BRANCH:-main}"
 PERSONAL_DEMOS=(
   "public-demo|cutline-studio-demo|awdyx.github.io/cutline-studio-demo"
   "public-demo-play|cutline-studio-play|awdyx.github.io/cutline-studio-play"
+  "public-demo-preview|cutline-studio-preview|awdyx.github.io/cutline-studio-preview"
 )
 
 AUDIO_GIT_PATH="public/audio/account-selection.mp3"

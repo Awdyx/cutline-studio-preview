@@ -118,6 +118,15 @@ export function flushScheduledWorkspaceSave(getSnapshot: () => LoadedWorkspace):
   if (snapshot) saveWorkspaceToStorage(snapshot())
 }
 
+/** Drop any pending debounced save *without* writing — used when resetting all data. */
+export function cancelScheduledWorkspaceSave(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  pendingSnapshot = null
+}
+
 export function saveWorkspaceToStorage(data: LoadedWorkspace): void {
   try {
     const serialized = serializeWorkspace(data)

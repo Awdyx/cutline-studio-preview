@@ -1,6 +1,7 @@
 import type { CanvasLayer } from '../canvasLock/layer'
 import { generateStrokeId } from '../drawing/strokeId'
 import { strokeToSvgPath } from '../drawing/strokePath'
+import { decimateStrokePoints } from '../drawing/strokePointDecimation'
 import type { DrawTool, Stroke } from '../drawing/types'
 import {
   DEFAULT_SPACE_PREVIEW_PAN,
@@ -43,17 +44,15 @@ function normalizeStroke(raw: unknown): Stroke | null {
   if (points.length < 3) return null
 
   const tool: DrawTool = o.tool === 'highlighter' ? 'highlighter' : 'pen'
+  const decimated = decimateStrokePoints(points)
   const stroke: Stroke = {
     id: typeof o.id === 'string' ? o.id : generateStrokeId(),
-    points,
+    points: decimated,
     color: typeof o.color === 'string' ? o.color : '#4f5568',
     size: typeof o.size === 'number' ? o.size : 4,
     tool,
   }
-  stroke.path =
-    typeof o.path === 'string' && o.path.length > 0
-      ? o.path
-      : strokeToSvgPath(stroke, false)
+  stroke.path = strokeToSvgPath(stroke, true)
   return stroke
 }
 

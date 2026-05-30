@@ -32,6 +32,7 @@ import { STUDY_SUBJECTS, type StudySubjectId } from './study/studyHubData'
 import UiPinHost from '../uiCustomization/UiPinHost'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
+import { useAppDestinationFocusStore } from '../navigation/appDestinationFocusStore'
 import {
   bottomRightFabPlusAnimate,
   bottomRightFabPlusTransition,
@@ -185,11 +186,15 @@ export default function PlusFab({
   const canvasEditEnabled = useCanvasEditStore((s) => s.enabled)
   const showCanvasEditSection = !isPhone || canvasEditEnabled
   const nearStudioViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
+  const destinationFocusEngaged = useAppDestinationFocusStore(
+    (s) => s.panLocked || s.dismissing,
+  )
   const [isOpen, setIsOpen] = useState(false)
   const [fabHoverScale, setFabHoverScale] = useState(false)
   const editingUi = useUiCustomizationStore((s) => s.editing)
   const fabHoverLift = fabHoverScale && !editingUi
-  const chromeVisible = editingUi || nearStudioViewport
+  const chromeVisible =
+    (editingUi || nearStudioViewport) && !destinationFocusEngaged
   const [widgetsComingSoon, setWidgetsComingSoon] = useState(false)
   const spaceWidgetCount = useCanvasItemsStore((s) => countSpaceWidgets(s.items))
 

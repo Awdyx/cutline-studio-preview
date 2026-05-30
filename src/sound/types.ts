@@ -32,3 +32,5 @@ export type SoundId =
   | 'minimapClose'
   | 'textCommit'
   | 'plateFocus'
+  | 'reloadIntroArrive'
+  | 'reloadIntroDismiss'

@@ -442,7 +442,7 @@ function bubblyPluck(
   peak: number,
   start: number,
   release: number,
-  opts?: { startMul?: number; endMul?: number },
+  opts?: { startMul?: number; endMul?: number; out?: GainNode },
 ): void {
   const startMul = opts?.startMul ?? 1.05
   const endMul = opts?.endMul ?? 1
@@ -455,7 +455,7 @@ function bubblyPluck(
     start + 0.024,
   )
   osc.connect(g)
-  g.connect(sfxOut())
+  g.connect(opts?.out ?? sfxOut())
   osc.start(start)
   osc.stop(start + release + 0.03)
   track(osc)
@@ -700,6 +700,222 @@ function plateFocusTick(context: AudioContext, t0: number, pitchMul = 1): void {
   tone(context, hz(238), 0.008, 0.01, 0.078, t0 + 0.24, 'sine')
 }
 
+/** Echo + light room reverb for reload intro crystal sounds. */
+let crystalReverbImpulse: AudioBuffer | null = null
+
+function crystalReverbImpulseResponse(context: AudioContext): AudioBuffer {
+  if (crystalReverbImpulse?.sampleRate === context.sampleRate) {
+    return crystalReverbImpulse
+  }
+
+  const seconds = 0.5
+  const length = Math.floor(context.sampleRate * seconds)
+  const impulse = context.createBuffer(2, length, context.sampleRate)
+  for (let c = 0; c < 2; c++) {
+    const channel = impulse.getChannelData(c)
+    for (let i = 0; i < length; i++) {
+      const decay = Math.pow(1 - i / length, 2.35)
+      channel[i] = (Math.random() * 2 - 1) * decay
+    }
+  }
+
+  crystalReverbImpulse = impulse
+  return impulse
+}
+
+function createCrystalIntroSpaceBus(context: AudioContext): GainNode {
+  const input = context.createGain()
+
+  const dry = context.createGain()
+  dry.gain.value = 0.5
+
+  const echoDelay = context.createDelay(0.45)
+  echoDelay.delayTime.value = 0.192
+  const echoWet = context.createGain()
+  echoWet.gain.value = 0.28
+
+  const reverb = context.createConvolver()
+  reverb.buffer = crystalReverbImpulseResponse(context)
+  const reverbLp = context.createBiquadFilter()
+  reverbLp.type = 'lowpass'
+  reverbLp.frequency.value = 4400
+  reverbLp.Q.value = 0.35
+  const reverbWet = context.createGain()
+  reverbWet.gain.value = 0.22
+
+  input.connect(dry)
+  dry.connect(sfxOut())
+  input.connect(echoDelay)
+  echoDelay.connect(echoWet)
+  echoWet.connect(sfxOut())
+  input.connect(reverb)
+  reverb.connect(reverbLp)
+  reverbLp.connect(reverbWet)
+  reverbWet.connect(sfxOut())
+
+  return input
+}
+
+const CRYSTAL_MAJOR_FREQS = [220, 277, 330, 415, 554] as const
+const CRYSTAL_MAJOR_WEIGHTS = [1, 0.74, 0.6, 0.4, 0.24] as const
+
+/** Warm A-major sub layer — pairs with the crystal cluster partials. */
+function addCrystalBassLayer(
+  context: AudioContext,
+  t0: number,
+  dest: GainNode,
+  duration: number,
+  kind: 'gather' | 'wash',
+): void {
+  const peak = kind === 'gather' ? 0.015 : 0.017
+  const attack = kind === 'gather' ? 0.16 : 0.12
+  const hold = kind === 'gather' ? 0.08 : 0.1
+  const release = duration * (kind === 'gather' ? 0.72 : 0.68)
+
+  ambientPad(context, 110, peak, attack, hold, release, t0, {
+    filterHz: 310,
+    detuneCents: -3,
+    out: dest,
+  })
+  ambientPad(context, 55, peak * 0.52, attack + 0.04, hold, release * 1.04, t0, {
+    filterHz: 170,
+    out: dest,
+  })
+}
+
+/**
+ * Title materialising — same major cluster as exit, but light gathers inward.
+ */
+function crystalTitleGather(
+  context: AudioContext,
+  t0: number,
+  dest: GainNode,
+): void {
+  const duration = 0.54
+  const len = Math.max(1, Math.floor(context.sampleRate * duration))
+  const buf = context.createBuffer(1, len, context.sampleRate)
+  const data = buf.getChannelData(0)
+
+  for (let i = 0; i < len; i++) {
+    const t = i / len
+    const env = (1 - Math.cos(Math.PI * Math.min(t / 0.72, 1))) * (1 - t * 0.1)
+    let sample = 0
+    for (let f = 0; f < CRYSTAL_MAJOR_FREQS.length; f++) {
+      sample +=
+        Math.sin((2 * Math.PI * CRYSTAL_MAJOR_FREQS[f] * i) / context.sampleRate) *
+        CRYSTAL_MAJOR_WEIGHTS[f]
+    }
+    data[i] = (sample * env) / CRYSTAL_MAJOR_FREQS.length
+  }
+
+  const src = context.createBufferSource()
+  src.buffer = buf
+  const lp = context.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.Q.value = 0.35
+  lp.frequency.setValueAtTime(4600, t0)
+  lp.frequency.exponentialRampToValueAtTime(760, t0 + duration * 0.68)
+
+  const g = context.createGain()
+  g.gain.value = 0.031
+
+  src.connect(lp)
+  lp.connect(g)
+  g.connect(dest)
+  src.start(t0)
+  src.stop(t0 + duration + 0.03)
+  track(src)
+
+  addCrystalBassLayer(context, t0, dest, duration, 'gather')
+}
+
+/**
+ * Reload intro arrive — crystal gather + settling twinkle (pair to exit wash).
+ */
+function reloadIntroArriveTick(context: AudioContext, t0: number): void {
+  const bus = createCrystalIntroSpaceBus(context)
+  crystalTitleGather(context, t0, bus)
+
+  const twinkle = context.createOscillator()
+  const twinkleG = env(context, 0.0055, 0.032, 0.14, t0 + 0.03)
+  twinkle.type = 'sine'
+  twinkle.frequency.setValueAtTime(740, t0 + 0.03)
+  twinkle.frequency.exponentialRampToValueAtTime(622, t0 + 0.17)
+  twinkle.connect(twinkleG)
+  twinkleG.connect(bus)
+  twinkle.start(t0 + 0.03)
+  twinkle.stop(t0 + 0.36)
+  track(twinkle)
+}
+
+/**
+ * Major-cluster wash — bell-shaped swell with a brightening filter.
+ * Built from a short composite buffer (not plucks or pads).
+ */
+function crystalThresholdWash(
+  context: AudioContext,
+  t0: number,
+  dest: GainNode,
+): void {
+  const duration = 0.62
+  const len = Math.max(1, Math.floor(context.sampleRate * duration))
+  const buf = context.createBuffer(1, len, context.sampleRate)
+  const data = buf.getChannelData(0)
+  const freqs = CRYSTAL_MAJOR_FREQS
+  const weights = CRYSTAL_MAJOR_WEIGHTS
+
+  for (let i = 0; i < len; i++) {
+    const t = i / len
+    const env = Math.sin(Math.PI * t) * (1 - t * 0.12)
+    let sample = 0
+    for (let f = 0; f < freqs.length; f++) {
+      sample +=
+        Math.sin((2 * Math.PI * freqs[f] * i) / context.sampleRate) * weights[f]
+    }
+    data[i] = (sample * env) / freqs.length
+  }
+
+  const src = context.createBufferSource()
+  src.buffer = buf
+  const lp = context.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.Q.value = 0.35
+  lp.frequency.setValueAtTime(880, t0)
+  lp.frequency.exponentialRampToValueAtTime(5200, t0 + duration * 0.42)
+  lp.frequency.exponentialRampToValueAtTime(2400, t0 + duration * 0.9)
+
+  const g = context.createGain()
+  g.gain.value = 0.034
+
+  src.connect(lp)
+  lp.connect(g)
+  g.connect(dest)
+  src.start(t0)
+  src.stop(t0 + duration + 0.03)
+  track(src)
+
+  addCrystalBassLayer(context, t0, dest, duration, 'wash')
+}
+
+/**
+ * Reload intro dismiss — crystal major wash through echo + room reverb.
+ */
+function reloadIntroDismissTick(context: AudioContext, t0: number): void {
+  const bus = createCrystalIntroSpaceBus(context)
+  crystalThresholdWash(context, t0, bus)
+
+  const twinkle = context.createOscillator()
+  const twinkleG = env(context, 0.006, 0.028, 0.16, t0 + 0.24)
+  twinkle.type = 'sine'
+  twinkle.frequency.setValueAtTime(659, t0 + 0.24)
+  twinkle.frequency.exponentialRampToValueAtTime(784, t0 + 0.38)
+  twinkle.connect(twinkleG)
+  twinkleG.connect(bus)
+  twinkle.start(t0 + 0.24)
+  twinkle.stop(t0 + 0.44)
+  track(twinkle)
+}
+
 const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
   itemGrab(context, t0) {
     itemGrabLift(context, t0)
@@ -837,6 +1053,14 @@ const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
 
   plateFocus(context, t0) {
     plateFocusTick(context, t0)
+  },
+
+  reloadIntroArrive(context, t0) {
+    reloadIntroArriveTick(context, t0)
+  },
+
+  reloadIntroDismiss(context, t0) {
+    reloadIntroDismissTick(context, t0)
   },
 }
 

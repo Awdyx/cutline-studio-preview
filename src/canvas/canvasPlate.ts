@@ -7,11 +7,11 @@ import {
   CANVAS_PLATE_VIEWPORT_ZONE_PAD,
   CANVAS_STUDIO_ACOUSTICS_EDGE_PAD,
   CANVAS_STUDIO_EDGE_FADE,
-  FEATURE_PLATE_HEIGHT,
-  FEATURE_PLATE_WIDTH,
   STUDIO_VISUAL_HEIGHT,
   STUDIO_VISUAL_WIDTH,
 } from '../drawing/canvasDimensions'
+import type { FeaturePlateDimensions } from './featurePlateViewportDimensions'
+import { getFeaturePlateDimensions } from './featurePlateViewportStore'
 import type { CanvasMinimapRect } from './canvasMinimapGeometry'
 import {
   clampFeaturePlatePosition,
@@ -19,6 +19,7 @@ import {
 } from './studioCentrePosition'
 import { useStudioCentrePositionStore } from './studioCentrePositionStore'
 import { useFeaturePlatePositionStore } from './featurePlatePositionStore'
+import { useStudioCentreDragStore } from './studioCentreDragStore'
 
 export const FEATURE_PLATE_DESTINATIONS = [
   'leaderboard',
@@ -56,31 +57,61 @@ export function defaultFeaturePlatePositions(): Record<
   FeaturePlateDestination,
   StudioCentrePosition
 > {
+  const { width, height } = getFeaturePlateDimensions()
   const sx = CANVAS_CONTENT_OFFSET_X
   const sy = CANVAS_CONTENT_OFFSET_Y
   return {
-    leaderboard: clampFeaturePlatePosition(
-      sx - FEATURE_PLATE_WIDTH - PLATE_GAP,
-      sy,
-    ),
+    leaderboard: clampFeaturePlatePosition(sx - width - PLATE_GAP, sy),
     forum: clampFeaturePlatePosition(sx + STUDIO_VISUAL_WIDTH + PLATE_GAP, sy),
     groups: clampFeaturePlatePosition(
       sx,
       sy + STUDIO_VISUAL_HEIGHT + PLATE_GAP,
     ),
-    ucat: clampFeaturePlatePosition(
-      sx,
-      sy - FEATURE_PLATE_HEIGHT - PLATE_GAP,
-    ),
+    ucat: clampFeaturePlatePosition(sx, sy - height - PLATE_GAP),
   }
 }
 
 export function featurePlateRectAt(x: number, y: number): CanvasMinimapRect {
-  return {
-    x,
-    y,
-    width: FEATURE_PLATE_WIDTH,
-    height: FEATURE_PLATE_HEIGHT,
+  const { width, height } = getFeaturePlateDimensions()
+  return { x, y, width, height }
+}
+
+export function syncFeaturePlateDimensionCssVars(
+  dims: FeaturePlateDimensions = getFeaturePlateDimensions(),
+): void {
+  const root = document.documentElement
+  root.style.setProperty('--feature-plate-width', `${dims.width}px`)
+  root.style.setProperty('--feature-plate-height', `${dims.height}px`)
+}
+
+/** Keep plate centres fixed when the viewport aspect changes. */
+export function reflowFeaturePlatePositionsForDimensions(
+  prev: FeaturePlateDimensions,
+  next: FeaturePlateDimensions,
+): void {
+  if (prev.width === next.width && prev.height === next.height) return
+
+  const store = useFeaturePlatePositionStore.getState()
+  const positions = { ...store.positions }
+  let changed = false
+
+  for (const dest of FEATURE_PLATE_DESTINATIONS) {
+    const { x, y } = positions[dest]
+    const cx = x + prev.width / 2
+    const cy = y + prev.height / 2
+    const clamped = clampFeaturePlatePosition(
+      cx - next.width / 2,
+      cy - next.height / 2,
+    )
+    if (clamped.x !== x || clamped.y !== y) {
+      positions[dest] = clamped
+      changed = true
+    }
+    syncFeaturePlateLayoutVars(dest, positions[dest].x, positions[dest].y)
+  }
+
+  if (changed) {
+    useFeaturePlatePositionStore.setState({ positions })
   }
 }
 
@@ -100,7 +131,8 @@ export function plateDimensionsForDestination(
   if (destination === 'studio') {
     return { width: STUDIO_VISUAL_WIDTH, height: STUDIO_VISUAL_HEIGHT }
   }
-  return { width: FEATURE_PLATE_WIDTH, height: FEATURE_PLATE_HEIGHT }
+  const { width, height } = getFeaturePlateDimensions()
+  return { width, height }
 }
 
 function canvasPlateViewportZoneEllipseForSize(
@@ -150,21 +182,13 @@ export function canvasPlateAcousticsEllipse(plateX: number, plateY: number) {
 }
 
 function featurePlateViewportZoneEllipse(plateX: number, plateY: number) {
-  return canvasPlateViewportZoneEllipseForSize(
-    plateX,
-    plateY,
-    FEATURE_PLATE_WIDTH,
-    FEATURE_PLATE_HEIGHT,
-  )
+  const { width, height } = getFeaturePlateDimensions()
+  return canvasPlateViewportZoneEllipseForSize(plateX, plateY, width, height)
 }
 
 function featurePlateAcousticsEllipse(plateX: number, plateY: number) {
-  return canvasPlateAcousticsEllipseForSize(
-    plateX,
-    plateY,
-    FEATURE_PLATE_WIDTH,
-    FEATURE_PLATE_HEIGHT,
-  )
+  const { width, height } = getFeaturePlateDimensions()
+  return canvasPlateAcousticsEllipseForSize(plateX, plateY, width, height)
 }
 
 export function featurePlateCssVarName(
@@ -311,12 +335,12 @@ export type CanvasPlateHit = {
 /** Normalized ellipse distance above 1.0 — still snap to nearest plate when approaching. */
 const CANVAS_PLATE_VIEWPORT_NEAR_DEPTH = 1.18
 
-/** Fisheye titles sit above plates — keep this band in the owning plate’s focus footprint. */
-const FEATURE_PLATE_TITLE_BAND = 420
-
 /** Side/bottom reach beyond feature plate edges for viewport focus. */
-const FEATURE_PLATE_FOCUS_SIDE_PAD = 520
-const FEATURE_PLATE_FOCUS_BOTTOM_PAD = 720
+export const FEATURE_PLATE_FOCUS_SIDE_PAD = 520
+export const FEATURE_PLATE_FOCUS_BOTTOM_PAD = 720
+
+/** Fisheye titles sit above plates — keep this band in the owning plate’s focus footprint. */
+export const FEATURE_PLATE_TITLE_BAND = 420
 
 function isPointInFeaturePlateFocusFootprint(
   x: number,
@@ -324,11 +348,12 @@ function isPointInFeaturePlateFocusFootprint(
   plateX: number,
   plateY: number,
 ): boolean {
+  const { width, height } = getFeaturePlateDimensions()
   return (
     x >= plateX - FEATURE_PLATE_FOCUS_SIDE_PAD &&
-    x <= plateX + FEATURE_PLATE_WIDTH + FEATURE_PLATE_FOCUS_SIDE_PAD &&
+    x <= plateX + width + FEATURE_PLATE_FOCUS_SIDE_PAD &&
     y >= plateY - FEATURE_PLATE_TITLE_BAND &&
-    y <= plateY + FEATURE_PLATE_HEIGHT + FEATURE_PLATE_FOCUS_BOTTOM_PAD
+    y <= plateY + height + FEATURE_PLATE_FOCUS_BOTTOM_PAD
   )
 }
 
@@ -340,7 +365,13 @@ export function resolveCanvasPlateAt(
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null
 
   const studio = useStudioCentrePositionStore.getState()
-  const feature = useFeaturePlatePositionStore.getState().positions
+  const feature = { ...useFeaturePlatePositionStore.getState().positions }
+  const drag = useStudioCentreDragStore.getState()
+  const studioPos = drag.studioDragPreview ?? studio
+  if (drag.featurePlateDragPreview) {
+    const { dest, x: px, y: py } = drag.featurePlateDragPreview
+    feature[dest] = { x: px, y: py }
+  }
 
   // Feature plates below/above studio share a vertical gap where studio’s wide
   // ellipse wins even while the viewport centre is over the neighbour’s title.
@@ -360,7 +391,12 @@ export function resolveCanvasPlateAt(
 
   const candidates: CanvasPlateHit[] = []
 
-  const studioDepth = studioPlateViewportZoneDepth(x, y, studio.x, studio.y)
+  const studioDepth = studioPlateViewportZoneDepth(
+    x,
+    y,
+    studioPos.x,
+    studioPos.y,
+  )
   if (studioDepth <= CANVAS_PLATE_VIEWPORT_NEAR_DEPTH) {
     candidates.push({ destination: 'studio', depth: studioDepth })
   }

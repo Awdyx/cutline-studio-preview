@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { viewportCenterFullCanvas } from '../canvasItems/viewportCenter'
+import { isCameraFlyActive } from '../panMotionStore'
 import { useAppDestinationStore } from '../navigation/appDestinationStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { resolveCanvasPlateAt } from './canvasPlate'
@@ -11,10 +12,12 @@ export function syncCanvasPlateViewportZone(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
   viewportRef: RefObject<HTMLElement | null>,
 ): void {
-  const { setNearStudioViewport } = useCanvasStudioViewportZoneStore.getState()
+  const { setViewportZone } = useCanvasStudioViewportZoneStore.getState()
+
+  if (isCameraFlyActive()) return
 
   if (useCanvasWorkspaceStore.getState().isInsideSpace()) {
-    setNearStudioViewport(true)
+    setViewportZone(true, 'studio')
     return
   }
 
@@ -22,8 +25,7 @@ export function syncCanvasPlateViewportZone(
   if (!center) return
 
   const hit = resolveCanvasPlateAt(center.x, center.y)
-  const near = hit != null
-  setNearStudioViewport(near)
+  setViewportZone(hit != null, hit?.destination ?? null)
 
   if (hit) {
     const current = useAppDestinationStore.getState().destination

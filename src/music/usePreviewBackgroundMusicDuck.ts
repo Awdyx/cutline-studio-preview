@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { restoreBackgroundMusicAfterPreview } from './previewAudioEffects'
+import { restoreBackgroundMusicAfterPreview, isProfilePreviewOutroActive } from './previewAudioEffects'
 
 export function usePreviewBackgroundMusicDuck(): {
   onPreviewStarted: () => void
@@ -9,7 +9,10 @@ export function usePreviewBackgroundMusicDuck(): {
 
   useEffect(() => {
     return () => {
-      if (duckingRef.current) restoreBackgroundMusicAfterPreview()
+      if (!duckingRef.current) return
+      if (isProfilePreviewOutroActive()) return
+      restoreBackgroundMusicAfterPreview()
+      duckingRef.current = false
     }
   }, [])
 

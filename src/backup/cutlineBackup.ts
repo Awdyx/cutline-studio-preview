@@ -10,12 +10,15 @@ import {
   saveProfileAvatar,
   saveProfileBanner,
 } from '../profile/profileAvatarPersistence'
-import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import {
+  disableWorkspacePersist,
+  useCanvasWorkspaceStore,
+} from '../spaces/canvasWorkspaceStore'
 
 export const CUTLINE_BACKUP_FORMAT_VERSION = 2
 
 /** Keys that are per-device / ephemeral — never export or restore. */
-const EPHEMERAL_STORAGE_SUFFIXES = ['cutline-klipy-customer-id']
+const EPHEMERAL_STORAGE_SUFFIXES = ['cutline-klipy-customer-id', 'cutline-app-access-v1']
 
 export type SerializedBlob = {
   mimeType: string
@@ -142,13 +145,15 @@ export function flushAllPersistedState(): void {
   }
 }
 
-/** Write backup payload into localStorage + IndexedDB (no reload). */
+/** Write backup payload into localStorage + IndexedDB (no reload).
+ *  Ephemeral keys (app-access, klipy id) are left untouched so importing a
+ *  backup or applying the bundled default seed never re-locks the device. */
 export async function applyCutlineBackupData(
   backup: CutlineBackupFile,
 ): Promise<void> {
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const key = localStorage.key(i)
-    if (key && isCutlineStorageKey(key)) {
+    if (key && isCutlineStorageKey(key) && !isEphemeralStorageKey(key)) {
       localStorage.removeItem(key)
     }
   }
@@ -228,6 +233,48 @@ export function hasExistingCutlineData(): boolean {
     return true
   }
   return false
+}
+
+/** Wipe all Cutline data from localStorage + IndexedDB, then reload so the
+ *  bundled default seed is re-applied for a clean "reset to defaults".
+ *  Ephemeral keys (app-access, klipy id) are preserved so the user
+ *  is not locked out after the reset.
+ *
+ *  Persistence is disabled *before* clearing: useCanvasCameraPersist flushes
+ *  workspace state to localStorage on beforeunload/pagehide/visibilitychange,
+ *  and a debounced save may still be pending. Either would re-write the
+ *  workspace key during the reload, which makes the next boot think data still
+ *  exists and skip the default seed (the old canvas reappears). Turning
+ *  persistence off neutralises all of those writers regardless of event
+ *  ordering. */
+export async function resetCutlineData(): Promise<void> {
+  disableWorkspacePersist()
+
+  try {
+    const allKeys = await keys(mediaBlobStore)
+    for (const key of allKeys) {
+      if (typeof key === 'string') await del(key, mediaBlobStore)
+    }
+  } catch {
+    // IndexedDB unavailable — continue with reload.
+  }
+  try {
+    await saveProfileAvatar(null)
+    await saveProfileBanner(null)
+  } catch {
+    // ignore
+  }
+
+  // Clear localStorage last (synchronously, right before reload) so anything
+  // written during the awaits above is also removed and the page boots clean.
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i)
+    if (key && isCutlineStorageKey(key) && !isEphemeralStorageKey(key)) {
+      localStorage.removeItem(key)
+    }
+  }
+
+  window.location.reload()
 }
 
 /** Whether IndexedDB already holds canvas media or profile images for this scope. */

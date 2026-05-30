@@ -33,6 +33,7 @@ import ProfileIdentityTags from './ProfileIdentityTags'
 import ProfileSocialPills from './ProfileSocialPills'
 import UserAvatar from './UserAvatar'
 import ResolvedProfilePinnedTrack from '../music/ResolvedProfilePinnedTrack'
+import { stopActiveProfilePreviewPlayback } from '../music/previewAudioEffects'
 
 const CARD_WIDTH = 300
 const PANEL_GAP = 12
@@ -600,6 +601,7 @@ export function NotificationProfilePreviewScope({
 
   const closeProfile = useCallback((opts?: ChromeMenuSoundOpts) => {
     if (!openRef.current) return
+    void stopActiveProfilePreviewPlayback()
     if (!opts?.silent) playSound('profileClose', { layer: true })
     setOpenProfile(null)
   }, [])
@@ -740,6 +742,7 @@ export function NotificationActorProfileProvider({
 
   const closeProfile = useCallback((opts?: ChromeMenuSoundOpts) => {
     if (!openRef.current) return
+    void stopActiveProfilePreviewPlayback()
     if (!opts?.silent) playSound('profileClose', { layer: true })
     setOpen(false)
   }, [])

@@ -7,6 +7,7 @@ import {
 } from './canvasBarrelPostProcess'
 import { useCanvasFisheyeStore } from './canvasFisheyeStore'
 import { useCanvasMinimapStore } from './canvasMinimapStore'
+import { useAppDestinationFocusStore } from '../navigation/appDestinationFocusStore'
 
 /** Expand the map overlay while fisheye is already active (collapsed minimap click). */
 export function expandCanvasMinimap(): void {
@@ -74,6 +75,7 @@ export function dismissMinimapMode(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
 ): void {
   closeCanvasMinimap()
+  useAppDestinationFocusStore.getState().setPanLocked(false)
   if (useCanvasFisheyeStore.getState().engaged) {
     runCanvasFisheyeExit(transformRef.current, null)
   }

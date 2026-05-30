@@ -18,6 +18,7 @@ import {
   settleCanvasBounds,
 } from './canvasCamera'
 import { useCanvasFisheyeStore } from './canvasFisheyeStore'
+import { useAppDestinationFocusStore } from '../navigation/appDestinationFocusStore'
 
 export const CANVAS_BARREL_HOST_ATTR = 'data-canvas-barrel-host'
 export const CANVAS_BARREL_ACTIVE_ATTR = 'data-canvas-barrel-active'
@@ -41,16 +42,28 @@ function host(): Element | null {
   return document.querySelector(`[${CANVAS_BARREL_HOST_ATTR}]`)
 }
 
+function displacementNode(): SVGFEDisplacementMapElement | null {
+  const byId = document.getElementById(DISPLACEMENT_NODE_ID)
+  if (byId instanceof SVGFEDisplacementMapElement) return byId
+  return document.querySelector(`#${DISPLACEMENT_NODE_ID}`)
+}
+
 function applyPx(px: number): void {
-  const node = document.getElementById(DISPLACEMENT_NODE_ID)
+  const node = displacementNode()
   const h = host()
   if (!node || !h) return
+  const active = px > 0.05
   node.setAttribute('scale', px.toFixed(2))
-  if (px > 0.05) h.setAttribute(CANVAS_BARREL_ACTIVE_ATTR, '')
+  if (active) h.setAttribute(CANVAS_BARREL_ACTIVE_ATTR, '')
   else h.removeAttribute(CANVAS_BARREL_ACTIVE_ATTR)
 }
 
 let barrelWarmed = false
+
+/** StrictMode remounts leave a stale warm flag — reset on filter layer teardown. */
+export function resetCanvasBarrelWarmState(): void {
+  barrelWarmed = false
+}
 
 /**
  * Pre-build the barrel filter once after load. The first time `filter: url(#…)`
@@ -62,7 +75,7 @@ let barrelWarmed = false
  */
 export function warmCanvasBarrelFilter(): void {
   if (barrelWarmed) return
-  const node = document.getElementById(DISPLACEMENT_NODE_ID)
+  const node = displacementNode()
   const h = host()
   if (!node || !h) return
   barrelWarmed = true
@@ -142,6 +155,26 @@ export function ensureNotInFisheyeOverview(
   settleCanvasBounds(ref)
 }
 
+/** Immediately drop barrel warp and fisheye overview state (no exit animation). */
+export function forceClearCanvasBarrelWarp(): void {
+  if (enterRaf) {
+    cancelAnimationFrame(enterRaf)
+    enterRaf = 0
+  }
+  if (exitRaf) {
+    cancelAnimationFrame(exitRaf)
+    exitRaf = 0
+  }
+  if (tweenRaf) {
+    cancelAnimationFrame(tweenRaf)
+    tweenRaf = 0
+  }
+  currentPx = 0
+  targetPx = 0
+  applyPx(0)
+  useCanvasFisheyeStore.getState().setEngaged(false, { silent: true })
+}
+
 /** Sync engagement + filter to the live zoom; binary at the engage threshold. */
 export function updateCanvasBarrelAfterCamera(
   ref: ReactZoomPanPinchContentRef | null,
@@ -151,6 +184,13 @@ export function updateCanvasBarrelAfterCamera(
   if (performance.now() < exitLockUntil) return
   const scale = ref.state?.scale
   if (!Number.isFinite(scale)) return
+
+  const focus = useAppDestinationFocusStore.getState()
+  if (focus.panLocked || focus.dismissing) {
+    useCanvasFisheyeStore.getState().setEngaged(false, { silent: options?.silent })
+    tweenTo(0)
+    return
+  }
 
   const { width, height } = wrapperSize(ref)
   const engaged = isBarrelEngaged(scale, getCanvasMinScale(width, height))
@@ -172,6 +212,7 @@ export function runCanvasFisheyeExit(
   if (!wrapper || !Number.isFinite(scale)) return
 
   exitLockUntil = performance.now() + EXIT_MS + 140
+  useAppDestinationFocusStore.getState().setPanLocked(false)
   useCanvasFisheyeStore.getState().setEngaged(false)
   if (tweenRaf) {
     cancelAnimationFrame(tweenRaf)
@@ -303,6 +344,7 @@ export function runCanvasFisheyeExitToCamera(
   if (!wrapper || !Number.isFinite(scale)) return
 
   exitLockUntil = performance.now() + EXIT_MS + 140
+  useAppDestinationFocusStore.getState().setPanLocked(false)
   useCanvasFisheyeStore.getState().setEngaged(false, { silent: true })
   if (tweenRaf) {
     cancelAnimationFrame(tweenRaf)

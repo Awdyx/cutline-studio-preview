@@ -4,9 +4,11 @@ import { motion } from 'framer-motion'
 import { font } from '../styles/tokens'
 
 const ACCESS_PASSWORD = 'asianavoidants4life'
+// Permanent unlock: persists past reloads on this device (see appAccessPersistence).
+const PERSISTENT_ACCESS_PASSWORD = 'asian3life'
 
 type Props = {
-  onUnlock: () => void
+  onUnlock: (persist: boolean) => void
 }
 
 export default function AppAccessGate({ onUnlock }: Props) {
@@ -15,8 +17,12 @@ export default function AppAccessGate({ onUnlock }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const submit = useCallback(() => {
+    if (value === PERSISTENT_ACCESS_PASSWORD) {
+      onUnlock(true)
+      return
+    }
     if (value === ACCESS_PASSWORD) {
-      onUnlock()
+      onUnlock(false)
       return
     }
     setWrong(true)

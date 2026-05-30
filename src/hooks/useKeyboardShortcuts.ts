@@ -15,6 +15,8 @@ import { runCanvasFisheyeExit } from '../canvas/canvasBarrelPostProcess'
 import { dismissMinimapMode, toggleCanvasMinimap } from '../canvas/canvasMinimapOpen'
 import { useCanvasFisheyeStore } from '../canvas/canvasFisheyeStore'
 import { useCanvasMinimapStore } from '../canvas/canvasMinimapStore'
+import { dismissAppDestinationFocus } from '../navigation/appDestinationFocus'
+import { useAppDestinationFocusStore } from '../navigation/appDestinationFocusStore'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { SHORTCUTS_BY_ID } from '../shortcuts/shortcutDefs'
@@ -136,6 +138,11 @@ function handleEscape(
 
   if (useCanvasMinimapStore.getState().expandedOpen) {
     dismissMinimapMode(transformRef)
+    return true
+  }
+
+  if (useAppDestinationFocusStore.getState().panLocked) {
+    dismissAppDestinationFocus(transformRef)
     return true
   }
 

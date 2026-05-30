@@ -3,7 +3,7 @@ import {
   CANVAS_MINIMAP_PLATE_TITLE_LIFT_PX,
   canvasRectToRegionPercent,
 } from './canvasMinimapGeometry'
-import { FEATURE_PLATE_HEIGHT, FEATURE_PLATE_WIDTH } from '../drawing/canvasDimensions'
+import { getFeaturePlateDimensions } from './featurePlateViewportStore'
 import type { FeaturePlateDestination } from './canvasPlate'
 import { syncFeaturePlateLayoutVars } from './canvasPlate'
 import {
@@ -62,12 +62,13 @@ function syncMinimapPlateLayout(
   const wrap = minimapPlateWrapEls.get(dest)
   if (!wrap) return
 
+  const { width, height } = getFeaturePlateDimensions()
   const pct = canvasRectToRegionPercent(
     {
       x,
       y,
-      width: FEATURE_PLATE_WIDTH,
-      height: FEATURE_PLATE_HEIGHT,
+      width,
+      height,
     },
     region,
   )

@@ -1,7 +1,10 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { CANVAS_BARREL_FILTER_ID } from './canvasBarrelStrength'
 import { buildBarrelDisplacementMapDataUrl } from './canvasBarrelMap'
-import { warmCanvasBarrelFilter } from './canvasBarrelPostProcess'
+import {
+  resetCanvasBarrelWarmState,
+  warmCanvasBarrelFilter,
+} from './canvasBarrelPostProcess'
 
 /**
  * Defines the screen-space barrel filter (a single feDisplacementMap fed by a
@@ -9,7 +12,12 @@ import { warmCanvasBarrelFilter } from './canvasBarrelPostProcess'
  * post-process is active, so it costs nothing when zoomed in.
  */
 export default function CanvasBarrelLayer() {
-  const mapUrl = useMemo(() => buildBarrelDisplacementMapDataUrl(), [])
+  const [mapUrl, setMapUrl] = useState('')
+
+  useEffect(() => {
+    const dataUrl = buildBarrelDisplacementMapDataUrl()
+    if (dataUrl) setMapUrl(dataUrl)
+  }, [])
 
   // Decode the displacement map and pre-build the filter once so the first
   // fisheye engage doesn't flash black edges before it has rasterised.
@@ -31,11 +39,25 @@ export default function CanvasBarrelLayer() {
     return () => {
       cancelled = true
       window.clearTimeout(fallback)
+      resetCanvasBarrelWarmState()
     }
   }, [mapUrl])
 
+  if (!mapUrl) return null
+
   return (
-    <svg aria-hidden width="0" height="0" style={{ position: 'absolute' }}>
+    <svg
+      aria-hidden
+      xmlns="http://www.w3.org/2000/svg"
+      xmlnsXlink="http://www.w3.org/1999/xlink"
+      style={{
+        position: 'absolute',
+        width: 0,
+        height: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+      }}
+    >
       <defs>
         <filter
           id={CANVAS_BARREL_FILTER_ID}
@@ -47,6 +69,7 @@ export default function CanvasBarrelLayer() {
         >
           <feImage
             href={mapUrl}
+            xlinkHref={mapUrl}
             preserveAspectRatio="none"
             result="barrelMap"
           />

@@ -1,7 +1,4 @@
-import {
-  FEATURE_PLATE_HEIGHT,
-  FEATURE_PLATE_WIDTH,
-} from '../drawing/canvasDimensions'
+import { getFeaturePlateDimensions } from './featurePlateViewportStore'
 
 export type ComingSoonParticle = {
   x: number
@@ -37,8 +34,7 @@ function labelForVariant(variant: number): string {
 }
 
 export function createComingSoonParticles(count = 28): ComingSoonParticle[] {
-  const w = FEATURE_PLATE_WIDTH
-  const h = FEATURE_PLATE_HEIGHT
+  const { width: w, height: h } = getFeaturePlateDimensions()
   const particles: ComingSoonParticle[] = []
 
   for (let i = 0; i < count; i++) {
@@ -65,8 +61,7 @@ export function stepComingSoonParticles(
   dragDx: number,
   dragDy: number,
 ): void {
-  const w = FEATURE_PLATE_WIDTH
-  const h = FEATURE_PLATE_HEIGHT
+  const { width: w, height: h } = getFeaturePlateDimensions()
   const kickX = dragDx * DRAG_KICK
   const kickY = dragDy * DRAG_KICK
 

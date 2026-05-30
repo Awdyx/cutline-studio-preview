@@ -15,6 +15,10 @@ import {
   nextCanvasStackZIndex,
 } from '../canvasItems/canvasZOrder'
 import { notifyWorkspacePersist, useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import {
+  decimateStrokePoints,
+  shouldAppendStrokePoint,
+} from './strokePointDecimation'
 import { strokeToSvgPath, ensureMinimumStrokePoints } from './strokePath'
 import { generateStrokeId } from './strokeId'
 import type { DrawTool, Stroke, StrokePoint } from './types'
@@ -82,6 +86,8 @@ export const useStrokesStore = create<StrokesState>((set, get) => ({
   addPoint: (point) => {
     const { activeStroke } = get()
     if (!activeStroke) return
+    const last = activeStroke.points[activeStroke.points.length - 1]
+    if (!shouldAppendStrokePoint(last, point)) return
     set({
       activeStroke: {
         ...activeStroke,
@@ -114,12 +120,13 @@ export const useStrokesStore = create<StrokesState>((set, get) => ({
       return
     }
 
+    points = decimateStrokePoints(points)
     points = ensureMinimumStrokePoints(points, 3)
 
     pushUndoSnapshot()
 
     const trimmed: Stroke = { ...active, points }
-    const path = strokeToSvgPath(trimmed, false)
+    const path = strokeToSvgPath(trimmed, true)
     const completed = { ...trimmed, path }
     const isLocked = effectiveCanvasLocked(
       useCanvasLockStore.getState().isLocked,

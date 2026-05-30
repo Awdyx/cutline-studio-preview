@@ -5,6 +5,7 @@ import {
   CANVAS_WHEEL_ZOOM_STEP,
 } from './canvasCamera'
 import { shouldBlockCanvasZoomForStudyHubMenuFocus } from '../canvasItems/studyHubMenuFocus'
+import { shouldBlockCanvasZoomForAppDestinationFocus } from '../navigation/appDestinationFocus'
 import { CANVAS_PAN_SESSION_GAP_MS } from './studyHubPanScroll'
 function isModifierWheelZoom(event: WheelEvent): boolean {
   return event.ctrlKey || event.metaKey
@@ -64,6 +65,11 @@ export function useCanvasCursorWheelZoom({
       event.preventDefault()
 
       if (shouldBlockCanvasZoomForStudyHubMenuFocus(event.target)) {
+        event.stopPropagation()
+        return
+      }
+
+      if (shouldBlockCanvasZoomForAppDestinationFocus(event.target)) {
         event.stopPropagation()
         return
       }

@@ -20,6 +20,18 @@ export const canvasItemSpaceTransferExitTransition = {
   ease: [0.4, 0, 0.2, 1] as const,
 }
 
+/** Viewport cull remount — slow opacity (+ subtle scale) so heavy items do not snap in. */
+export const canvasItemCullEnterInitial = {
+  opacity: 0,
+  scale: 0.982,
+} as const
+
+export const canvasItemCullEnterTransition = {
+  opacity: { duration: 0.52, ease: [0.16, 1, 0.3, 1] as const },
+  scale: { duration: 0.52, ease: [0.16, 1, 0.3, 1] as const },
+  boxShadow: { duration: 0.52, ease: [0.16, 1, 0.3, 1] as const },
+}
+
 /** Drag/resize lift on canvas item shells (and matching sticky overflow previews). */
 export const canvasItemLiftSpring = {
   type: 'spring' as const,

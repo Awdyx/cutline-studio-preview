@@ -6,16 +6,22 @@ import { syncTouchFirstAttribute } from './platform/compositor'
 import { applyDefaultSeedForFirstVisit } from './defaults/bootstrapDefaultSeed'
 import App from './App.tsx'
 import AppAccessGate from './components/AppAccessGate.tsx'
+import { loadAppAccessUnlocked, saveAppAccessUnlocked } from './components/appAccessPersistence'
 
 syncLayoutProfileAttribute()
 syncTouchFirstAttribute()
 
 function Root() {
-  const [unlocked, setUnlocked] = useState(false)
+  const [unlocked, setUnlocked] = useState(loadAppAccessUnlocked)
+
+  const handleUnlock = (persist: boolean) => {
+    if (persist) saveAppAccessUnlocked()
+    setUnlocked(true)
+  }
 
   return (
     <>
-      {!unlocked && <AppAccessGate onUnlock={() => setUnlocked(true)} />}
+      {!unlocked && <AppAccessGate onUnlock={handleUnlock} />}
       {unlocked && (
         <StrictMode>
           <App />

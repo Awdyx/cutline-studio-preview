@@ -79,6 +79,21 @@ function setDragActiveClass(active: boolean, dest: FeaturePlateDestination | nul
   useStudioCentreDragStore.getState().setFeaturePlateDragging(active && dest ? dest : null)
 }
 
+function clearFeaturePlateDragChrome(): void {
+  setDragActiveClass(false, null)
+}
+
+function finishFeaturePlateDragDim(): void {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    clearFeaturePlateDragChrome()
+    return
+  }
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(clearFeaturePlateDragChrome)
+  })
+}
+
 function removeDocumentListeners() {
   detachListeners?.()
   detachListeners = null
@@ -134,6 +149,7 @@ function finishSession() {
   const dest = ended?.dest
   useStudioCentreDragStore.getState().setPanSuppressed(false)
   useStudioCentreDragStore.getState().setMinimapDragging(false)
+  useStudioCentreDragStore.getState().setFeaturePlateDragPreview(null)
   if (ended) releaseBodyPointerCapture(ended.pointerId)
 
   if (!ended || ended.phase !== 'dragging' || !dest) {
@@ -160,6 +176,7 @@ function finishSession() {
         ended.lastX,
         ended.lastY,
       )
+      finishFeaturePlateDragDim()
       springBackFeaturePlateDragEdge(dest)
       return
     }
@@ -168,6 +185,7 @@ function finishSession() {
     useFeaturePlatePositionStore
       .getState()
       .setPosition(dest, ended.lastX, ended.lastY, { persist: true })
+    finishFeaturePlateDragDim()
     springBackFeaturePlateDragEdge(dest)
     return
   }
@@ -205,6 +223,11 @@ function applyDragPosition(clientX: number, clientY: number) {
   session.lastX = clamped.x
   session.lastY = clamped.y
   session.moved = true
+  useStudioCentreDragStore.getState().setFeaturePlateDragPreview({
+    dest: session.dest,
+    x: clamped.x,
+    y: clamped.y,
+  })
 }
 
 function scheduleDragMove(clientX: number, clientY: number) {
@@ -415,6 +438,11 @@ export function onFeaturePlateMinimapDragPointerDown(
     session.lastX = clamped.x
     session.lastY = clamped.y
     session.moved = true
+    useStudioCentreDragStore.getState().setFeaturePlateDragPreview({
+      dest,
+      x: clamped.x,
+      y: clamped.y,
+    })
     updateStudioCentreDragSound(minimapLastX, minimapLastY)
   }
 

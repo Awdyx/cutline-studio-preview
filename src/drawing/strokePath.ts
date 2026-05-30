@@ -1,4 +1,5 @@
 import { getStroke } from 'perfect-freehand'
+import { decimateStrokePoints } from './strokePointDecimation'
 import { getFlatSvgPathFromStroke } from './pathUtils'
 import type { Stroke, StrokePoint } from './types'
 
@@ -15,17 +16,18 @@ export function ensureMinimumStrokePoints(
 }
 
 export function strokeToSvgPath(stroke: Stroke, isComplete: boolean): string {
-  if (stroke.points.length === 0) return ''
+  const sampled = decimateStrokePoints(stroke.points)
+  if (sampled.length === 0) return ''
 
-  const points = stroke.points.map(
+  const points = sampled.map(
     (p) => [p.x, p.y, p.pressure] as [number, number, number],
   )
 
   const outline = getStroke(points, {
     size: stroke.size,
     thinning: 0.5,
-    smoothing: 0.5,
-    streamline: 0.5,
+    smoothing: 0.56,
+    streamline: 0.58,
     simulatePressure: false,
     last: isComplete,
     start: {
@@ -40,7 +42,7 @@ export function strokeToSvgPath(stroke: Stroke, isComplete: boolean): string {
 
   if (outline.length === 0) {
     console.log('[DRAW] getStroke returned empty outline', {
-      pointCount: stroke.points.length,
+      pointCount: sampled.length,
       last: isComplete,
     })
     return ''

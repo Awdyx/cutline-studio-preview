@@ -9,10 +9,45 @@ export const PREVIEW_PLAYBACK_VOLUME = 0.12
 /** Fade preview level and ambient duck in / out together. */
 export const PREVIEW_TRACK_FADE_SEC = 4
 
+/** Snappy fade when the user pauses — shorter than the natural end cutoff. */
+export const PREVIEW_MANUAL_STOP_FADE_SEC = 0.1
+
 const cutoffMonitorByElement = new WeakMap<
   HTMLAudioElement,
   { cleanup: () => void }
 >()
+
+type ActiveProfilePreview = {
+  el: HTMLAudioElement
+  onStopped: () => void
+  startTime: number
+  endTime: number
+}
+
+let activeProfilePreview: ActiveProfilePreview | null = null
+let outroRetainedPreview: HTMLAudioElement | null = null
+let dismissOutroPromise: Promise<void> | null = null
+
+/** Keep preview audio alive after the profile UI unmounts so outro fades can finish. */
+function retainPreviewElementForOutro(el: HTMLAudioElement): void {
+  if (outroRetainedPreview === el) return
+  outroRetainedPreview = el
+  if (el.parentElement !== document.body) {
+    document.body.appendChild(el)
+  }
+  Object.assign(el.style, {
+    position: 'fixed',
+    width: '0',
+    height: '0',
+    opacity: '0',
+    pointerEvents: 'none',
+  })
+}
+
+function releasePreviewElementAfterOutro(el: HTMLAudioElement): void {
+  if (outroRetainedPreview === el) outroRetainedPreview = null
+  el.remove()
+}
 
 /** Subtle muffled-room color for profile / picker song previews. */
 const PREVIEW_ACOUSTICS = {
@@ -127,12 +162,18 @@ function connectPreviewChain(el: HTMLAudioElement): PreviewWireState | null {
   }
 }
 
+function easeOutCubic(t: number): number {
+  const x = Math.min(1, Math.max(0, t))
+  return 1 - (1 - x) ** 3
+}
+
 function animateScalar(
   durationSec: number,
   from: number,
   to: number,
   apply: (value: number) => void,
   isCancelled: () => boolean,
+  mapProgress: (p: number) => number = (p) => p,
 ): Promise<void> {
   const durationMs = Math.max(0, durationSec) * 1000
   if (durationMs <= 0) {
@@ -148,7 +189,7 @@ function animateScalar(
         return
       }
       const p = Math.min(1, (now - t0) / durationMs)
-      apply(from + (to - from) * p)
+      apply(from + (to - from) * mapProgress(p))
       if (p < 1) requestAnimationFrame(step)
       else resolve()
     }
@@ -163,6 +204,7 @@ async function fadePreviewLevel(
 ): Promise<void> {
   const state = previewWireByElement.get(el)
   const generation = state ? ++state.fadeGeneration : 0
+  const mapProgress = to === 0 ? easeOutCubic : undefined
 
   await resumePreviewAudioContext()
 
@@ -177,6 +219,7 @@ async function fadePreviewLevel(
         state.master.gain.setValueAtTime(Math.max(0, value), state.ctx.currentTime)
       },
       () => generation !== state.fadeGeneration,
+      mapProgress,
     )
     return
   }
@@ -190,6 +233,7 @@ async function fadePreviewLevel(
       el.volume = Math.max(0, Math.min(1, value))
     },
     () => false,
+    mapProgress,
   )
 }
 
@@ -203,6 +247,17 @@ function resetPreviewLevel(el: HTMLAudioElement): void {
 export function getPreviewCutoffFadeSec(startTime: number, endTime: number): number {
   const clipSec = Math.max(0.1, endTime - startTime)
   return Math.min(PREVIEW_TRACK_FADE_SEC, clipSec)
+}
+
+/** Outro fade duration from the current playhead — same curve as natural end cutoff. */
+export function getPreviewOutroFadeSec(
+  startTime: number,
+  endTime: number,
+  currentTime: number,
+): number {
+  const fadeSec = getPreviewCutoffFadeSec(startTime, endTime)
+  const remaining = Math.max(0, endTime - currentTime)
+  return Math.max(0.15, Math.min(fadeSec, remaining + 0.05))
 }
 
 export function unbindPreviewEndCutoff(el: HTMLAudioElement): void {
@@ -234,8 +289,11 @@ export function bindPreviewEndCutoff(
 
     fading = true
     void (async () => {
-      const remaining = Math.max(0, options.endTime - el.currentTime)
-      const fadeDuration = Math.max(0.15, Math.min(fadeSec, remaining + 0.05))
+      const fadeDuration = getPreviewOutroFadeSec(
+        options.startTime,
+        options.endTime,
+        el.currentTime,
+      )
 
       await fadePreviewLevel(el, 0, fadeDuration)
       if (cancelled) return
@@ -358,10 +416,67 @@ export async function startPreviewPlayback(
   void fadePreviewLevel(el, PREVIEW_PLAYBACK_VOLUME, PREVIEW_TRACK_FADE_SEC)
 }
 
-/** Fade the preview out over {@link PREVIEW_TRACK_FADE_SEC}, then pause. */
-export async function stopPreviewPlayback(el: HTMLAudioElement): Promise<void> {
+/** Fade the preview out, then pause. Uses a short fade for manual stop. */
+export async function stopPreviewPlayback(
+  el: HTMLAudioElement,
+  fadeSec = PREVIEW_MANUAL_STOP_FADE_SEC,
+): Promise<void> {
   unbindPreviewEndCutoff(el)
-  await fadePreviewLevel(el, 0, PREVIEW_TRACK_FADE_SEC)
+  await fadePreviewLevel(el, 0, fadeSec)
   el.pause()
   resetPreviewLevel(el)
+}
+
+export function bindActiveProfilePreview(
+  el: HTMLAudioElement,
+  onStopped: () => void,
+  startTime: number,
+  endTime: number,
+): void {
+  if (activeProfilePreview && activeProfilePreview.el !== el) {
+    void stopActiveProfilePreviewPlayback()
+  }
+  activeProfilePreview = { el, onStopped, startTime, endTime }
+}
+
+export function unbindActiveProfilePreview(el: HTMLAudioElement): void {
+  if (activeProfilePreview?.el === el) activeProfilePreview = null
+}
+
+export function isProfilePreviewOutroActive(): boolean {
+  return dismissOutroPromise !== null || outroRetainedPreview !== null
+}
+
+/** Long outro fade when the profile menu dismisses — matches natural end cutoff. */
+export async function stopActiveProfilePreviewPlayback(): Promise<void> {
+  if (dismissOutroPromise) {
+    await dismissOutroPromise
+    return
+  }
+
+  const active = activeProfilePreview
+  if (!active) return
+
+  activeProfilePreview = null
+
+  dismissOutroPromise = (async () => {
+    const { el, onStopped, startTime, endTime } = active
+
+    if (!el.paused) {
+      retainPreviewElementForOutro(el)
+      const fadeSec = getPreviewOutroFadeSec(startTime, endTime, el.currentTime)
+      await stopPreviewPlayback(el, fadeSec)
+      releasePreviewElementAfterOutro(el)
+    } else {
+      unbindPreviewEndCutoff(el)
+    }
+
+    onStopped()
+  })()
+
+  try {
+    await dismissOutroPromise
+  } finally {
+    dismissOutroPromise = null
+  }
 }

@@ -1,6 +1,7 @@
 import type { Stroke } from './types'
 import { generateStrokeId } from './strokeId'
 import { strokeToSvgPath } from './strokePath'
+import { decimateStrokePoints } from './strokePointDecimation'
 import {
   CONTRAST_INK,
   DEFAULT_HIGHLIGHTER_COLOR,
@@ -36,9 +37,10 @@ function normalizeStroke(raw: unknown): Stroke | null {
   if (points.length < 3) return null
 
   const tool: DrawTool = o.tool === 'highlighter' ? 'highlighter' : 'pen'
+  const decimated = decimateStrokePoints(points)
   const stroke: Stroke = {
     id: typeof o.id === 'string' ? o.id : generateStrokeId(),
-    points,
+    points: decimated,
     color:
       typeof o.color === 'string'
         ? tool === 'pen'
@@ -52,10 +54,7 @@ function normalizeStroke(raw: unknown): Stroke | null {
     ...(typeof o.zIndex === 'number' ? { zIndex: o.zIndex } : {}),
   }
 
-  stroke.path =
-    typeof o.path === 'string' && o.path.length > 0
-      ? o.path
-      : strokeToSvgPath(stroke, false)
+  stroke.path = strokeToSvgPath(stroke, true)
 
   return stroke
 }

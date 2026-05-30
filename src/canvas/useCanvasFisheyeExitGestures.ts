@@ -3,6 +3,7 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { CHROME_CONTEXT_MENU_ROOTS } from '../chrome/suppressChromeContextMenu'
 import { runCanvasFisheyeExit } from './canvasBarrelPostProcess'
 import { useCanvasFisheyeStore } from './canvasFisheyeStore'
+import { closeCanvasMinimap } from './canvasMinimapOpen'
 import { watchPendingTouchTap } from './pointerTapGesture'
 
 /** Interactive chrome — taps here should not leave fisheye overview. */
@@ -20,7 +21,6 @@ const FISHEYE_EXIT_CHROME_SELECTORS = [
   '.canvas-minimap-expanded-menu__frame',
   '.canvas-minimap-expanded-scrim',
   '.studio-centre-drag-handle-wrapper',
-  '.cutline-studio-centre-surface',
   '.canvas-plate-reposition-btn',
 ] as const
 
@@ -39,6 +39,7 @@ export function useCanvasFisheyeExitGestures(
 
   const exitFisheye = useCallback(
     (anchor: { x: number; y: number } | null) => {
+      closeCanvasMinimap()
       runCanvasFisheyeExit(transformRef.current, anchor)
     },
     [transformRef],

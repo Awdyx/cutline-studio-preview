@@ -35,8 +35,11 @@ import UiPinHost from '../uiCustomization/UiPinHost'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import { useLassoStore, type LassoTargetType } from '../drawing/useLassoStore'
 import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
+import { useAppDestinationFocusStore } from '../navigation/appDestinationFocusStore'
 import {
   bottomRightFabPenSlideTransition,
+  bottomRightFabPlusAnimate,
+  bottomRightFabPlusTransition,
   bottomRightFabRightCss,
   BOTTOM_RIGHT_FAB_SLOT_SHIFT_PX,
   usePenFabSlideStretch,
@@ -347,7 +350,11 @@ export default function PenFab() {
   const reduceMotion = useReducedMotion()
   const editingUi = useUiCustomizationStore((s) => s.editing)
   const nearStudioViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
+  const destinationFocusEngaged = useAppDestinationFocusStore(
+    (s) => s.panLocked || s.dismissing,
+  )
   const plusSlotOccupied = editingUi || nearStudioViewport
+  const fabRowChromeVisible = penFabActive && !destinationFocusEngaged
   const fabHoverLift = fabHoverScale && !editingUi
   const penSlideStretch = usePenFabSlideStretch(plusSlotOccupied, reduceMotion)
   const [colorPopover, setColorPopover] = useState<'pen' | 'highlighter' | null>(
@@ -460,7 +467,9 @@ export default function PenFab() {
     if (penFabActive) {
       setHostMounted(true)
       if (isPhone) {
-        const id = requestAnimationFrame(() => setHostVisible(true))
+        const id = requestAnimationFrame(() =>
+          setHostVisible(fabRowChromeVisible),
+        )
         return () => cancelAnimationFrame(id)
       }
       setHostVisible(true)
@@ -473,7 +482,12 @@ export default function PenFab() {
       PEN_FAB_HOST_TRANSITION_MS,
     )
     return () => window.clearTimeout(timer)
-  }, [penFabActive, isPhone])
+  }, [penFabActive, isPhone, fabRowChromeVisible])
+
+  useEffect(() => {
+    if (!destinationFocusEngaged) return
+    if (isOpen) closeMenu({ silent: true })
+  }, [destinationFocusEngaged, isOpen])
 
   useEffect(() => {
     return () => clearHoverTimers()
@@ -616,13 +630,33 @@ export default function PenFab() {
 
   if (!hostMounted) return null
 
+  const penSlideTransition = bottomRightFabPenSlideTransition(
+    plusSlotOccupied,
+    reduceMotion,
+  )
+  const fabVisibilityTransition = bottomRightFabPlusTransition(
+    fabRowChromeVisible,
+    reduceMotion,
+  )
+
   return (
     <motion.div
       ref={containerRef}
       data-pen-fab=""
       className={hostVisible ? 'pen-fab-host--visible' : ''}
-      animate={{ x: plusSlotOccupied ? -BOTTOM_RIGHT_FAB_SLOT_SHIFT_PX : 0 }}
-      transition={bottomRightFabPenSlideTransition(plusSlotOccupied, reduceMotion)}
+      animate={{
+        x: plusSlotOccupied ? -BOTTOM_RIGHT_FAB_SLOT_SHIFT_PX : 0,
+        ...bottomRightFabPlusAnimate(fabRowChromeVisible, reduceMotion),
+      }}
+      transition={{
+        ...(typeof penSlideTransition === 'object' && 'x' in penSlideTransition
+          ? { x: penSlideTransition.x }
+          : penSlideTransition),
+        opacity: fabVisibilityTransition.opacity,
+        scale: fabVisibilityTransition.scale,
+        filter: fabVisibilityTransition.filter,
+        y: fabVisibilityTransition.y,
+      }}
       style={{
         ...chromeBottomRightFixed,
         right: bottomRightFabRightCss(),
@@ -641,7 +675,7 @@ export default function PenFab() {
         onMouseLeave={handleHoverZoneLeave}
         style={{
           position: 'relative',
-          pointerEvents: 'auto',
+          pointerEvents: fabRowChromeVisible ? 'auto' : 'none',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-end',

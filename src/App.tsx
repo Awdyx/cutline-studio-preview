@@ -31,6 +31,7 @@ import TopBar from './components/TopBar'
 import NotificationsPanel from './components/NotificationsPanel'
 import NewsPanel from './components/NewsPanel'
 import ProfilePanel from './components/ProfilePanel'
+import { stopActiveProfilePreviewPlayback } from './music/previewAudioEffects'
 import PlusFab from './components/PlusFab'
 import PenFab from './components/PenFab'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -97,6 +98,10 @@ import { useCanvasZoomEdgeEase } from './canvas/useCanvasZoomEdgeEase'
 import { useCanvasPanBounce } from './canvas/useCanvasPanBounce'
 import { useCanvasCompositorWarmup } from './canvas/useCanvasCompositorWarmup'
 import CanvasSwapVeil from './canvas/CanvasSwapVeil'
+import ReloadSpaceIntro from './canvas/ReloadSpaceIntro'
+import { resetReloadIntroPanTracking, trackReloadIntroPan } from './canvas/reloadIntroPan'
+import { resolveReloadIntroCopy } from './canvas/reloadIntroCopy'
+import { useReloadIntroStore } from './canvas/reloadIntroStore'
 import CanvasPlateBoundsOverlay from './canvas/CanvasPlateBoundsOverlay'
 import { useAppDestinationActive } from './navigation/useAppDestinationActive'
 import StudioCentreTitle from './canvas/StudioCentreTitle'
@@ -123,6 +128,8 @@ import { useStudioCentreHoldDrag } from './canvas/useStudioCentreHoldDrag'
 import { useStudioCentreDragStore } from './canvas/studioCentreDragStore'
 import { registerStudioCentreDrawTarget } from './canvas/studioCentreVisualDrag'
 import { useCanvasMinimapStore } from './canvas/canvasMinimapStore'
+import { useAppDestinationFocusStore } from './navigation/appDestinationFocusStore'
+import { useFeaturePlateViewportSync } from './canvas/useFeaturePlateViewportSync'
 import { blurStrayTextFocus } from './platform/textFocus'
 import { idleAfterFirstPaint, isTouchFirstDevice } from './platform/compositor'
 import { useLayoutProfile } from './hooks/useLayoutProfile'
@@ -430,9 +437,15 @@ function App() {
   const fisheyeEngaged = useCanvasFisheyeStore((s) => s.engaged)
   useCanvasFisheyeExitGestures(transformRef)
   useCanvasFisheyeMinimapOpen()
+  useFeaturePlateViewportSync(viewportRef, transformRef)
   const studioCentreHoldDrag = useStudioCentreHoldDrag(transformRef)
   const studioCentrePanSuppressed = useStudioCentreDragStore((s) => s.panSuppressed)
   const expandedMinimapOpen = useCanvasMinimapStore((s) => s.expandedOpen)
+  const destinationFocusEngaged = useAppDestinationFocusStore(
+    (s) => s.panLocked || s.dismissing,
+  )
+  const canvasPanLocked =
+    expandedMinimapOpen || destinationFocusEngaged
   useCanvasMinimapMenuPointerGuard()
   // Lock canvas-item interaction (panning still works) while overview is engaged.
   // The transition SFX is owned by the fisheye store so programmatic camera moves
@@ -500,6 +513,7 @@ function App() {
     disabled: isPenDown || studyHubMenuFocusEngaged || lassoDragActive,
     excluded: trackpadPanExcluded,
     onPanFrame: (ref) => {
+      trackReloadIntroPan(ref)
       onPanning(ref)
       panBounce.onPanning(ref)
       scheduleCameraSync(ref)
@@ -516,8 +530,9 @@ function App() {
       isPenDown ||
       studyHubMenuFocusEngaged ||
       lassoDragActive ||
-      expandedMinimapOpen,
+      canvasPanLocked,
     onPanFrame: (ref) => {
+      trackReloadIntroPan(ref)
       onPanning(ref)
       panBounce.onPanning(ref)
       scheduleCameraSync(ref)
@@ -616,6 +631,7 @@ function App() {
   }
 
   const closePanel = useCallback((opts?: { silent?: boolean }) => {
+    void stopActiveProfilePreviewPlayback()
     if (opts?.silent) suppressPanelSoundRef.current = true
     useShortcutUiStore.getState().dismissPeerChromeOverlays(opts)
     setOpenPanel(null)
@@ -747,6 +763,12 @@ function App() {
   }, [openPanel, notifications])
 
   useEffect(() => {
+    if (!appHydrated) return
+    resetReloadIntroPanTracking()
+    useReloadIntroStore.getState().arm(resolveReloadIntroCopy())
+  }, [appHydrated])
+
+  useEffect(() => {
     blurStrayTextFocus()
     const t = window.setTimeout(blurStrayTextFocus, 0)
     return () => window.clearTimeout(t)
@@ -766,9 +788,12 @@ function App() {
       <div ref={viewportRef} className="cutline-canvas-viewport">
         <div
           ref={panBounce.bounceRef}
-          {...{ [CANVAS_BARREL_HOST_ATTR]: '' }}
           style={{ width: '100%', height: '100%', position: 'relative' }}
         >
+          <div
+            {...{ [CANVAS_BARREL_HOST_ATTR]: '' }}
+            style={{ width: '100%', height: '100%', position: 'relative' }}
+          >
           <TransformWrapper
             ref={transformRef}
             disabled={isPenDown}
@@ -780,6 +805,7 @@ function App() {
             centerZoomedOut={false}
             onInit={onTransformInit}
             onPanning={(ref) => {
+              trackReloadIntroPan(ref)
               onPanning(ref)
               panBounce.onPanning(ref)
               scheduleCameraSync(ref)
@@ -839,7 +865,7 @@ function App() {
                 isPenDown ||
                 studyHubMenuFocusEngaged ||
                 lassoDragActive ||
-                expandedMinimapOpen,
+                canvasPanLocked,
               excluded: trackpadPanExcluded,
             }}
             panning={{
@@ -849,11 +875,14 @@ function App() {
                 studyHubMenuFocusEngaged ||
                 lassoDragActive ||
                 studioCentrePanSuppressed ||
-                expandedMinimapOpen,
+                canvasPanLocked,
               excluded: panExcluded,
             }}
             pinch={{
-              disabled: isPenDown || studyHubMenuFocusActive,
+              disabled:
+                isPenDown ||
+                studyHubMenuFocusActive ||
+                destinationFocusEngaged,
               excluded: panExcluded,
             }}
             velocityAnimation={{
@@ -969,9 +998,11 @@ function App() {
               </div>
             </TransformComponent>
           </TransformWrapper>
+          </div>
         </div>
 
-        <ThemeChangePulse effectiveMode={effectiveMode} />
+      <ReloadSpaceIntro />
+      <ThemeChangePulse effectiveMode={effectiveMode} />
       </div>
 
       {canvasSwapBusy && (
@@ -1008,7 +1039,10 @@ function App() {
 
       <PenFab />
 
-      <PenToolPillMenu state={penMenu.state} />
+      <PenToolPillMenu
+        state={penMenu.state}
+        onCloseAnimationComplete={() => penMenu.bridgeRef.current?.finishCloseAnimation()}
+      />
       <LassoOverlay canvasRef={canvasRef} />
       <CanvasItemZOrderMenu />
       <TextFontSizeFloatingMenu />

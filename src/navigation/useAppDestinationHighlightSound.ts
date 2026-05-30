@@ -15,6 +15,7 @@ const PLATE_FOCUS_COOLDOWN_MS = 300
 export function useAppDestinationHighlightSound() {
   const destination = useAppDestinationStore((s) => s.destination)
   const nearPlateViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
+  const viewportPlate = useCanvasStudioViewportZoneStore((s) => s.viewportPlate)
   const editingUi = useUiCustomizationStore((s) => s.editing)
   const insideSpace = useCanvasWorkspaceStore((s) => s.activeCanvasId !== 'main')
   const prevLabelRef = useRef<BrandPillAreaLabel | null>(null)
@@ -43,5 +44,5 @@ export function useAppDestinationHighlightSound() {
     }
 
     prevLabelRef.current = label
-  }, [insideSpace, editingUi, nearPlateViewport, destination])
+  }, [insideSpace, editingUi, nearPlateViewport, destination, viewportPlate])
 }

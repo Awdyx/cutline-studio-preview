@@ -2,11 +2,10 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
-  FEATURE_PLATE_HEIGHT,
-  FEATURE_PLATE_WIDTH,
   STUDIO_VISUAL_HEIGHT,
   STUDIO_VISUAL_WIDTH,
 } from '../drawing/canvasDimensions'
+import { getFeaturePlateDimensions } from './featurePlateViewportStore'
 import { mainCanvasLogicalBleedOffset } from '../drawing/canvasCoords'
 import type { FeaturePlateDestination } from './canvasPlate'
 import { useFeaturePlatePositionStore } from './featurePlatePositionStore'
@@ -46,12 +45,8 @@ export function canvasMinimapFeaturePlateRect(
   dest: FeaturePlateDestination,
 ): CanvasMinimapRect {
   const { x, y } = useFeaturePlatePositionStore.getState().positions[dest]
-  return {
-    x,
-    y,
-    width: FEATURE_PLATE_WIDTH,
-    height: FEATURE_PLATE_HEIGHT,
-  }
+  const { width, height } = getFeaturePlateDimensions()
+  return { x, y, width, height }
 }
 
 export function canvasRectToMinimapPercent(
@@ -98,7 +93,7 @@ export function canvasMinimapExpandedMapRegion(): CanvasMinimapRect {
   return canvasMinimapMapRegion()
 }
 
-export const CANVAS_MINIMAP_EXPANDED_WIDTH_PX = 720
+export const CANVAS_MINIMAP_EXPANDED_WIDTH_PX = 600
 
 /** Title row above the expanded minimap studio plate — keep in sync with menu layout. */
 export const CANVAS_MINIMAP_PLATE_TITLE_LIFT_PX = 24

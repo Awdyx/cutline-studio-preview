@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { playSound } from '../sound/playSound'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { Download, Keyboard, Settings, ChevronRight, Sparkles, Upload } from 'lucide-react'
+import { Download, Keyboard, Settings, ChevronRight, Sparkles, Upload, RotateCcw } from 'lucide-react'
 import {
   downloadCutlineBackupFile,
   exportCutlineBackup,
   importCutlineBackup,
   parseCutlineBackupFile,
+  resetCutlineData,
 } from '../backup/cutlineBackup'
 import {
   showBackupExportDone,
@@ -27,7 +28,6 @@ import { SubmenuSoundScope } from './SubmenuSoundScope'
 import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
-
 interface CutlineMenuProps {
   isOpen: boolean
   onClose: (opts?: { silent?: boolean }) => void
@@ -156,6 +156,22 @@ export default function CutlineMenu({
     [onClose],
   )
 
+  const handleReset = useCallback(async () => {
+    if (backupBusy) return
+    closeAllSubmenus()
+    const confirmed = window.confirm(
+      'Reset to defaults? This will clear your entire canvas, settings, and all saved data. This cannot be undone.',
+    )
+    if (!confirmed) return
+    setBackupBusy(true)
+    try {
+      await resetCutlineData()
+    } catch (err) {
+      console.warn('[reset] failed', err)
+      setBackupBusy(false)
+    }
+  }, [backupBusy, closeAllSubmenus])
+
   return (
     <>
       <motion.div
@@ -210,6 +226,13 @@ export default function CutlineMenu({
           accept="application/json,.json"
           style={{ display: 'none' }}
           onChange={handleImportFileChange}
+        />
+        <MenuRow
+          icon={RotateCcw}
+          label="Reset to Defaults"
+          inset
+          disabled={backupBusy}
+          onClick={() => void handleReset()}
         />
         <MenuRow
           icon={Download}

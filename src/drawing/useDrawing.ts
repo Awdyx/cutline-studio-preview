@@ -4,6 +4,7 @@ import {
   canStartDrawingPointer,
   isFingerTouch,
   isPenDrawMode,
+  isPenInput,
   isPhoneFingerDrawMode,
   isSpaceDrawHeld,
   isStylusTouch,
@@ -26,6 +27,8 @@ import { isUiDrawCanvasTarget } from './penToolMenuLayout'
 const captureOpts = { capture: true } as const
 const capturePassiveOpts = { capture: true, passive: false } as const
 const ERASE_THROTTLE_MS = 16
+/** Stylus moved this far — treat as drawing and cancel a pending tool-menu hold. */
+const STYLUS_DRAW_CANCEL_PX = 4
 
 function readPressure(pressure: number): number {
   return pressure > 0 ? pressure : 0.5
@@ -71,6 +74,10 @@ export function useDrawing(
     let lastEraseAt = 0
     let activeStickyId: string | null = null
     let lastPointerPos: { clientX: number; clientY: number } | null = null
+    let drawPointerDownX = 0
+    let drawPointerDownY = 0
+    let strokeStarted = false
+    let deferredDownPressure = 0.5
 
     function setPenDown(down: boolean) {
       onPenStateChange?.(down)
@@ -78,6 +85,23 @@ export function useDrawing(
 
     function penMenu(): PenToolMenuBridge | null {
       return penMenuBridgeRef?.current ?? null
+    }
+
+    function isStylusDrawPointer(event: PointerEvent): boolean {
+      if (isPhoneFingerDrawMode()) return false
+      return event.pointerType === 'pen' || isPenInput(event)
+    }
+
+    function pointerDriftFromDown(clientX: number, clientY: number): number {
+      return Math.hypot(clientX - drawPointerDownX, clientY - drawPointerDownY)
+    }
+
+    function maybeCancelMenuForStylusDraw(clientX: number, clientY: number) {
+      const menu = penMenu()
+      if (!menu?.isPending()) return
+      if (pointerDriftFromDown(clientX, clientY) >= STYLUS_DRAW_CANCEL_PX) {
+        menu.cancelPendingHold()
+      }
     }
 
     function toCanvasCoords(clientX: number, clientY: number): { x: number; y: number } | null {
@@ -343,6 +367,10 @@ export function useDrawing(
 
       pointerPenActive = true
       activePointerId = event.pointerId
+      drawPointerDownX = event.clientX
+      drawPointerDownY = event.clientY
+      deferredDownPressure = readPressure(event.pressure)
+      strokeStarted = false
       setPenDown(true)
       capturePointer(event)
 
@@ -355,17 +383,26 @@ export function useDrawing(
             canvasEl,
           )
         ) {
+          pointerPenActive = false
+          activePointerId = null
+          if (!isSpaceDrawHeld()) setPenDown(false)
+          releasePointer(event)
           return
         }
         useLassoStore.getState().clearSelection()
+      }
+
+      if (mode === 'lasso') {
         useLassoStore.getState().startLasso(event.clientX, event.clientY)
+        strokeStarted = true
         return
       }
 
       const coords = toCanvasCoords(event.clientX, event.clientY)
       if (!coords) return
 
-      startDrawAt(coords, readPressure(event.pressure))
+      startDrawAt(coords, deferredDownPressure)
+      strokeStarted = true
     }
 
     function onPointerMove(event: PointerEvent) {
@@ -378,6 +415,7 @@ export function useDrawing(
         if (!penMenu()?.isMenuOpen()) {
           const spaceMode = useToolStore.getState().mode
           if (spaceMode === 'lasso' && useLassoStore.getState().isDrawing) {
+            penMenu()?.cancelPendingHold()
             useLassoStore.getState().addPoint(event.clientX, event.clientY)
           } else {
             const coords = toCanvasCoords(event.clientX, event.clientY)
@@ -386,15 +424,16 @@ export function useDrawing(
         }
       }
 
-      if (
-        pointerPenActive &&
-        event.pointerId === activePointerId &&
-        isPhoneFingerDrawMode()
-      ) {
-        penMenu()?.cancelPendingHold()
+      if (pointerPenActive && event.pointerId === activePointerId) {
+        if (isPhoneFingerDrawMode()) {
+          penMenu()?.cancelPendingHold()
+        } else if (isStylusDrawPointer(event)) {
+          maybeCancelMenuForStylusDraw(event.clientX, event.clientY)
+        }
       }
 
       const menu = penMenu()
+
       if (
         menu &&
         menu.isPending() &&
@@ -444,6 +483,7 @@ export function useDrawing(
         }
         eraseActive = false
         activeStickyId = null
+        strokeStarted = false
         useCanvasItemsStore.getState().cancelActiveStickyStroke()
         return
       }
@@ -461,13 +501,17 @@ export function useDrawing(
 
       const modeAtRelease = useToolStore.getState().mode
       if (modeAtRelease === 'lasso') {
-        useLassoStore.getState().commitLasso(canvasEl)
+        if (useLassoStore.getState().isDrawing) {
+          useLassoStore.getState().commitLasso(canvasEl)
+        }
+        strokeStarted = false
         return
       }
 
-      if (!isSpaceDrawHeld()) {
+      if (!isSpaceDrawHeld() && (strokeStarted || eraseActive)) {
         endDrawSession()
       }
+      strokeStarted = false
     }
 
     function onTouchMove(event: TouchEvent) {

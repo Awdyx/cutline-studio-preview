@@ -15,13 +15,16 @@ import { useToolStore, type ToolMode } from './toolStore'
 import { useLassoStore } from './useLassoStore'
 
 /** Hold this long with no UI — pill swoops in once threshold is met. */
-export const HOLD_MS = 700
+export const HOLD_MS = 400
 
 /** Stylus stillness radius (screen px) — any drift beyond this cancels the hold. */
-export const PEN_MOVE_CANCEL_PX = 1
+export const PEN_MOVE_CANCEL_PX = 16
+
+/** Brief stylus wobble grace before drift checks apply (iPad hand tremor). */
+const PEN_MOVE_GRACE_MS = 180
 
 /** Mouse / space-bar stillness radius (screen px). */
-const POINTER_MOVE_CANCEL_PX = 20
+const POINTER_MOVE_CANCEL_PX = 3
 
 /** Mouse / space-bar wobble grace before drift checks apply. */
 const POINTER_MOVE_GRACE_MS = 80
@@ -33,13 +36,15 @@ export function registerPenMenuCancelDraw(fn: CancelFn): () => void {
   return () => cancelDrawRegistry.delete(fn)
 }
 
-export type PenToolMenuPhase = 'idle' | 'open'
+export type PenToolMenuPhase = 'idle' | 'open' | 'closing'
 
 export type PenToolMenuState = {
   phase: PenToolMenuPhase
   anchorX: number
   anchorY: number
   hoveredTool: ToolMode | null
+  /** Tool picked on release — drives the commit close animation. */
+  committedTool: ToolMode | null
   toolOrder: ToolMode[]
 }
 
@@ -48,6 +53,7 @@ const idleUi: PenToolMenuState = {
   anchorX: 0,
   anchorY: 0,
   hoveredTool: null,
+  committedTool: null,
   toolOrder: PEN_TOOL_ORDER,
 }
 
@@ -72,6 +78,8 @@ export type PenToolMenuBridge = {
   /** Hard-cancel a pending hold (finger draw, palette close, etc.). */
   cancelPendingHold: () => void
   resetHold: () => void
+  /** Called when the close animation finishes in PenToolPillMenu. */
+  finishCloseAnimation: () => void
 }
 
 function dist(x1: number, y1: number, x2: number, y2: number): number {
@@ -140,14 +148,49 @@ export function usePenToolMenu(
     }
   }
 
-  const resetHoldState = (playCloseSound: boolean) => {
+  const resetHoldInternal = (playCloseSound: boolean, opts?: { instant?: boolean }) => {
     const hold = holdRef.current
-    const wasOpen = hold.phase === 'open'
+    if (hold.phase === 'open') {
+      if (opts?.instant) {
+        clearHoldTimer(hold)
+        hold.generation += 1
+        Object.assign(hold, freshHoldController(), { generation: hold.generation })
+        setState(idleUi)
+        if (playCloseSound) playSound('menuClose')
+      } else {
+        beginCloseUi(null, playCloseSound)
+      }
+      return
+    }
+
     clearHoldTimer(hold)
     hold.generation += 1
     Object.assign(hold, freshHoldController(), { generation: hold.generation })
-    setState(idleUi)
-    if (playCloseSound && wasOpen) playSound('menuClose')
+    setState((prev) => (prev.phase === 'closing' && !opts?.instant ? prev : idleUi))
+  }
+
+  const beginCloseUi = (committedTool: ToolMode | null, playCloseSound: boolean) => {
+    const hold = holdRef.current
+    if (hold.phase !== 'open') return
+
+    const snapshot = {
+      anchorX: hold.anchorX,
+      anchorY: hold.anchorY,
+      toolOrder: hold.toolOrder,
+      hoveredTool: committedTool,
+      committedTool,
+    }
+
+    clearHoldTimer(hold)
+    hold.generation += 1
+    Object.assign(hold, freshHoldController(), { generation: hold.generation })
+
+    setState({ phase: 'closing', ...snapshot })
+    if (playCloseSound) playSound(committedTool ? 'submenuTap' : 'menuClose')
+  }
+
+  const resetHoldState = (playCloseSound: boolean, opts?: { instant?: boolean }) => {
+    resetHoldInternal(playCloseSound, opts)
   }
 
   const openMenuUi = () => {
@@ -164,6 +207,7 @@ export function usePenToolMenu(
       anchorX: hold.anchorX,
       anchorY: hold.anchorY,
       hoveredTool: null,
+      committedTool: null,
       toolOrder: hold.toolOrder,
     })
   }
@@ -182,7 +226,6 @@ export function usePenToolMenu(
   const shouldCancelForDrift = (hold: HoldController) => {
     const limit = driftLimitPx(hold)
     if (hold.peakDriftPx <= limit) return false
-    if (hold.strict) return true
     return performance.now() >= hold.graceUntilMs
   }
 
@@ -225,7 +268,7 @@ export function usePenToolMenu(
       hold.toolOrder,
     )
     if (hovered) useToolStore.getState().setMode(hovered)
-    resetHoldState(true)
+    beginCloseUi(hovered, true)
     return true
   }
 
@@ -264,7 +307,8 @@ export function usePenToolMenu(
     hold.anchorY = clientY
     hold.strict = opts.strict
     hold.peakDriftPx = 0
-    hold.graceUntilMs = performance.now() + POINTER_MOVE_GRACE_MS
+    hold.graceUntilMs =
+      performance.now() + (opts.strict ? PEN_MOVE_GRACE_MS : POINTER_MOVE_GRACE_MS)
     hold.toolOrder = toolOrder
     scheduleHoldTimer()
   }
@@ -429,24 +473,28 @@ export function usePenToolMenu(
     resetHold() {
       resetHoldState(true)
     },
+
+    finishCloseAnimation() {
+      setState(idleUi)
+    },
   }
 
   useEffect(() => {
     return useShortcutUiStore.subscribe((state, prev) => {
       if (prev.toolPaletteOpen && !state.toolPaletteOpen) {
-        resetHoldState(true)
+        resetHoldState(true, { instant: true })
       }
     })
   }, [])
 
   useEffect(() => {
     function onHide() {
-      if (document.visibilityState === 'hidden') resetHoldState(true)
+      if (document.visibilityState === 'hidden') resetHoldState(false, { instant: true })
     }
     document.addEventListener('visibilitychange', onHide)
     return () => {
       document.removeEventListener('visibilitychange', onHide)
-      resetHoldState(false)
+      resetHoldState(false, { instant: true })
     }
   }, [])
 

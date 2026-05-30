@@ -1,12 +1,10 @@
 import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { EMPTY_EDGE_STRENGTHS } from '../canvasPanVignette'
-import { usePanMotionStore } from '../panMotionStore'
 import { updateCanvasBarrelAfterCamera } from './canvasBarrelPostProcess'
 import { focusItemOnCanvas, type FocusItemRect } from './canvasCamera'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 
-const MINIMAP_PAN_MS = 520
+const MINIMAP_PAN_MS = 720
 
 type PanOptions = {
   onComplete?: () => void
@@ -25,11 +23,7 @@ export function panCanvasMinimapToItem(
     mainCanvasPlate: true,
     animationMs: MINIMAP_PAN_MS,
     curved: true,
-    onMotionFrame: (dx, dy) => {
-      usePanMotionStore.getState().setPanFrame(dx, dy, EMPTY_EDGE_STRENGTHS)
-    },
     onComplete: () => {
-      usePanMotionStore.getState().setPanStopped()
       if (transformRef.current !== ref) {
         options?.onComplete?.()
         return

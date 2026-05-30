@@ -7,7 +7,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { panToAppDestination } from '../navigation/panToAppDestination'
+import { panToAppDestination } from '../navigation/appDestinationFocus'
 import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
 import {
   useAppDestinationStore,
@@ -52,9 +52,13 @@ export default function CutlineAppNavSection({
   const destination = useAppDestinationStore((s) => s.destination)
   const setDestination = useAppDestinationStore((s) => s.setDestination)
   const nearStudioViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
+  const viewportPlate = useCanvasStudioViewportZoneStore((s) => s.viewportPlate)
   const editingUi = useUiCustomizationStore((s) => s.editing)
   const studioAtViewport = editingUi || nearStudioViewport
-  const studioActive = destination === 'studio' && studioAtViewport
+  const studioActive =
+    editingUi
+      ? destination === 'studio'
+      : (viewportPlate ?? destination) === 'studio'
 
   const goTo = (next: AppDestination) => {
     setDestination(next)
@@ -63,8 +67,10 @@ export default function CutlineAppNavSection({
   }
 
   const plateAtViewport = (dest: AppDestination) => {
-    if (dest === 'studio') return studioAtViewport
-    return destination === dest && studioAtViewport
+    if (!studioAtViewport) return false
+    if (editingUi) return destination === dest
+    const activePlate = viewportPlate ?? destination
+    return activePlate === dest
   }
 
   return (

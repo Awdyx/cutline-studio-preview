@@ -4,10 +4,10 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Bell, GraduationCap, LayoutGrid, MessageSquare, Newspaper, Trophy, Users } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
-import { panToAppDestination } from '../navigation/panToAppDestination'
-import { useCanvasStudioViewportZoneStore } from '../canvas/canvasStudioViewportZoneStore'
+import { panToAppDestination } from '../navigation/appDestinationFocus'
 import { CHROME_FROSTED_MENU_CLASS, CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, CHROME_TAP_SQUEEZE_TARGET_CLASS, CHROME_SURFACE_BG_TRANSITION, chromeFrostedMenuStyle, chromeGlassSurfaceBg, glass, font } from '../styles/tokens'
-import { APP_DESTINATION_LABELS, useAppDestinationStore } from '../navigation/appDestinationStore'
+import { useAppDestinationStore } from '../navigation/appDestinationStore'
+import { useBrandPillDestinationDisplay } from '../navigation/brandPillAreaLabel'
 import { playSubmenuTap } from '../sound/submenuSound'
 import { PHONE_HEADER_ROW_GAP } from '../styles/phoneChrome'
 import CanvasSearchBar from './CanvasSearchBar'
@@ -109,19 +109,14 @@ interface BrandPillProps {
 }
 
 export function BrandPill({ isOpen = false, onClick, transformRef, fullWidth = false }: BrandPillProps) {
-  const destination = useAppDestinationStore((s) => s.destination)
   const setDestination = useAppDestinationStore((s) => s.setDestination)
-  const nearStudioViewport = useCanvasStudioViewportZoneStore((s) => s.nearStudioViewport)
+  const destinationLabel = useBrandPillDestinationDisplay()
   const [hovered, setHovered] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
 
   const editingUi = useUiCustomizationStore((s) => s.editing)
-  const plusFabChromeVisible = editingUi || nearStudioViewport
-  const destinationLabel = plusFabChromeVisible
-    ? APP_DESTINATION_LABELS[destination]
-    : 'canvas'
   const showHoverBackground = hovered && !editingUi
 
   const buttonRef = useRef<HTMLButtonElement>(null)

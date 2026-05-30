@@ -9,11 +9,10 @@ import {
   LEGACY_CANVAS_WIDTH,
   PREV_CANVAS_HEIGHT,
   PREV_CANVAS_WIDTH,
-  FEATURE_PLATE_HEIGHT,
-  FEATURE_PLATE_WIDTH,
   STUDIO_VISUAL_HEIGHT,
   STUDIO_VISUAL_WIDTH,
 } from '../drawing/canvasDimensions'
+import { getFeaturePlateDimensions } from './featurePlateViewportStore'
 import type { CanvasMinimapRect } from './canvasMinimapGeometry'
 
 export type StudioCentrePosition = {
@@ -29,7 +28,7 @@ export function defaultStudioCentrePosition(): StudioCentrePosition {
 }
 
 /** Expanded minimap width — keep in sync with `CANVAS_MINIMAP_EXPANDED_WIDTH_PX`. */
-const MINIMAP_REFERENCE_WIDTH_PX = 720
+const MINIMAP_REFERENCE_WIDTH_PX = 600
 /** Target breathing room from canvas edge to studio centre (~28px on expanded minimap). */
 const MINIMAP_PLATE_EDGE_GAP_PX = 28
 /** Extra top-only gap so minimap title row keeps a little more air. */
@@ -63,12 +62,13 @@ export function clampStudioCentrePosition(x: number, y: number): StudioCentrePos
 }
 
 export function clampFeaturePlatePosition(x: number, y: number): StudioCentrePosition {
+  const { width, height } = getFeaturePlateDimensions()
   const inset = STUDIO_CENTRE_POSITION_BORDER_INSET
   const topInset = STUDIO_CENTRE_POSITION_BORDER_INSET_TOP
   const minX = inset
   const minY = topInset
-  const maxX = CANVAS_WIDTH - FEATURE_PLATE_WIDTH - inset
-  const maxY = CANVAS_HEIGHT - FEATURE_PLATE_HEIGHT - inset
+  const maxX = CANVAS_WIDTH - width - inset
+  const maxY = CANVAS_HEIGHT - height - inset
   return {
     x: Math.min(Math.max(minX, x), maxX),
     y: Math.min(Math.max(minY, y), maxY),

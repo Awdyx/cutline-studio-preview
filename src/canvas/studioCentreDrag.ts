@@ -94,17 +94,20 @@ function setDragActiveClass(active: boolean) {
   }
 }
 
-function finishStudioCentreDragDim(): void {
+function clearStudioCentreDragChrome(): void {
   const root = document.documentElement
+  root.removeAttribute('data-studio-centre-dragging')
+  root.classList.remove(DRAG_ACTIVE_CLASS)
+}
+
+function finishStudioCentreDragDim(): void {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    root.removeAttribute('data-studio-centre-dragging')
+    clearStudioCentreDragChrome()
     return
   }
 
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      root.removeAttribute('data-studio-centre-dragging')
-    })
+    requestAnimationFrame(clearStudioCentreDragChrome)
   })
 }
 
@@ -161,6 +164,7 @@ function finishSession() {
   useStudioCentreDragStore.getState().setPanSuppressed(false)
   useStudioCentreDragStore.getState().setMinimapDragging(false)
   useStudioCentreDragStore.getState().setStudioCentreDragging(false)
+  useStudioCentreDragStore.getState().setStudioDragPreview(null)
   if (ended) releaseBodyPointerCapture(ended.pointerId)
 
   if (!ended || ended.phase !== 'dragging') {
@@ -227,6 +231,10 @@ function applyDragPosition(clientX: number, clientY: number) {
   session.lastX = clamped.x
   session.lastY = clamped.y
   session.moved = true
+  useStudioCentreDragStore.getState().setStudioDragPreview({
+    x: clamped.x,
+    y: clamped.y,
+  })
 }
 
 function scheduleDragMove(clientX: number, clientY: number) {
@@ -453,6 +461,10 @@ export function onStudioCentreMinimapDragPointerDown(
     session.lastX = clamped.x
     session.lastY = clamped.y
     session.moved = true
+    useStudioCentreDragStore.getState().setStudioDragPreview({
+      x: clamped.x,
+      y: clamped.y,
+    })
     updateStudioCentreDragSound(minimapLastX, minimapLastY)
   }
 

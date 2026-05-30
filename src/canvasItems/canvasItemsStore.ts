@@ -17,6 +17,10 @@ import { isLassoMode, useToolStore } from '../drawing/toolStore'
 import { useLassoStore } from '../drawing/useLassoStore'
 import { generateStrokeId } from '../drawing/strokeId'
 import { strokeToSvgPath, ensureMinimumStrokePoints } from '../drawing/strokePath'
+import {
+  decimateStrokePoints,
+  shouldAppendStrokePoint,
+} from '../drawing/strokePointDecimation'
 import type { DrawTool, Stroke, StrokePoint } from '../drawing/types'
 import { notifyWorkspacePersist, useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import type { SpaceCamera } from '../spaces/types'
@@ -1461,6 +1465,8 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   addStickyStrokePoint: (point) => {
     const { activeStickyStroke } = get()
     if (!activeStickyStroke) return
+    const last = activeStickyStroke.stroke.points.at(-1)
+    if (!shouldAppendStrokePoint(last, point)) return
     set({
       activeStickyStroke: {
         ...activeStickyStroke,
@@ -1538,12 +1544,13 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       return
     }
 
+    points = decimateStrokePoints(points)
     points = ensureMinimumStrokePoints(points, 3)
 
     pushUndoSnapshot()
 
     const trimmed: Stroke = { ...active.stroke, points }
-    const path = strokeToSvgPath(trimmed, false)
+    const path = strokeToSvgPath(trimmed, true)
     const completed = { ...trimmed, path }
 
     const isLocked = effectiveCanvasLocked(

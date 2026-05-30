@@ -41,6 +41,10 @@ export const SOUND_LEVELS: Record<SoundId, number> = {
   textCommit: 0.9,
   /** Brand pill area lock-in — whisper loader (very quiet). */
   plateFocus: 0.48,
+  /** Reload intro — crystal gather on title appear. */
+  reloadIntroArrive: 0.5,
+  /** Reload intro — crystal major wash on dismiss. */
+  reloadIntroDismiss: 0.5,
 }
 
 /** Trim for looping drag noise (pre-compressor). Bed sits below one-shot blips. */

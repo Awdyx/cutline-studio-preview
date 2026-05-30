@@ -11,6 +11,8 @@ interface PanMotionState {
   intensity: number
   active: boolean
   zoomActive: boolean
+  /** Programmatic menu / plate fly-to — suppress viewport chrome mid-flight. */
+  cameraFlyActive: boolean
   edges: EdgeStrengths
   zoomEdgeStrength: number
   setPanFrame: (vx: number, vy: number, edges: EdgeStrengths) => void
@@ -18,6 +20,7 @@ interface PanMotionState {
   setZoomEdgeStrength: (strength: number) => void
   setPanStopped: () => void
   setZoomActive: (active: boolean) => void
+  setCameraFlyActive: (active: boolean) => void
 }
 
 const EDGE_EPS = 0.001
@@ -38,6 +41,7 @@ export const usePanMotionStore = create<PanMotionState>((set, get) => ({
   intensity: 0,
   active: false,
   zoomActive: false,
+  cameraFlyActive: false,
   edges: EMPTY_EDGE_STRENGTHS,
   zoomEdgeStrength: 0,
 
@@ -90,6 +94,15 @@ export const usePanMotionStore = create<PanMotionState>((set, get) => ({
     if (get().zoomActive === active) return
     set({ zoomActive: active })
   },
+
+  setCameraFlyActive: (active: boolean) => {
+    if (get().cameraFlyActive === active) return
+    set({ cameraFlyActive: active })
+  },
 }))
+
+export function isCameraFlyActive(): boolean {
+  return usePanMotionStore.getState().cameraFlyActive
+}
 
 export { MAX_VELOCITY } from './canvasPanVignette'

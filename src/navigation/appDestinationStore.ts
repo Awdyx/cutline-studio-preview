@@ -1,4 +1,8 @@
 import { create } from 'zustand'
+import {
+  loadLastAppDestination,
+  saveLastAppDestination,
+} from './appDestinationPersistence'
 
 export type AppDestination = 'studio' | 'leaderboard' | 'forum' | 'groups' | 'ucat'
 
@@ -16,6 +20,9 @@ type AppDestinationState = {
 }
 
 export const useAppDestinationStore = create<AppDestinationState>((set) => ({
-  destination: 'studio',
-  setDestination: (destination) => set({ destination }),
+  destination: loadLastAppDestination(),
+  setDestination: (destination) => {
+    set({ destination })
+    saveLastAppDestination(destination)
+  },
 }))

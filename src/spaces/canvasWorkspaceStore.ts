@@ -12,6 +12,7 @@ import {
   flushScheduledWorkspaceSave,
   scheduleSaveWorkspace,
   saveWorkspaceToStorage,
+  cancelScheduledWorkspaceSave,
   WORKSPACE_STORAGE_VERSION,
   type LoadedWorkspace,
 } from './workspacePersistence'
@@ -122,6 +123,8 @@ let mainCameraCache: SpaceCamera | null = null
 /** Main pan/zoom captured the moment a pocket is opened — restored on exit. */
 let mainCameraBeforePocket: SpaceCamera | null = null
 let pendingMainCameraRestore = false
+/** False until applyCameraForActiveCanvas has centered the main canvas once. */
+let mainCameraSpawnApplied = false
 
 function patchMainSpaceItem(
   spaceId: string,
@@ -237,6 +240,17 @@ export function isWorkspaceHydrated(): boolean {
   return workspaceHydrated
 }
 
+/**
+ * Permanently stop persisting workspace state for the current page session.
+ * Used by the full reset so nothing re-writes localStorage while the page
+ * reloads (camera-persist unload handlers + any pending debounced save). The
+ * flag resets naturally on the next page load via hydrate().
+ */
+export function disableWorkspacePersist(): void {
+  persistEnabled = false
+  cancelScheduledWorkspaceSave()
+}
+
 export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) => ({
   activeCanvasId: 'main',
   spaces: {},
@@ -251,6 +265,7 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
 
   hydrate: async () => {
     workspaceHydrated = false
+    mainCameraSpawnApplied = false
     resetLegacyMediaSrcIndex()
     let loaded = loadWorkspaceFromStorage()
     if (
@@ -533,7 +548,9 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
   },
 
   syncMainCamera: (transformRef) => {
-    if (get().activeCanvasId !== 'main' || !transformRef) return
+    if (get().activeCanvasId !== 'main' || !transformRef || !mainCameraSpawnApplied) {
+      return
+    }
     const camera = readCameraFromRef(transformRef)
     if (!camera) return
 
@@ -579,8 +596,11 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
       }
 
       const cached = mainCameraCache ?? DEFAULT_SPACE_CAMERA
+      const wrapper = transformRef.instance.wrapperComponent
+      const viewportWidth = wrapper?.offsetWidth ?? window.innerWidth
+      const viewportHeight = wrapper?.offsetHeight ?? window.innerHeight
       if (
-        isUninitializedMainCamera(cached) ||
+        isUninitializedMainCamera(cached, viewportWidth, viewportHeight) ||
         !isCameraPlausible(cached, transformRef)
       ) {
         resetToCoverFit(transformRef)
@@ -590,6 +610,7 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
       ensureNotInFisheyeOverview(transformRef)
       const synced = readCameraFromRef(transformRef)
       if (synced) mainCameraCache = synced
+      mainCameraSpawnApplied = true
       invalidateBackgroundMusicAcousticsViewportSample()
       updateCanvasBarrelAfterCamera(transformRef, { silent: true })
       return

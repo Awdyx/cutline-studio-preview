@@ -39,9 +39,11 @@ export const STUDIO_CONTENT_SCALE = 1.4
 export const STUDIO_VISUAL_WIDTH = Math.round(CANVAS_ORIGINAL_WIDTH * STUDIO_CONTENT_SCALE)
 export const STUDIO_VISUAL_HEIGHT = Math.round(CANVAS_ORIGINAL_HEIGHT * STUDIO_CONTENT_SCALE)
 
-/** Feature plates (forum, rankings, etc.) — 16:10, same width as studio logical. */
-export const FEATURE_PLATE_WIDTH = CANVAS_ORIGINAL_WIDTH
+/** Feature plates (forum, rankings, etc.) — width tracks live viewport aspect. */
+export const FEATURE_PLATE_SCALE = 0.75
+export const FEATURE_PLATE_WIDTH = Math.round(CANVAS_ORIGINAL_WIDTH * FEATURE_PLATE_SCALE)
 export const FEATURE_PLATE_HEIGHT = Math.round(FEATURE_PLATE_WIDTH * (10 / 16))
+/** Fallback aspect before viewport sync — runtime uses featurePlateViewportStore. */
 export const FEATURE_PLATE_ASPECT = FEATURE_PLATE_WIDTH / FEATURE_PLATE_HEIGHT
 
 /** Pocket interior — same logical working area as the studio centre. */

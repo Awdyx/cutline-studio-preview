@@ -6,7 +6,9 @@ import {
   startPreviewPlayback,
   stopPreviewPlayback,
   bindPreviewEndCutoff,
-  unbindPreviewEndCutoff,
+  bindActiveProfilePreview,
+  unbindActiveProfilePreview,
+  stopActiveProfilePreviewPlayback,
 } from './previewAudioEffects'
 import { usePreviewBackgroundMusicDuck } from './usePreviewBackgroundMusicDuck'
 
@@ -18,9 +20,7 @@ export default function ProfilePinnedTrack({ track }: { track: PinnedTrack }) {
 
   useEffect(() => {
     return () => {
-      cutoffCleanupRef.current?.()
-      cutoffCleanupRef.current = null
-      if (audioRef.current) unbindPreviewEndCutoff(audioRef.current)
+      void stopActiveProfilePreviewPlayback()
     }
   }, [])
 
@@ -29,11 +29,16 @@ export default function ProfilePinnedTrack({ track }: { track: PinnedTrack }) {
     cutoffCleanupRef.current = null
   }
 
+  function notifyPreviewStopped() {
+    clearCutoffMonitor()
+    onPreviewStopped()
+    setPlaying(false)
+  }
+
   async function stopPreview() {
     const audio = audioRef.current
-    clearCutoffMonitor()
-    setPlaying(false)
-    onPreviewStopped()
+    if (audio) unbindActiveProfilePreview(audio)
+    notifyPreviewStopped()
     if (audio) await stopPreviewPlayback(audio)
   }
 
@@ -49,14 +54,14 @@ export default function ProfilePinnedTrack({ track }: { track: PinnedTrack }) {
       await startPreviewPlayback(audio, track.preview, track.startTime)
       onPreviewStarted()
       setPlaying(true)
+      bindActiveProfilePreview(audio, notifyPreviewStopped, track.startTime, track.endTime)
       clearCutoffMonitor()
       cutoffCleanupRef.current = bindPreviewEndCutoff(audio, {
         startTime: track.startTime,
         endTime: track.endTime,
         onFadeComplete: () => {
-          clearCutoffMonitor()
-          onPreviewStopped()
-          setPlaying(false)
+          unbindActiveProfilePreview(audio)
+          notifyPreviewStopped()
         },
       })
     } catch {

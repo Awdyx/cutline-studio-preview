@@ -102,14 +102,14 @@ export function syncStudioCanvasViewportZone(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
   viewportRef: RefObject<HTMLElement | null>,
 ): void {
-  const { setNearStudioViewport } = useCanvasStudioViewportZoneStore.getState()
+  const { setViewportZone } = useCanvasStudioViewportZoneStore.getState()
 
   if (useCanvasWorkspaceStore.getState().isInsideSpace()) {
-    setNearStudioViewport(true)
+    setViewportZone(true, 'studio')
     return
   }
 
   const near = isViewportCenterNearStudioCanvas(transformRef, viewportRef.current)
   if (near == null) return
-  setNearStudioViewport(near)
+  setViewportZone(near, near ? 'studio' : null)
 }

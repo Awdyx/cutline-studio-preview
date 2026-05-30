@@ -3,6 +3,7 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { useCanvasFisheyeStore } from '../canvas/canvasFisheyeStore'
 import { useStudioCentrePositionStore } from '../canvas/studioCentrePositionStore'
 import { useFeaturePlatePositionStore } from '../canvas/featurePlatePositionStore'
+import { useStudioCentreDragStore } from '../canvas/studioCentreDragStore'
 import { viewportCenterFullCanvas } from '../canvasItems/viewportCenter'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { syncBackgroundMusicAcoustics } from '../sound/backgroundMusicAcoustics'
@@ -34,6 +35,7 @@ export function useBackgroundMusicStudioZoneAcoustics(
     const unsubPlates = useFeaturePlatePositionStore.subscribe(sync)
     const unsubFisheye = useCanvasFisheyeStore.subscribe(sync)
     const unsubWorkspace = useCanvasWorkspaceStore.subscribe(sync)
+    const unsubPlateDrag = useStudioCentreDragStore.subscribe(sync)
 
     return () => {
       cancelAnimationFrame(raf)
@@ -41,6 +43,7 @@ export function useBackgroundMusicStudioZoneAcoustics(
       unsubPlates()
       unsubFisheye()
       unsubWorkspace()
+      unsubPlateDrag()
     }
   }, [transformRef, viewportRef])
 }

@@ -4,7 +4,9 @@ import { playSound } from '../sound/playSound'
 import { clientToCanvas } from './canvasCoords'
 import { isPenInput, isPenMenuPointer, isPhoneFingerDrawMode, noteStylusInput } from './penInput'
 import {
+  advancePenToolMenuRail,
   hitTestPenToolPill,
+  initPenToolMenuRail,
   isUiDrawCanvasTarget,
   PEN_TOOL_ORDER,
   UI_DRAW_PEN_TOOL_ORDER,
@@ -42,6 +44,9 @@ export type PenToolMenuState = {
   phase: PenToolMenuPhase
   anchorX: number
   anchorY: number
+  /** Live pointer while the pill is open — drives elastic segment morph. */
+  pointerX: number | null
+  pointerY: number | null
   hoveredTool: ToolMode | null
   /** Tool picked on release — drives the commit close animation. */
   committedTool: ToolMode | null
@@ -52,6 +57,8 @@ const idleUi: PenToolMenuState = {
   phase: 'idle',
   anchorX: 0,
   anchorY: 0,
+  pointerX: null,
+  pointerY: null,
   hoveredTool: null,
   committedTool: null,
   toolOrder: PEN_TOOL_ORDER,
@@ -104,6 +111,9 @@ type HoldController = {
   pointerId: number | null
   anchorX: number
   anchorY: number
+  /** Guard-rail X while the pill is open (delta-integrated, wall-clamped). */
+  railX: number
+  lastRawX: number
   strict: boolean
   peakDriftPx: number
   graceUntilMs: number
@@ -119,6 +129,8 @@ function freshHoldController(): HoldController {
     pointerId: null,
     anchorX: 0,
     anchorY: 0,
+    railX: 0,
+    lastRawX: 0,
     strict: false,
     peakDriftPx: 0,
     graceUntilMs: 0,
@@ -176,6 +188,8 @@ export function usePenToolMenu(
     const snapshot = {
       anchorX: hold.anchorX,
       anchorY: hold.anchorY,
+      pointerX: null,
+      pointerY: null,
       toolOrder: hold.toolOrder,
       hoveredTool: committedTool,
       committedTool,
@@ -202,11 +216,29 @@ export function usePenToolMenu(
     useLassoStore.getState().cancelLasso()
     playSound('menuOpen')
     hold.phase = 'open'
+    const rail = initPenToolMenuRail(
+      hold.anchorX,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+    )
+    hold.railX = rail.railX
+    hold.lastRawX = rail.lastRawX
+    const hovered = hitTestPenToolPill(
+      rail.x,
+      rail.y,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+      { guardRail: true },
+    )
     setState({
       phase: 'open',
       anchorX: hold.anchorX,
       anchorY: hold.anchorY,
-      hoveredTool: null,
+      pointerX: rail.x,
+      pointerY: rail.y,
+      hoveredTool: hovered,
       committedTool: null,
       toolOrder: hold.toolOrder,
     })
@@ -244,28 +276,52 @@ export function usePenToolMenu(
     maybeCancelPendingForDrift()
   }
 
-  const updateOpenHover = (clientX: number, clientY: number) => {
-    const hold = holdRef.current
-    const hovered = hitTestPenToolPill(
+  const sampleOpenRail = (hold: HoldController, clientX: number) => {
+    const next = advancePenToolMenuRail(
+      { railX: hold.railX, lastRawX: hold.lastRawX },
       clientX,
-      clientY,
       hold.anchorX,
       hold.anchorY,
       hold.toolOrder,
     )
-    setState((prev) =>
-      prev.hoveredTool === hovered ? prev : { ...prev, hoveredTool: hovered },
+    hold.railX = next.railX
+    hold.lastRawX = next.lastRawX
+    return next
+  }
+
+  const updateOpenHover = (clientX: number, clientY: number) => {
+    const hold = holdRef.current
+    const rail = sampleOpenRail(hold, clientX)
+    const hovered = hitTestPenToolPill(
+      rail.x,
+      rail.y,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+      { guardRail: true },
     )
+    setState((prev) => {
+      if (
+        prev.hoveredTool === hovered &&
+        prev.pointerX === rail.x &&
+        prev.pointerY === rail.y
+      ) {
+        return prev
+      }
+      return { ...prev, hoveredTool: hovered, pointerX: rail.x, pointerY: rail.y }
+    })
   }
 
   const finishOpenHold = (clientX: number, clientY: number) => {
     const hold = holdRef.current
+    const rail = sampleOpenRail(hold, clientX)
     const hovered = hitTestPenToolPill(
-      clientX,
-      clientY,
+      rail.x,
+      rail.y,
       hold.anchorX,
       hold.anchorY,
       hold.toolOrder,
+      { guardRail: true },
     )
     if (hovered) useToolStore.getState().setMode(hovered)
     beginCloseUi(hovered, true)

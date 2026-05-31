@@ -3,10 +3,6 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { refitCameraAfterResize } from './canvasCamera'
 import { getCanvasMinScale } from '../drawing/canvasDimensions'
 import { readViewportSize, type ViewportSize } from '../platform/viewportSize'
-import {
-  ensureNotInFisheyeOverview,
-  updateCanvasBarrelAfterCamera,
-} from './canvasBarrelPostProcess'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 
 export type { ViewportSize }
@@ -56,8 +52,6 @@ export function useCanvasViewport(
         useCanvasWorkspaceStore.getState().applyCameraForActiveCanvas(live)
         const nextMin = refitCameraAfterResize(live)
         if (nextMin != null) setMinScale(nextMin)
-        ensureNotInFisheyeOverview(live)
-        updateCanvasBarrelAfterCamera(live, { silent: true })
       })
     })
   }, [transformRef, refreshMinScale])
@@ -102,9 +96,7 @@ export function useCanvasViewport(
             if (!live) return
             const nextMin = refitCameraAfterResize(live)
             if (nextMin != null) setMinScale(nextMin)
-            ensureNotInFisheyeOverview(live)
             useCanvasWorkspaceStore.getState().syncMainCamera(live)
-            updateCanvasBarrelAfterCamera(live, { silent: true })
           })
         }
       })

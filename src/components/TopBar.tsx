@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type RefObject } from 'react'
-import { createPortal } from 'react-dom'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Bell, GraduationCap, LayoutGrid, MessageSquare, Newspaper, Trophy, Users } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { Bell, Newspaper } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
-import { panToAppDestination } from '../navigation/appDestinationFocus'
-import { CHROME_FROSTED_MENU_CLASS, CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, CHROME_TAP_SQUEEZE_TARGET_CLASS, CHROME_SURFACE_BG_TRANSITION, chromeFrostedMenuStyle, chromeGlassSurfaceBg, glass, font } from '../styles/tokens'
-import { useAppDestinationStore } from '../navigation/appDestinationStore'
-import { useBrandPillDestinationDisplay } from '../navigation/brandPillAreaLabel'
-import { playSubmenuTap } from '../sound/submenuSound'
+import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, CHROME_TAP_SQUEEZE_TARGET_CLASS, CHROME_SURFACE_BG_TRANSITION, chromeGlassSurfaceBg, glass, font } from '../styles/tokens'
+import { APP_DESTINATION_LABELS, useAppDestinationStore } from '../navigation/appDestinationStore'
 import { PHONE_HEADER_ROW_GAP } from '../styles/phoneChrome'
 import CanvasSearchBar from './CanvasSearchBar'
 import ChromeTapSqueezeWrap from './ChromeTapSqueezeWrap'
@@ -16,17 +12,8 @@ import UserAvatar from './UserAvatar'
 import ProfileStatusDot from './ProfileStatusDot'
 import UiPinHost from '../uiCustomization/UiPinHost'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
+import { desktopChromeEdgeLeft, desktopChromeEdgeRight, desktopChromeEdgeTop } from '../platform/chromeLayout'
 import type { TopBarUser } from '../profile/types'
-
-// ─── Hold menu data ────────────────────────────────────────────────────────────
-
-const HOLD_ITEMS = [
-  { id: 'studio',      label: 'studio',      Icon: LayoutGrid },
-  { id: 'leaderboard', label: 'rankings', Icon: Trophy },
-  { id: 'forum',       label: 'forum',       Icon: MessageSquare },
-  { id: 'groups',      label: 'groups',      Icon: Users },
-  { id: 'ucat',        label: 'ucat',        Icon: GraduationCap },
-] as const
 
 const islandBase: React.CSSProperties = {
   display: 'flex',
@@ -39,8 +26,6 @@ const islandBase: React.CSSProperties = {
   userSelect: 'none',
 }
 
-const brandPillLabelEase = [0.22, 1, 0.36, 1] as const
-
 const brandPillDestinationLabelStyle: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 400,
@@ -49,8 +34,6 @@ const brandPillDestinationLabelStyle: React.CSSProperties = {
 }
 
 function BrandPillDestinationLabel({ label }: { label: string }) {
-  const reduceMotion = useReducedMotion()
-
   return (
     <span
       style={{
@@ -62,38 +45,7 @@ function BrandPillDestinationLabel({ label }: { label: string }) {
         justifyContent: 'flex-start',
       }}
     >
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.span
-          key={label}
-          initial={
-            reduceMotion
-              ? false
-              : { opacity: 0, y: 5, filter: 'blur(4px)' }
-          }
-          animate={
-            reduceMotion
-              ? undefined
-              : { opacity: 1, y: 0, filter: 'blur(0px)' }
-          }
-          exit={
-            reduceMotion
-              ? undefined
-              : { opacity: 0, y: -4, filter: 'blur(3px)' }
-          }
-          transition={
-            reduceMotion
-              ? { duration: 0 }
-              : {
-                  opacity: { duration: 0.22, ease: brandPillLabelEase },
-                  y: { duration: 0.28, ease: brandPillLabelEase },
-                  filter: { duration: 0.24, ease: 'easeOut' },
-                }
-          }
-          style={brandPillDestinationLabelStyle}
-        >
-          {label}
-        </motion.span>
-      </AnimatePresence>
+      <span style={brandPillDestinationLabelStyle}>{label}</span>
     </span>
   )
 }
@@ -103,180 +55,57 @@ function BrandPillDestinationLabel({ label }: { label: string }) {
 interface BrandPillProps {
   isOpen?: boolean
   onClick?: () => void
-  transformRef: RefObject<ReactZoomPanPinchContentRef | null>
   /** Stretch pill to fill its column (desktop top bar balance). */
   fullWidth?: boolean
 }
 
-export function BrandPill({ isOpen = false, onClick, transformRef, fullWidth = false }: BrandPillProps) {
-  const setDestination = useAppDestinationStore((s) => s.setDestination)
-  const destinationLabel = useBrandPillDestinationDisplay()
+export function BrandPill({ isOpen = false, onClick, fullWidth = false }: BrandPillProps) {
+  const destination = useAppDestinationStore((s) => s.destination)
   const [hovered, setHovered] = useState(false)
-  const [holdOpen, setHoldOpen] = useState(false)
-  const [hoveredItem, setHoveredItem] = useState<string | null>(null)
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
 
   const editingUi = useUiCustomizationStore((s) => s.editing)
+  const destinationLabel = APP_DESTINATION_LABELS[destination]
   const showHoverBackground = hovered && !editingUi
 
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isHoldRef = useRef(false)
-  const itemRefs = useRef<(HTMLDivElement | null)[]>([])
-
-  // Measure menu anchor when hold opens
-  useEffect(() => {
-    if (holdOpen && buttonRef.current) {
-      const r = buttonRef.current.getBoundingClientRect()
-      setMenuPos({ top: r.bottom + 8, left: r.left })
-    }
-  }, [holdOpen])
-
-  const cancelHold = () => {
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
-    isHoldRef.current = false
-    setHoldOpen(false)
-    setHoveredItem(null)
-  }
-
-  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0 || editingUi) return
-    e.currentTarget.setPointerCapture(e.pointerId)
-    holdTimerRef.current = setTimeout(() => {
-      isHoldRef.current = true
-      setHoldOpen(true)
-    }, 380)
-  }
-
-  const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!isHoldRef.current) return
-    // Hit-test item rects manually (menu has pointerEvents:none)
-    const { clientX, clientY } = e
-    let found: string | null = null
-    for (let i = 0; i < itemRefs.current.length; i++) {
-      const el = itemRefs.current[i]
-      if (!el) continue
-      const r = el.getBoundingClientRect()
-      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-        found = HOLD_ITEMS[i].id
-        break
-      }
-    }
-    setHoveredItem(found)
-  }
-
-  const onPointerUp = () => {
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
-    if (isHoldRef.current) {
-      if (hoveredItem) {
-        playSubmenuTap()
-        setDestination(hoveredItem as (typeof HOLD_ITEMS)[number]['id'])
-        panToAppDestination(transformRef, hoveredItem as (typeof HOLD_ITEMS)[number]['id'])
-      }
-      cancelHold()
-    } else {
-      onClick?.()
-    }
-  }
-
   return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        data-panel-trigger="cutline"
-        data-ui-anchor="brand-pill"
-        aria-label="Cutline menu"
-        aria-expanded={isOpen}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={cancelHold}
-        className={`${CHROME_TAP_SQUEEZE_TARGET_CLASS} theme-surface ${CHROME_GLASS_CLASS}`}
+    <button
+      type="button"
+      data-panel-trigger="cutline"
+      data-ui-anchor="brand-pill"
+      aria-label="Cutline menu"
+      aria-expanded={isOpen}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
+      className={`${CHROME_TAP_SQUEEZE_TARGET_CLASS} theme-surface ${CHROME_GLASS_CLASS}`}
+      style={{
+        ...islandBase,
+        position: 'relative',
+        gap: 8,
+        padding: '8px 16px',
+        width: fullWidth ? '100%' : undefined,
+        justifyContent: fullWidth ? 'center' : undefined,
+        cursor: 'pointer',
+        transition: editingUi ? undefined : CHROME_SURFACE_BG_TRANSITION,
+        background: chromeGlassSurfaceBg({
+          active: isOpen,
+          hoverLift: showHoverBackground,
+        }),
+        border: glass.border,
+      }}
+    >
+      <span
         style={{
-          ...islandBase,
-          position: 'relative',
-          gap: 8,
-          padding: '8px 16px',
-          width: fullWidth ? '100%' : undefined,
-          justifyContent: fullWidth ? 'center' : undefined,
-          cursor: 'pointer',
-          transition: editingUi ? undefined : CHROME_SURFACE_BG_TRANSITION,
-          background: chromeGlassSurfaceBg({
-            active: isOpen || holdOpen,
-            hoverLift: showHoverBackground,
-          }),
-          border: glass.border,
+          width: 7, height: 7, borderRadius: '50%',
+          backgroundColor: '#3ecf6e',
+          boxShadow: '0 0 6px rgba(62, 207, 110, 0.7)',
+          flexShrink: 0,
         }}
-      >
-        <span
-          style={{
-            width: 7, height: 7, borderRadius: '50%',
-            backgroundColor: '#3ecf6e',
-            boxShadow: '0 0 6px rgba(62, 207, 110, 0.7)',
-            flexShrink: 0,
-          }}
-        />
-        <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>Cutline</span>
-        <BrandPillDestinationLabel label={destinationLabel} />
-        <UiPinHost anchorId="brand-pill" />
-      </button>
-
-      {/* Hold submenu — rendered via portal so it floats above everything */}
-      {createPortal(
-        <AnimatePresence>
-          {holdOpen && menuPos && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: -6 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: -4 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 28, mass: 0.6 }}
-              className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
-              style={{
-                position: 'fixed',
-                top: menuPos.top,
-                left: menuPos.left,
-                zIndex: 9000,
-                pointerEvents: 'none',
-                transformOrigin: 'top left',
-                ...chromeFrostedMenuStyle,
-                padding: '6px 0',
-                minWidth: 168,
-                overflow: 'hidden',
-              }}
-            >
-              {HOLD_ITEMS.map(({ id, label, Icon }, i) => (
-                <div
-                  key={id}
-                  ref={el => { itemRefs.current[i] = el }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '9px 16px',
-                    fontFamily: font.family,
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: hoveredItem === id ? 'var(--ui-text)' : font.colorMuted,
-                    background: hoveredItem === id ? 'var(--menu-row-hover-bg)' : 'transparent',
-                    transition: 'background 80ms ease, color 80ms ease',
-                    borderRadius: 10,
-                    margin: '0 4px',
-                  }}
-                >
-                  <Icon size={14} strokeWidth={1.9} style={{ flexShrink: 0, opacity: hoveredItem === id ? 1 : 0.55 }} />
-                  {label}
-                </div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body,
-      )}
-
-    </>
+      />
+      <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '-0.01em' }}>Cutline</span>
+      <BrandPillDestinationLabel label={destinationLabel} />
+      <UiPinHost anchorId="brand-pill" />
+    </button>
   )
 }
 
@@ -456,7 +285,13 @@ export function UserCluster({
             {!compact && (
               <span
                 className={CHROME_PRESERVE_CASE_CLASS}
-                style={{ fontSize: 14, fontWeight: 500, color: font.colorPrimary }}
+                style={{
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: font.colorPrimary,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
               >
                 {user.name}
               </span>
@@ -542,7 +377,7 @@ export default function TopBar({
     const observer = new ResizeObserver(update)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [isPhone, user.name, unreadCount, newsCount])
+  }, [isPhone, user.name, unreadCount, newsCount, profileOpen])
 
   if (isPhone) {
     return (
@@ -570,7 +405,7 @@ export default function TopBar({
           }}
         >
           <div style={{ pointerEvents: 'auto', flexShrink: 0 }}>
-            <BrandPill isOpen={cutlineMenuOpen} onClick={onCutlineClick} transformRef={transformRef} />
+            <BrandPill isOpen={cutlineMenuOpen} onClick={onCutlineClick} />
           </div>
           <div style={{ pointerEvents: 'auto', flexShrink: 0, minWidth: 0 }}>
             <UserCluster
@@ -604,8 +439,11 @@ export default function TopBar({
     )
   }
 
-  const sideColumnStyle: React.CSSProperties | undefined = sideColumnWidth
+  const leftColumnStyle: React.CSSProperties | undefined = sideColumnWidth
     ? { width: sideColumnWidth, minWidth: sideColumnWidth, maxWidth: sideColumnWidth }
+    : undefined
+  const rightColumnStyle: React.CSSProperties | undefined = sideColumnWidth
+    ? { minWidth: sideColumnWidth }
     : undefined
 
   return (
@@ -613,9 +451,9 @@ export default function TopBar({
       className="cutline-top-bar"
       style={{
         position: 'fixed',
-        top: 16,
-        left: 16,
-        right: 16,
+        top: desktopChromeEdgeTop,
+        left: desktopChromeEdgeLeft,
+        right: desktopChromeEdgeRight,
         display: 'grid',
         gridTemplateColumns:
           sideColumnWidth != null
@@ -627,15 +465,18 @@ export default function TopBar({
         pointerEvents: 'none',
       }}
     >
-      <div style={{ pointerEvents: 'auto', ...sideColumnStyle }}>
+      <div
+        className="cutline-top-bar__leading"
+        style={{ pointerEvents: 'auto', ...leftColumnStyle }}
+      >
         <BrandPill
           isOpen={cutlineMenuOpen}
           onClick={onCutlineClick}
-          transformRef={transformRef}
           fullWidth={sideColumnWidth != null}
         />
       </div>
       <div
+        className="cutline-top-bar__center"
         style={{
           pointerEvents: 'none',
           display: 'flex',
@@ -647,11 +488,12 @@ export default function TopBar({
       </div>
       <div
         ref={userClusterRef}
+        className="cutline-top-bar__trailing"
         style={{
           pointerEvents: 'auto',
           display: 'flex',
           justifyContent: 'flex-end',
-          ...sideColumnStyle,
+          ...rightColumnStyle,
         }}
       >
         <UserCluster

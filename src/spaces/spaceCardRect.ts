@@ -1,7 +1,5 @@
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { useStudioCentrePositionStore } from '../canvas/studioCentrePositionStore'
-import { mainCanvasLogicalBleedOffset } from '../drawing/canvasCoords'
-import { STUDIO_CONTENT_SCALE } from '../drawing/canvasDimensions'
 import type { SpaceCanvasItem } from '../canvasItems/types'
 import { useCanvasWorkspaceStore } from './canvasWorkspaceStore'
 import type { SpaceCamera } from './types'
@@ -21,13 +19,11 @@ export function canvasItemTransformRect(item: CanvasItemRect): CanvasItemRect {
   }
 
   const { x: studioX, y: studioY } = useStudioCentrePositionStore.getState()
-  const s = STUDIO_CONTENT_SCALE
-  const bleed = mainCanvasLogicalBleedOffset()
   return {
-    x: bleed + studioX + item.x * s,
-    y: bleed + studioY + item.y * s,
-    width: item.width * s,
-    height: item.height * s,
+    x: studioX + item.x,
+    y: studioY + item.y,
+    width: item.width,
+    height: item.height,
   }
 }
 

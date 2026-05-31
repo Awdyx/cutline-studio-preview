@@ -7,6 +7,7 @@ import { phonePanelSheetStyle, phoneTopPanelSlideMotion, phoneTopPanelTransformO
 import { isSwapChromeMenuTarget } from './chromeMenuDismiss'
 import { partitionNewOld, PanelNewOldDivider } from './PanelNewOldDivider'
 import ChromeScrollFade from './ChromeScrollFade'
+import { chromePanelRight, desktopChromePanelTop } from '../platform/chromeLayout'
 import type { NewsPost, NewsTab } from '../types'
 
 interface NewsPanelProps {
@@ -52,8 +53,8 @@ const metaStyle: React.CSSProperties = {
 
 const cardBase: React.CSSProperties = {
   position: 'fixed',
-  top: 64,
-  right: 124,
+  top: desktopChromePanelTop,
+  right: chromePanelRight(124),
   width: 360,
   maxHeight: 'min(72vh, 520px)',
   ...chromeFrostedMenuStyle,
@@ -254,6 +255,7 @@ export default function NewsPanel({
   return (
     <motion.div
       ref={panelRef}
+      data-top-chrome-panel=""
       className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
       style={{
         ...(isPhone

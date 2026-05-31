@@ -67,6 +67,7 @@ function StudyHubItem({
         onItemResizeStateChange={onItemResizeStateChange}
       >
         <div
+          className={`study-hub-canvas-shell plus-fab-menu-glass${perfDrag ? ' study-hub-widget--perf-drag' : ''}`}
           style={{
             position: 'absolute',
             inset: 0,

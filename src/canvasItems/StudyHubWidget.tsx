@@ -4,12 +4,12 @@ import StudyHubPanel from '../components/study/StudyHubPanel'
 import StudyHubPracticePicker, {
   type StudyPracticeSelection,
 } from '../components/study/StudyHubPracticePicker'
-import { STUDY_SUBJECTS, STUDY_SUBJECT_CATALOG } from '../components/study/studyHubData'
 import {
-  CHROME_PRESERVE_CASE_CLASS,
-  chromeFrostedMenuStyle,
-  font,
-} from '../styles/tokens'
+  STUDY_SUBJECTS,
+  STUDY_SUBJECT_CATALOG,
+  studySubjectProgressPct,
+} from '../components/study/studyHubData'
+import { CHROME_PRESERVE_CASE_CLASS } from '../styles/tokens'
 import type { StudySubjectId } from './types'
 
 const MemoStudyHubPanel = memo(StudyHubPanel)
@@ -32,22 +32,16 @@ export default function StudyHubWidget({
   perfDrag?: boolean
 }) {
   const catalog = STUDY_SUBJECT_CATALOG[subjectId]
-  const SubjectIcon = STUDY_SUBJECTS.find((s) => s.id === subjectId)?.icon
+  if (!catalog) return null
+  const subjectMeta = STUDY_SUBJECTS.find((s) => s.id === subjectId)
+  const SubjectIcon = subjectMeta?.icon
+  const progressPct = subjectMeta
+    ? studySubjectProgressPct(subjectMeta.progress)
+    : null
 
   return (
     <div
-      className={`study-hub-widget theme-surface plus-fab-menu-glass ${CHROME_PRESERVE_CASE_CLASS}${perfDrag ? ' study-hub-widget--perf-drag' : ''}`}
-      style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        ...chromeFrostedMenuStyle,
-        background: 'var(--study-hub-surface-bg, var(--glass-bg))',
-        fontFamily: font.family,
-        color: font.colorPrimary,
-        overflow: 'hidden',
-      }}
+      className={`study-hub-widget theme-surface ${CHROME_PRESERVE_CASE_CLASS}${perfDrag ? ' study-hub-widget--perf-drag' : ''}`}
     >
       {showDismiss && onDismiss && (
         <button
@@ -60,53 +54,37 @@ export default function StudyHubWidget({
           <X size={12} strokeWidth={2} />
         </button>
       )}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '18px 22px 14px',
-          flexShrink: 0,
-        }}
-      >
-        {SubjectIcon && (
-          <SubjectIcon
-            size={20}
-            strokeWidth={1.8}
-            color={font.colorMuted}
-            style={{ flexShrink: 0 }}
-          />
-        )}
-        <div style={{ minWidth: 0 }}>
-          <p
-            style={{
-              margin: 0,
-              fontSize: 18,
-              fontWeight: 600,
-              lineHeight: 1.25,
-              letterSpacing: '0.04em',
-              color: font.colorPrimary,
-            }}
-          >
-            {catalog.paperCode}
-          </p>
+
+      <header className="study-hub-header">
+        <div className="study-hub-header__identity">
+          {SubjectIcon && (
+            <span className="study-hub-header__icon" aria-hidden>
+              <SubjectIcon size={18} strokeWidth={1.85} />
+            </span>
+          )}
+          <div className="study-hub-header__titles">
+            <p className="study-hub-header__code">{catalog.paperCode}</p>
+            <p className="study-hub-header__name">{catalog.fullName}</p>
+          </div>
         </div>
+        {progressPct != null && subjectMeta && (
+          <div className="study-hub-header__progress" aria-label={`${progressPct}% complete`}>
+            <span className="study-hub-header__progress-track" aria-hidden>
+              <span
+                className="study-hub-header__progress-fill"
+                style={{ width: `${progressPct}%` }}
+              />
+            </span>
+            <span className="study-hub-header__progress-label">{progressPct}%</span>
+          </div>
+        )}
       </header>
 
       <StudyHubPracticePicker value={practice} onChange={onPracticeChange} />
 
       <div
         ref={scrollRef}
-        className="study-hub-scroll"
-        style={{
-          flex: 1,
-          overflowY: perfDrag ? 'hidden' : 'auto',
-          padding: '10px 22px 22px',
-          minHeight: 0,
-          touchAction: 'pan-y',
-          overscrollBehavior: 'contain',
-          pointerEvents: perfDrag ? 'none' : undefined,
-        }}
+        className={`study-hub-scroll${perfDrag ? ' study-hub-scroll--perf-drag' : ''}`}
       >
         <MemoStudyHubPanel subjectId={subjectId} practice={practice} />
       </div>

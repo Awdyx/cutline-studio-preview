@@ -23,11 +23,6 @@ import {
   commitStudioCentreDragPosition,
   springBackStudioCentreDragEdge,
 } from './studioCentreVisualDrag'
-import {
-  armStudioCentreDragParallax,
-  clearStudioCentreDragParallax,
-  settleStudioCentreDragParallax,
-} from './studioCentreDragParallax'
 import { useStudioCentreDragStore } from './studioCentreDragStore'
 
 const DRAG_THRESHOLD_PX = 8
@@ -141,7 +136,6 @@ function commitDragStart() {
   session.phase = 'dragging'
   playSound('studioCentreGrab')
   startStudioCentreDragSound()
-  armStudioCentreDragParallax()
   setDragActiveClass(true)
   useStudioCentreDragStore.getState().setStudioCentreDragging(true)
 }
@@ -168,7 +162,6 @@ function finishSession() {
   if (ended) releaseBodyPointerCapture(ended.pointerId)
 
   if (!ended || ended.phase !== 'dragging') {
-    clearStudioCentreDragParallax()
     setDragActiveClass(false)
     if (!hadMove) clearStudioCentreDragTransform()
     clearMinimapPlateDragTransform()
@@ -179,7 +172,6 @@ function finishSession() {
   }
 
   stopStudioCentreDragSound()
-  settleStudioCentreDragParallax()
   if (hadMove) {
     playSound('studioCentreDrop')
 
@@ -442,7 +434,6 @@ export function onStudioCentreMinimapDragPointerDown(
     clearMinimapPlateDragTransform()
     playSound('studioCentreGrab')
     startStudioCentreDragSound()
-    armStudioCentreDragParallax()
     setDragActiveClass(true)
     useStudioCentreDragStore.getState().setMinimapDragging(true)
   }

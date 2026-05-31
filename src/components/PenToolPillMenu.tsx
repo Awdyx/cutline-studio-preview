@@ -6,7 +6,7 @@ import { LassoIcon } from '../drawing/LassoIcon'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import type { PenToolMenuState } from '../drawing/usePenToolMenu'
-import { PILL_PADDING, pillScreenRect, SEGMENT_WIDTH } from '../drawing/penToolMenuLayout'
+import { PILL_PADDING, penToolSegmentWeights, pillScreenRect, SEGMENT_WIDTH } from '../drawing/penToolMenuLayout'
 import type { ToolMode } from '../drawing/toolStore'
 
 const ICON_SIZE = 20
@@ -23,6 +23,13 @@ const PILL_OPEN_SPRING = {
 const PILL_DISMISS_TRANSITION = {
   duration: 0.26,
   ease: [0.45, 0.05, 0.85, 0.45] as const,
+}
+
+const SEGMENT_MORPH_SPRING = {
+  type: 'spring' as const,
+  stiffness: 780,
+  damping: 42,
+  mass: 0.58,
 }
 
 const PILL_COMMIT_TRANSITION = {
@@ -55,10 +62,13 @@ function segmentOriginPercent(index: number, pillWidth: number): string {
 function PillToolIcon({
   Icon,
   emphasized,
+  active = false,
 }: {
   Icon: ComponentType<ToolIconProps>
   emphasized?: boolean
+  active?: boolean
 }) {
+  const iconScale = emphasized ? 1.06 : active ? 1.05 : 0.82
   return (
     <motion.span
       className="pen-tool-pill__icon"
@@ -66,12 +76,12 @@ function PillToolIcon({
       animate={
         emphasized
           ? { scale: [1, 1.22, 1.06], rotate: [0, -4, 0] }
-          : { scale: 1, rotate: 0 }
+          : { scale: iconScale, rotate: 0 }
       }
       transition={
         emphasized
           ? { duration: 0.34, ease: [0.22, 1, 0.36, 1], times: [0, 0.42, 1] }
-          : { duration: 0.16 }
+          : SEGMENT_MORPH_SPRING
       }
     >
       <Icon
@@ -126,6 +136,24 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
     state.committedTool == null
       ? -1
       : tools.findIndex((tool) => tool.mode === state.committedTool)
+
+  const morphing = state.phase === 'open'
+  const pointerX = state.pointerX ?? state.anchorX
+  const menuRail = { guardRail: true as const }
+  const segmentWeights = morphing
+    ? penToolSegmentWeights(
+        pointerX,
+        state.pointerY ?? state.anchorY,
+        state.anchorX,
+        state.anchorY,
+        state.toolOrder,
+        menuRail,
+      )
+    : tools.map((_, index) => (index === committedIndex ? 1.44 : 0.68))
+  const activeIndex =
+    morphing && state.hoveredTool != null
+      ? tools.findIndex((tool) => tool.mode === state.hoveredTool)
+      : committedIndex
 
   const commitOrigin =
     committedIndex >= 0 ? segmentOriginPercent(committedIndex, width) : '100% 50%'
@@ -215,22 +243,29 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
         >
           {tools.map(({ mode, Icon, label }, index) => {
             const hovered = state.hoveredTool === mode
+            const active = morphing ? index === activeIndex : hovered
             const committed = state.committedTool === mode
             const closing = state.phase === 'closing'
             const fadePeer = closing && state.committedTool != null && !committed
+            const weight = segmentWeights[index] ?? 1
+            const prominence = active ? 1 : 0
 
             return (
               <motion.div
                 key={mode}
                 className={[
                   'pen-tool-pill__segment',
-                  hovered && !closing ? 'pen-tool-pill__segment--hovered' : '',
+                  active && morphing ? 'pen-tool-pill__segment--hovered' : '',
                   committed && closing ? 'pen-tool-pill__segment--committed' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
                 role="img"
                 aria-label={label}
+                style={{
+                  flex: weight,
+                  ['--pen-segment-prominence' as string]: prominence,
+                }}
                 initial={
                   reduceMotion
                     ? { opacity: 0 }
@@ -238,15 +273,23 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
                 }
                 animate={
                   fadePeer
-                    ? { opacity: 0, scale: 0.72, y: 0 }
+                    ? { opacity: 0, scale: 0.72, y: 0, flex: 0.68 }
                     : closing && committed
-                      ? { opacity: 1, scale: 1, y: 0 }
+                      ? { opacity: 1, scale: 1, y: 0, flex: weight }
                       : closing
-                        ? { opacity: 0.35, scale: 0.92, y: 2 }
-                        : { opacity: 1, scale: 1, y: 0 }
+                        ? { opacity: 0.35, scale: 0.92, y: 2, flex: weight }
+                        : morphing
+                          ? {
+                              opacity: active ? 1 : 0.52,
+                              scale: active ? 1 : 0.96,
+                              y: 0,
+                              flex: weight,
+                            }
+                          : { opacity: 1, scale: 1, y: 0 }
                 }
                 transition={{
                   delay: motionPhase === 'open' && !reduceMotion ? index * 0.045 + 0.04 : 0,
+                  flex: morphing && !reduceMotion ? SEGMENT_MORPH_SPRING : undefined,
                   duration:
                     motionPhase === 'open'
                       ? 0.28
@@ -258,7 +301,11 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
                   ease: motionPhase === 'open' ? [0.22, 1, 0.36, 1] : [0.4, 0, 0.85, 0.45],
                 }}
               >
-                <PillToolIcon Icon={Icon} emphasized={committed && closing && !reduceMotion} />
+                <PillToolIcon
+                  Icon={Icon}
+                  emphasized={committed && closing && !reduceMotion}
+                  active={active && morphing}
+                />
               </motion.div>
             )
           })}

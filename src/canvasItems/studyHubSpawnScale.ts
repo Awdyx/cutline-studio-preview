@@ -6,7 +6,7 @@ const MIN_SPAWN_SCALE = 0.05
 const MAX_SPAWN_SCALE = 8
 
 /** Default on-canvas footprint relative to design size (1 = full design width). */
-export const STUDY_HUB_SPAWN_SIZE_FACTOR = 0.75
+export const STUDY_HUB_SPAWN_SIZE_FACTOR = 0.62
 
 export function normalizeSpawnScale(spawnScale: number): number {
   if (!Number.isFinite(spawnScale) || spawnScale <= 0) return 1

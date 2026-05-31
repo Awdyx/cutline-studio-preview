@@ -123,6 +123,7 @@ export const font = {
 /** Fixed bottom-right chrome — safe-area aware, sits flush in the visual viewport corner. */
 export const chromeBottomRightFixed: CSSProperties = {
   position: 'fixed',
-  bottom: 'max(16px, env(safe-area-inset-bottom, 0px))',
+  bottom:
+    'calc(max(16px, env(safe-area-inset-bottom, 0px)) + var(--chrome-outer-nudge, 0px))',
   zIndex: 20,
 }

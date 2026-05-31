@@ -174,23 +174,3 @@ export function clearHistory(): void {
   future = []
   syncHistoryUi()
 }
-
-/** Inline data URLs still present on items in undo/redo stacks. */
-export function findHistoryMediaSrc(
-  mediaId: string,
-  itemId?: string,
-): string | null {
-  const candidates = [
-    ...useCanvasItemsStore.getState().items,
-    ...past.flatMap((snap) => snap.items),
-    ...future.flatMap((snap) => snap.items),
-  ]
-
-  for (const item of candidates) {
-    if (item.type !== 'image' && item.type !== 'video') continue
-    if (item.mediaId !== mediaId && item.id !== itemId) continue
-    const src = (item as { src?: string }).src
-    if (typeof src === 'string' && src.startsWith('data:')) return src
-  }
-  return null
-}

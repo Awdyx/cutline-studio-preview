@@ -1,5 +1,4 @@
 import { useEffect, type RefObject } from 'react'
-import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 
 /** Keep wheel / trackpad scroll inside a canvas item instead of panning the canvas. */
 export function useCanvasItemScrollCapture(ref: RefObject<HTMLElement | null>) {
@@ -8,7 +7,6 @@ export function useCanvasItemScrollCapture(ref: RefObject<HTMLElement | null>) {
     if (!el) return
 
     function onWheel(event: WheelEvent) {
-      if (useCanvasNavigationStore.getState().trackpadPanLockActive) return
       event.stopPropagation()
     }
 

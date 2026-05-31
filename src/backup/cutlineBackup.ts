@@ -2,6 +2,7 @@ import { del, get, keys, set } from 'idb-keyval'
 import { mediaBlobStore } from '../media/mediaBlobStore'
 import {
   isCutlineStorageKey,
+  scopedIdbName,
   scopedStorageKey,
 } from '../storage/storageScope'
 import {
@@ -14,8 +15,10 @@ import {
   disableWorkspacePersist,
   useCanvasWorkspaceStore,
 } from '../spaces/canvasWorkspaceStore'
+import { clearHistory } from '../canvasHistory/canvasHistory'
 
 export const CUTLINE_BACKUP_FORMAT_VERSION = 2
+const LEGACY_BACKUP_FORMAT_VERSION = 1
 
 /** Keys that are per-device / ephemeral — never export or restore. */
 const EPHEMERAL_STORAGE_SUFFIXES = ['cutline-klipy-customer-id', 'cutline-app-access-v1']
@@ -26,7 +29,7 @@ export type SerializedBlob = {
 }
 
 export type CutlineBackupFile = {
-  formatVersion: typeof CUTLINE_BACKUP_FORMAT_VERSION | 1
+  formatVersion: typeof CUTLINE_BACKUP_FORMAT_VERSION | typeof LEGACY_BACKUP_FORMAT_VERSION
   exportedAt: string
   /** Unscoped `cutline-*` keys for cross-deployment portability. */
   localStorage: Record<string, string>
@@ -120,10 +123,39 @@ async function writeAllMediaBlobs(
   }
 }
 
+async function clearAllMediaBlobs(): Promise<void> {
+  const existing = await keys(mediaBlobStore)
+  for (const key of existing) {
+    if (typeof key === 'string') await del(key, mediaBlobStore)
+  }
+}
+
+async function deleteIndexedDbByName(name: string): Promise<void> {
+  if (typeof indexedDB === 'undefined') return
+  await new Promise<void>((resolve) => {
+    const request = indexedDB.deleteDatabase(name)
+    request.onsuccess = () => resolve()
+    request.onerror = () => resolve()
+    request.onblocked = () => resolve()
+  })
+}
+
+async function deleteCutlineIndexedDbsForScope(): Promise<void> {
+  const names = Array.from(
+    new Set([
+      scopedIdbName('cutline-media'),
+      scopedIdbName('cutline-profile'),
+    ]),
+  )
+  await Promise.all(names.map((name) => deleteIndexedDbByName(name)))
+}
+
 function isCutlineBackupFile(value: unknown): value is CutlineBackupFile {
   if (!value || typeof value !== 'object') return false
   const o = value as CutlineBackupFile
-  const versionOk = o.formatVersion === 1 || o.formatVersion === CUTLINE_BACKUP_FORMAT_VERSION
+  const versionOk =
+    o.formatVersion === LEGACY_BACKUP_FORMAT_VERSION ||
+    o.formatVersion === CUTLINE_BACKUP_FORMAT_VERSION
   return (
     versionOk &&
     typeof o.exportedAt === 'string' &&
@@ -136,43 +168,9 @@ function isCutlineBackupFile(value: unknown): value is CutlineBackupFile {
   )
 }
 
-/** Flush in-memory stores so localStorage reflects the latest canvas + settings. */
-export function flushAllPersistedState(): void {
-  try {
-    useCanvasWorkspaceStore.getState().flushPersistWorkspace()
-  } catch {
-    // Store may not be mounted yet during dev seed capture.
-  }
-}
-
-/** Write backup payload into localStorage + IndexedDB (no reload).
- *  Ephemeral keys (app-access, klipy id) are left untouched so importing a
- *  backup or applying the bundled default seed never re-locks the device. */
-export async function applyCutlineBackupData(
-  backup: CutlineBackupFile,
-): Promise<void> {
-  for (let i = localStorage.length - 1; i >= 0; i--) {
-    const key = localStorage.key(i)
-    if (key && isCutlineStorageKey(key) && !isEphemeralStorageKey(key)) {
-      localStorage.removeItem(key)
-    }
-  }
-
-  for (const [rawKey, value] of Object.entries(backup.localStorage)) {
-    const baseKey = unscopedCutlineStorageKey(rawKey)
-    if (!baseKey.startsWith('cutline-') || isEphemeralStorageKey(baseKey)) continue
-    if (typeof value !== 'string') continue
-    localStorage.setItem(scopedCutlineStorageKeyFromBase(baseKey), value)
-  }
-
-  await writeAllMediaBlobs(backup.mediaBlobs ?? {})
-  await saveProfileAvatar(backup.profileImages?.avatar ?? null)
-  await saveProfileBanner(backup.profileImages?.banner ?? null)
-}
-
 /** Snapshot canvas, settings, media blobs, and profile images into a downloadable JSON file. */
 export async function exportCutlineBackup(): Promise<CutlineBackupFile> {
-  flushAllPersistedState()
+  useCanvasWorkspaceStore.getState().flushPersistWorkspace()
 
   const [mediaBlobs, avatar, banner] = await Promise.all([
     readAllMediaBlobs(),
@@ -220,53 +218,8 @@ export async function parseCutlineBackupFile(
 
 /** Replace local storage and IndexedDB, then reload so all stores rehydrate. */
 export async function importCutlineBackup(backup: CutlineBackupFile): Promise<void> {
-  flushAllPersistedState()
-  await applyCutlineBackupData(backup)
-  window.location.reload()
-}
+  useCanvasWorkspaceStore.getState().flushPersistWorkspace()
 
-/** True when the user already has saved Cutline data on this origin. */
-export function hasExistingCutlineData(): boolean {
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-    if (!key || !isCutlineStorageKey(key) || isEphemeralStorageKey(key)) continue
-    return true
-  }
-  return false
-}
-
-/** Wipe all Cutline data from localStorage + IndexedDB, then reload so the
- *  bundled default seed is re-applied for a clean "reset to defaults".
- *  Ephemeral keys (app-access, klipy id) are preserved so the user
- *  is not locked out after the reset.
- *
- *  Persistence is disabled *before* clearing: useCanvasCameraPersist flushes
- *  workspace state to localStorage on beforeunload/pagehide/visibilitychange,
- *  and a debounced save may still be pending. Either would re-write the
- *  workspace key during the reload, which makes the next boot think data still
- *  exists and skip the default seed (the old canvas reappears). Turning
- *  persistence off neutralises all of those writers regardless of event
- *  ordering. */
-export async function resetCutlineData(): Promise<void> {
-  disableWorkspacePersist()
-
-  try {
-    const allKeys = await keys(mediaBlobStore)
-    for (const key of allKeys) {
-      if (typeof key === 'string') await del(key, mediaBlobStore)
-    }
-  } catch {
-    // IndexedDB unavailable — continue with reload.
-  }
-  try {
-    await saveProfileAvatar(null)
-    await saveProfileBanner(null)
-  } catch {
-    // ignore
-  }
-
-  // Clear localStorage last (synchronously, right before reload) so anything
-  // written during the awaits above is also removed and the page boots clean.
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const key = localStorage.key(i)
     if (key && isCutlineStorageKey(key) && !isEphemeralStorageKey(key)) {
@@ -274,27 +227,48 @@ export async function resetCutlineData(): Promise<void> {
     }
   }
 
+  for (const [rawKey, value] of Object.entries(backup.localStorage)) {
+    const baseKey = unscopedCutlineStorageKey(rawKey)
+    if (!baseKey.startsWith('cutline-') || isEphemeralStorageKey(baseKey)) continue
+    if (typeof value !== 'string') continue
+    localStorage.setItem(scopedCutlineStorageKeyFromBase(baseKey), value)
+  }
+
+  await writeAllMediaBlobs(backup.mediaBlobs ?? {})
+  await saveProfileAvatar(backup.profileImages?.avatar ?? null)
+  await saveProfileBanner(backup.profileImages?.banner ?? null)
+
   window.location.reload()
 }
 
-/** Whether IndexedDB already holds canvas media or profile images for this scope. */
-export async function hasExistingCutlineMedia(): Promise<boolean> {
-  try {
-    const mediaKeys = await keys(mediaBlobStore)
-    if (mediaKeys.length > 0) return true
-  } catch {
-    // IndexedDB unavailable — fall back to localStorage-only check.
+/** Wipe all persisted Cutline data for the current build scope, then reload. */
+export async function resetCutlineData(): Promise<void> {
+  disableWorkspacePersist()
+  clearHistory()
+
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i)
+    if (key && isCutlineStorageKey(key)) {
+      localStorage.removeItem(key)
+    }
   }
 
   try {
-    const [avatar, banner] = await Promise.all([
-      loadProfileAvatar(),
-      loadProfileBanner(),
-    ])
-    if (avatar || banner) return true
-  } catch {
-    // ignore
+    await clearAllMediaBlobs()
+  } catch (err) {
+    console.warn('[reset] failed to clear media blobs', err)
+  }
+  try {
+    await saveProfileAvatar(null)
+    await saveProfileBanner(null)
+  } catch (err) {
+    console.warn('[reset] failed to clear profile images', err)
+  }
+  try {
+    await deleteCutlineIndexedDbsForScope()
+  } catch (err) {
+    console.warn('[reset] failed to delete IndexedDB databases', err)
   }
 
-  return false
+  window.location.reload()
 }

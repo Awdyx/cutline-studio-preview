@@ -66,7 +66,12 @@ export function focusStudyHubOnCanvas(
     suppressZMenu: true,
     menuFocusReturnCamera: returnCamera,
   })
-  focusItemOnCanvas(transformRef, item, studyHubMenuFocusFitOptions())
+  focusItemOnCanvas(transformRef, item, {
+    ...studyHubMenuFocusFitOptions(),
+    onComplete: () => {
+      useCanvasItemsStore.getState().revealMenuFocus()
+    },
+  })
   return true
 }
 
@@ -85,6 +90,7 @@ export function dismissStudyHubMenuFocus(
   if (!returnCamera) return false
 
   useCanvasItemsStore.setState({
+    menuFocusRevealed: false,
     menuFocusDismissing: true,
     menuFocusDismissItemId: dismissItemId,
   })

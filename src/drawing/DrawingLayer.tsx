@@ -43,7 +43,7 @@ const CompletedStrokePath = memo(function CompletedStrokePath({
   stroke: Stroke
   fill: string
 }) {
-  const d = strokeToSvgPath(stroke, false) || stroke.path
+  const d = stroke.path ?? strokeToSvgPath(stroke, true)
   if (!d) return null
   return <path d={d} fill={fill} />
 })
@@ -142,6 +142,7 @@ function StrokeSvgLayer({
 
   return (
     <svg
+      className="cutline-stroke-svg"
       width={svgWidth}
       height={svgHeight}
       viewBox={`${-bleedPad} ${-bleedPad} ${svgWidth} ${svgHeight}`}
@@ -181,6 +182,7 @@ function StrokeSvgLayer({
       )}
 
       <g
+        className="cutline-stroke-highlighter-blend"
         style={{
           mixBlendMode: highlighterBlend,
           filter: isDark ? `url(#${glowFilterId})` : undefined,

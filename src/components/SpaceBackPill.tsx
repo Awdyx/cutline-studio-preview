@@ -16,6 +16,7 @@ import {
   isDefaultSpaceName,
 } from '../spaces/types'
 import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, glass, font } from '../styles/tokens'
+import { desktopChromePanelAnchorLeft, desktopChromePanelTop } from '../platform/chromeLayout'
 
 const SPACE_NAME_PLACEHOLDER = DEFAULT_SPACE_NAME_PLACEHOLDER
 
@@ -45,8 +46,8 @@ export const SPACE_BACK_PILL_MOTION = {
   },
   style: {
     position: 'fixed',
-    top: 64,
-    left: 16,
+    top: desktopChromePanelTop,
+    left: desktopChromePanelAnchorLeft,
     zIndex: 25,
   } as const,
 }

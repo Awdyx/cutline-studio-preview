@@ -8,7 +8,7 @@ type CanvasMinimapState = {
   setRepositionHintOpen: (open: boolean) => void
 }
 
-/** Expanded fisheye canvas map — boosted trackpad pan everywhere while open. */
+/** Expanded canvas map — boosted trackpad pan everywhere while open. */
 export const useCanvasMinimapStore = create<CanvasMinimapState>((set) => ({
   expandedOpen: false,
   repositionHintOpen: false,

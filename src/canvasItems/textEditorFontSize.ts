@@ -4,6 +4,7 @@ import { STUDIO_SPAWN_SIZE_SCALE } from './types'
 
 export const TEXT_ITEM_DEFAULT_FONT_SIZE = Math.round(16 * STUDIO_SPAWN_SIZE_SCALE)
 export const STICKY_DEFAULT_FONT_SIZE = Math.round(15 * STUDIO_SPAWN_SIZE_SCALE)
+export const SPACE_NAME_DEFAULT_FONT_SIZE = Math.round(16 * STUDIO_SPAWN_SIZE_SCALE)
 
 export const FONT_SIZE_MIN = 8
 export const FONT_SIZE_MAX = 72

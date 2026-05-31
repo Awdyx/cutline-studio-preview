@@ -1,7 +1,6 @@
 import type { CanvasLayer } from '../canvasLock/layer'
 import { generateStrokeId } from '../drawing/strokeId'
 import { strokeToSvgPath } from '../drawing/strokePath'
-import { decimateStrokePoints } from '../drawing/strokePointDecimation'
 import type { DrawTool, Stroke } from '../drawing/types'
 import {
   DEFAULT_SPACE_PREVIEW_PAN,
@@ -44,15 +43,17 @@ function normalizeStroke(raw: unknown): Stroke | null {
   if (points.length < 3) return null
 
   const tool: DrawTool = o.tool === 'highlighter' ? 'highlighter' : 'pen'
-  const decimated = decimateStrokePoints(points)
   const stroke: Stroke = {
     id: typeof o.id === 'string' ? o.id : generateStrokeId(),
-    points: decimated,
+    points,
     color: typeof o.color === 'string' ? o.color : '#4f5568',
     size: typeof o.size === 'number' ? o.size : 4,
     tool,
   }
-  stroke.path = strokeToSvgPath(stroke, true)
+  stroke.path =
+    typeof o.path === 'string' && o.path.length > 0
+      ? o.path
+      : strokeToSvgPath(stroke, false)
   return stroke
 }
 
@@ -125,13 +126,10 @@ function normalizeItem(raw: unknown): CanvasItem | null {
   }
 
   if (o.type === 'image' || o.type === 'video') {
-    const legacySrc = (o as { src?: string }).src
     const mediaId =
       typeof (o as { mediaId?: string }).mediaId === 'string'
         ? (o as { mediaId: string }).mediaId
-        : typeof legacySrc === 'string' && legacySrc.length > 0
-          ? o.id
-          : null
+        : null
     if (!mediaId) return null
     const importWidth = (o as { importWidth?: number }).importWidth
     const importHeight = (o as { importHeight?: number }).importHeight
@@ -167,7 +165,6 @@ function normalizeItem(raw: unknown): CanvasItem | null {
       ...(stickyId ? { stickyId } : {}),
       ...(mainCanvasOrigin ? { mainCanvasOrigin } : {}),
       ...(layer ? { layer } : {}),
-      ...(legacySrc ? { src: legacySrc } : {}),
     } as CanvasItem
   }
 
@@ -177,13 +174,10 @@ function normalizeItem(raw: unknown): CanvasItem | null {
         ? (o as { name: string }).name
         : DEFAULT_SPACE_NAME
     const snapshotIdRaw = (o as { snapshotId?: unknown }).snapshotId
-    const snapshotRaw = (o as { snapshot?: unknown }).snapshot
     const snapshotId =
       typeof snapshotIdRaw === 'string' && snapshotIdRaw.length > 0
         ? snapshotIdRaw
-        : typeof snapshotRaw === 'string' && snapshotRaw.length > 0
-          ? o.id
-          : null
+        : null
     const previewPanRaw = (o as {
       previewPan?: { x?: unknown; y?: unknown; scale?: unknown }
     }).previewPan

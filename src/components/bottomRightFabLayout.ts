@@ -15,7 +15,7 @@ export const PEN_FAB_STRETCH_PEAK_Y = 0.87
 export const PEN_FAB_SOLO_REST_SCALE_X = 1.03
 
 export const bottomRightFabRightCss = (marginPx = BOTTOM_RIGHT_FAB_MARGIN_PX) =>
-  `calc(${marginPx}px + env(safe-area-inset-right, 0px))`
+  `calc(${marginPx}px + env(safe-area-inset-right, 0px) + var(--chrome-outer-nudge, 0px))`
 
 const FAB_SPRING = {
   type: 'spring' as const,
@@ -89,11 +89,23 @@ export function usePenFabSlideStretch(
   return { scaleX, scaleY, transformOrigin }
 }
 
+/**
+ * Per-value transition map for the bottom-right + FAB. Intersecting with
+ * `Transition` keeps it assignable to the `transition` prop while still exposing
+ * the individual value tracks for callers that merge them with other animations.
+ */
+type BottomRightFabPlusTransition = Transition & {
+  opacity?: Transition
+  scale?: Transition
+  filter?: Transition
+  y?: Transition
+}
+
 /** + fades/scales out quickly; pen leads on exit, + trails in on return. */
 export function bottomRightFabPlusTransition(
   chromeVisible: boolean,
   reduceMotion: boolean | null,
-): Transition {
+): BottomRightFabPlusTransition {
   if (reduceMotion) return { duration: 0.12 }
 
   if (chromeVisible) {

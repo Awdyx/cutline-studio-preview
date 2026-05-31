@@ -2,14 +2,14 @@ import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { playSound } from '../sound/playSound'
 import {
-  runCanvasFisheyeEnter,
-  runCanvasFisheyeExit,
-} from './canvasBarrelPostProcess'
-import { useCanvasFisheyeStore } from './canvasFisheyeStore'
+  runCanvasOverviewEnter,
+  runCanvasOverviewExit,
+  toggleCanvasOverview,
+} from './canvasOverviewCamera'
+import { useCanvasOverviewStore } from './canvasOverviewStore'
 import { useCanvasMinimapStore } from './canvasMinimapStore'
-import { useAppDestinationFocusStore } from '../navigation/appDestinationFocusStore'
 
-/** Expand the map overlay while fisheye is already active (collapsed minimap click). */
+/** Expand the map overlay while overview is already active (collapsed minimap click). */
 export function expandCanvasMinimap(): void {
   const minimap = useCanvasMinimapStore.getState()
   if (minimap.expandedOpen) return
@@ -18,9 +18,9 @@ export function expandCanvasMinimap(): void {
   playSound('minimapOpen')
 }
 
-/** Open the expanded map from the studio reposition control (fisheye only). */
+/** Open the expanded map from the studio reposition control (overview only). */
 export function openCanvasMinimapFromReposition(): void {
-  if (!useCanvasFisheyeStore.getState().engaged) return
+  if (!useCanvasOverviewStore.getState().engaged) return
   const minimap = useCanvasMinimapStore.getState()
   if (minimap.expandedOpen) return
   minimap.setRepositionHintOpen(true)
@@ -28,12 +28,12 @@ export function openCanvasMinimapFromReposition(): void {
   playSound('minimapOpen')
 }
 
-/** Open the expanded canvas map — enters fisheye first when needed. */
+/** Open the expanded canvas map, entering overview first when needed. */
 export function openCanvasMinimap(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
 ): void {
-  if (!useCanvasFisheyeStore.getState().engaged) {
-    runCanvasFisheyeEnter(transformRef.current, null)
+  if (!useCanvasOverviewStore.getState().engaged) {
+    runCanvasOverviewEnter(transformRef.current, null)
   }
   const minimap = useCanvasMinimapStore.getState()
   minimap.setRepositionHintOpen(false)
@@ -41,9 +41,9 @@ export function openCanvasMinimap(
   playSound('minimapOpen')
 }
 
-/** Open the map only while fisheye is already active (e.g. right-click void). */
-export function openCanvasMinimapFromFisheye(): boolean {
-  if (!useCanvasFisheyeStore.getState().engaged) return false
+/** Open the map only while overview is already active (e.g. right-click void). */
+export function openCanvasMinimapFromOverview(): boolean {
+  if (!useCanvasOverviewStore.getState().engaged) return false
   const minimap = useCanvasMinimapStore.getState()
   minimap.setRepositionHintOpen(false)
   minimap.setExpandedOpen(true)
@@ -51,7 +51,7 @@ export function openCanvasMinimapFromFisheye(): boolean {
   return true
 }
 
-/** Drop expanded-map UI when leaving fisheye (no close SFX). */
+/** Drop expanded-map UI when leaving overview. */
 export function resetCanvasMinimapUiState(): void {
   const minimap = useCanvasMinimapStore.getState()
   if (!minimap.expandedOpen && !minimap.repositionHintOpen) return
@@ -70,18 +70,17 @@ export function closeCanvasMinimap(): void {
   minimap.setExpandedOpen(false)
 }
 
-/** Escape — close the expanded map and leave fisheye at the current viewport. */
+/** Escape closes the expanded map and leaves overview at the current viewport. */
 export function dismissMinimapMode(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
 ): void {
   closeCanvasMinimap()
-  useAppDestinationFocusStore.getState().setPanLocked(false)
-  if (useCanvasFisheyeStore.getState().engaged) {
-    runCanvasFisheyeExit(transformRef.current, null)
+  if (useCanvasOverviewStore.getState().engaged) {
+    runCanvasOverviewExit(transformRef.current, null)
   }
 }
 
-/** Canvas map shortcut — open (entering fisheye if needed), or close when already open. */
+/** Canvas map shortcut: toggle overview, or close the expanded map when open. */
 export function toggleCanvasMinimap(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
 ): void {
@@ -89,5 +88,5 @@ export function toggleCanvasMinimap(
     closeCanvasMinimap()
     return
   }
-  openCanvasMinimap(transformRef)
+  toggleCanvasOverview(transformRef.current, null)
 }

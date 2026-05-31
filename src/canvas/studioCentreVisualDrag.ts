@@ -5,7 +5,10 @@ import {
   CANVAS_MINIMAP_PLATE_TITLE_LIFT_PX,
   canvasRectToRegionPercent,
 } from './canvasMinimapGeometry'
-import { STUDIO_VISUAL_HEIGHT, STUDIO_VISUAL_WIDTH } from '../drawing/canvasDimensions'
+import {
+  CANVAS_ORIGINAL_HEIGHT,
+  CANVAS_ORIGINAL_WIDTH,
+} from '../drawing/canvasDimensions'
 import { syncStudioCentreLayoutVars } from './studioCentrePosition'
 import {
   isStudioCentreDragEdgeSquishActive,
@@ -16,10 +19,6 @@ import {
   studioCentreDragEdgePressures,
   studioCentreDragEdgeTransform,
 } from './studioCentreDragEdgeBump'
-import {
-  clearStudioCentreDragParallax,
-  syncStudioCentreDragParallax,
-} from './studioCentreDragParallax'
 
 let drawTargetEl: HTMLElement | null = null
 let minimapPlateWrapEl: HTMLElement | null = null
@@ -57,8 +56,8 @@ function syncMinimapPlateLayout(region: CanvasMinimapRect, x: number, y: number)
     {
       x,
       y,
-      width: STUDIO_VISUAL_WIDTH,
-      height: STUDIO_VISUAL_HEIGHT,
+      width: CANVAS_ORIGINAL_WIDTH,
+      height: CANVAS_ORIGINAL_HEIGHT,
     },
     region,
   )
@@ -112,10 +111,6 @@ function applyStudioCentreDragFrameInternal({
   minimapRegion,
 }: StudioCentreDragFrame): void {
   const squish = stepStudioCentreDragEdgeSquish(rawX, rawY)
-  syncStudioCentreDragParallax(
-    minimapDxCanvas ?? drawDx,
-    minimapDyCanvas ?? drawDy,
-  )
   applyDragTransformToEl(drawTargetEl, drawDx, drawDy, squish)
 
   if (
@@ -155,7 +150,6 @@ export function applyMinimapPlateDragTransform(
   rawY: number,
 ): void {
   const squish = stepStudioCentreDragEdgeSquish(rawX, rawY)
-  syncStudioCentreDragParallax(_dxCanvas, _dyCanvas)
   const { clamped } = studioCentreDragEdgePressures(rawX, rawY)
   syncStudioCentreLayoutVars(clamped.x, clamped.y)
   syncMinimapPlateLayout(region, clamped.x, clamped.y)
@@ -166,7 +160,6 @@ export function applyMinimapPlateDragTransform(
 export function clearStudioCentreDragTransform(): void {
   cancelStudioCentreDragEdgeSpringBack()
   resetStudioCentreDragEdgeSquish()
-  clearStudioCentreDragParallax()
   if (!drawTargetEl) return
   drawTargetEl.style.transform = ''
   drawTargetEl.style.removeProperty('transform-origin')

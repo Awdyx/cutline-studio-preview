@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { playSound } from '../sound/playSound'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { Download, Keyboard, Settings, ChevronRight, Sparkles, Upload, RotateCcw } from 'lucide-react'
+import { Download, Keyboard, Settings, ChevronRight, Sparkles, Upload, RotateCcw, TriangleAlert } from 'lucide-react'
 import {
   downloadCutlineBackupFile,
   exportCutlineBackup,
@@ -27,7 +27,8 @@ import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
-import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
+import { desktopChromePanelAnchorLeft, desktopChromePanelTop } from '../platform/chromeLayout'
+
 interface CutlineMenuProps {
   isOpen: boolean
   onClose: (opts?: { silent?: boolean }) => void
@@ -58,6 +59,8 @@ export default function CutlineMenu({
   const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false)
   const [shortcutsSubmenuOpen, setShortcutsSubmenuOpen] = useState(false)
   const [backupBusy, setBackupBusy] = useState(false)
+  const [resetArmed, setResetArmed] = useState(false)
+  const resetArmTimerRef = useRef<number | null>(null)
 
   const closeAllSubmenus = useCallback(() => {
     setSettingsSubmenuOpen(false)
@@ -78,6 +81,14 @@ export default function CutlineMenu({
     useShortcutUiStore.getState().registerCutlineMenu({ closeSubmenus: closeAllSubmenus })
     return () => useShortcutUiStore.getState().registerCutlineMenu(null)
   }, [closeAllSubmenus])
+
+  useEffect(() => {
+    return () => {
+      if (resetArmTimerRef.current !== null) {
+        window.clearTimeout(resetArmTimerRef.current)
+      }
+    }
+  }, [])
 
   const hasFlyoutSubmenu =
     settingsSubmenuOpen || (!isPhone && shortcutsSubmenuOpen)
@@ -136,7 +147,7 @@ export default function CutlineMenu({
       if (!file) return
 
       const confirmed = window.confirm(
-        'Import will replace your current canvas, pockets, studio layout, menu pins, shortcuts, theme, sound settings, tools, and profile images. Continue?',
+        'Import will replace your current canvas, pockets, menu layout, shortcuts, theme, and profile images. Continue?',
       )
       if (!confirmed) return
 
@@ -158,24 +169,54 @@ export default function CutlineMenu({
 
   const handleReset = useCallback(async () => {
     if (backupBusy) return
+    if (!resetArmed) {
+      setResetArmed(true)
+      if (resetArmTimerRef.current !== null) {
+        window.clearTimeout(resetArmTimerRef.current)
+      }
+      resetArmTimerRef.current = window.setTimeout(() => {
+        setResetArmed(false)
+        resetArmTimerRef.current = null
+      }, 5500)
+      useShortcutUiStore.getState().showActionToast({
+        shortcutId: 'cutline-reset-armed',
+        label: 'Tap reset again to erase everything',
+        keys: [],
+        icon: TriangleAlert,
+        holdMs: 3200,
+      })
+      return
+    }
+
+    if (resetArmTimerRef.current !== null) {
+      window.clearTimeout(resetArmTimerRef.current)
+      resetArmTimerRef.current = null
+    }
+    setResetArmed(false)
     closeAllSubmenus()
-    const confirmed = window.confirm(
-      'Reset to defaults? This will clear your entire canvas, settings, and all saved data. This cannot be undone.',
-    )
-    if (!confirmed) return
     setBackupBusy(true)
+    onClose({ silent: true })
     try {
       await resetCutlineData()
     } catch (err) {
       console.warn('[reset] failed', err)
+      useShortcutUiStore.getState().showActionToast({
+        shortcutId: 'cutline-reset-failed',
+        label: "Couldn't reset data",
+        keys: [],
+        icon: TriangleAlert,
+        holdMs: 3400,
+      })
       setBackupBusy(false)
+      setResetArmed(false)
     }
-  }, [backupBusy, closeAllSubmenus])
+  }, [backupBusy, closeAllSubmenus, onClose, resetArmed])
 
   return (
     <>
       <motion.div
         ref={panelRef}
+        data-top-chrome-panel=""
         {...(isPhone ? phoneSubmenuSlideMotion : {
           initial: { opacity: 0, scale: 0.96, y: -4 },
           animate: { opacity: 1, scale: 1, y: 0 },
@@ -187,8 +228,8 @@ export default function CutlineMenu({
             ? phonePanelSheetStyle({ display: 'flex', flexDirection: 'column' })
             : {
                 position: 'fixed',
-                top: 64,
-                left: 16,
+                top: desktopChromePanelTop,
+                left: desktopChromePanelAnchorLeft,
                 width: 260,
               }),
           ...chromeFrostedMenuStyle,
@@ -215,7 +256,7 @@ export default function CutlineMenu({
             userSelect: 'none',
           }}
         >
-          v1.7 alpha
+          v1.21
         </span>
         <SubmenuSoundScope>
         <CutlineAppNavSection onNavigate={onClose} transformRef={transformRef} />
@@ -229,8 +270,9 @@ export default function CutlineMenu({
         />
         <MenuRow
           icon={RotateCcw}
-          label="Reset to Defaults"
+          label={resetArmed ? 'Confirm Reset (No Undo)' : 'Reset to Defaults'}
           inset
+          destructive
           disabled={backupBusy}
           onClick={() => void handleReset()}
         />

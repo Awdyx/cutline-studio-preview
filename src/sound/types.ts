@@ -26,8 +26,6 @@ export type SoundId =
   | 'zOrderFront'
   | 'zOrderBack'
   | 'aspectSnap'
-  | 'fisheyeEnter'
-  | 'fisheyeExit'
   | 'minimapOpen'
   | 'minimapClose'
   | 'textCommit'

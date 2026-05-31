@@ -224,6 +224,7 @@ export function PreviewStudyHubItem({
   opacity?: number
 }) {
   const catalog = STUDY_SUBJECT_CATALOG[item.subjectId]
+  if (!catalog) return null
   const cardBg =
     effectiveMode === 'light'
       ? 'rgba(255, 255, 255, 0.85)'

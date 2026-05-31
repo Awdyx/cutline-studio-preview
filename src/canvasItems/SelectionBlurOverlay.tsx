@@ -23,7 +23,9 @@ function selectionScrimStyle(): React.CSSProperties {
 export default function SelectionBlurOverlay() {
   const show = useCanvasItemsStore((s) => s.selectedIds.length > 0)
   const menuFocusBlocksInteraction = useCanvasItemsStore(
-    (s) => s.menuFocusReturnCamera != null || s.menuFocusDismissing,
+    (s) =>
+      (s.menuFocusReturnCamera != null && s.menuFocusRevealed) ||
+      s.menuFocusDismissing,
   )
   const isLassoActive = useLassoStore(
     (s) => s.selectedStrokeIds.length > 0 || s.selectedItemIds.length > 0,

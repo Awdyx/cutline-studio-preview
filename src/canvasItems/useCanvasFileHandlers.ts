@@ -154,9 +154,14 @@ export function useCanvasFileHandlers(
       }
 
       const spawnScale = readCanvasTransformScale(transformRef)
-      useCanvasItemsStore
+      const id = useCanvasItemsStore
         .getState()
         .addStudyHub(canvasX, canvasY, subjectId, spawnScale)
+      if (id) {
+        requestAnimationFrame(() => {
+          focusStudyHubOnCanvas(transformRef.current, id)
+        })
+      }
     },
     [transformRef],
   )

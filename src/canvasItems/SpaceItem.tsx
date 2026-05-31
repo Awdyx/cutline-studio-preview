@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
+import { SPACE_NAME_DEFAULT_FONT_SIZE } from './textEditorFontSize'
 import { playSound } from '../sound/playSound'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
@@ -364,23 +365,6 @@ export default function SpaceItem({
         willChange: dragLift ? 'filter' : undefined,
       }}
     >
-      {!frozen && (
-        <div data-lock-flatten-skip>
-          {!hideDragHandle && (
-            <DragHandle
-              placement={grabHandlePlacement}
-              onPointerDown={(e) => onGrabPointerDown(e, { onReleaseWithoutDrag: selectSelf })}
-              hitSize={handleHitSize}
-            />
-          )}
-          <ResizeHandle
-            onPointerDown={onResizeDown}
-            cornerOutset={SPACE_RESIZE_CORNER_OUTSET}
-            hitSize={handleHitSize}
-          />
-        </div>
-      )}
-
       {/* Stacked card shadow */}
       <div
         aria-hidden
@@ -422,8 +406,8 @@ export default function SpaceItem({
       >
         <div
           style={{
-            padding: '10px 12px 14px',
-            fontSize: 16,
+            padding: '7px 8px 9px',
+            fontSize: SPACE_NAME_DEFAULT_FONT_SIZE,
             fontWeight: 500,
             lineHeight: 1.35,
             flexShrink: 0,
@@ -591,6 +575,22 @@ export default function SpaceItem({
           )}
         </div>
       </div>
+      {!frozen && (
+        <div data-lock-flatten-skip style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6 }}>
+          {!hideDragHandle && (
+            <DragHandle
+              placement={grabHandlePlacement}
+              onPointerDown={(e) => onGrabPointerDown(e, { onReleaseWithoutDrag: selectSelf })}
+              hitSize={handleHitSize}
+            />
+          )}
+          <ResizeHandle
+            onPointerDown={onResizeDown}
+            cornerOutset={SPACE_RESIZE_CORNER_OUTSET}
+            hitSize={handleHitSize}
+          />
+        </div>
+      )}
     </motion.div>
   )
 }

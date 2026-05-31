@@ -1,6 +1,6 @@
 import { isStudyHubMenuFocusActive } from '../canvasItems/studyHubMenuFocus'
 import { isPointInAnyCanvasPlateAcousticsZone } from '../canvas/canvasPlate'
-import { useCanvasFisheyeStore } from '../canvas/canvasFisheyeStore'
+import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import {
   backgroundMusic,
@@ -10,9 +10,23 @@ import {
 let lastMode: BackgroundMusicAcousticsMode | null = null
 /** Last sampled main-canvas viewport position relative to the acoustics zone. */
 let lastViewportInAcousticsZone: boolean | null = null
+let candidateViewportInAcousticsZone: boolean | null = null
+let candidateViewportSinceMs = 0
+
+/** Avoid seam thrash while panning across acoustics boundaries. */
+const ACOUSTICS_ZONE_ENTER_HOLD_MS = 70
+const ACOUSTICS_ZONE_EXIT_HOLD_MS = 180
 
 export type BackgroundMusicAcousticsSyncOptions = {
   viewportCenter?: { x: number; y: number } | null
+}
+
+export type BackgroundMusicAcousticsDebugState = {
+  lastMode: BackgroundMusicAcousticsMode | null
+  currentMode: BackgroundMusicAcousticsMode
+  lastViewportInAcousticsZone: boolean | null
+  candidateViewportInAcousticsZone: boolean | null
+  candidateViewportSinceMs: number
 }
 
 function sampleViewportAcousticsZone(
@@ -25,10 +39,33 @@ function sampleViewportAcousticsZone(
   ) {
     return
   }
-  lastViewportInAcousticsZone = isPointInAnyCanvasPlateAcousticsZone(
-    center.x,
-    center.y,
-  )
+  const rawInZone = isPointInAnyCanvasPlateAcousticsZone(center.x, center.y)
+  if (lastViewportInAcousticsZone === null) {
+    lastViewportInAcousticsZone = rawInZone
+    candidateViewportInAcousticsZone = null
+    return
+  }
+
+  if (rawInZone === lastViewportInAcousticsZone) {
+    candidateViewportInAcousticsZone = null
+    return
+  }
+
+  const nowMs =
+    typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (candidateViewportInAcousticsZone !== rawInZone) {
+    candidateViewportInAcousticsZone = rawInZone
+    candidateViewportSinceMs = nowMs
+    return
+  }
+
+  const holdMs = rawInZone
+    ? ACOUSTICS_ZONE_ENTER_HOLD_MS
+    : ACOUSTICS_ZONE_EXIT_HOLD_MS
+  if (nowMs - candidateViewportSinceMs >= holdMs) {
+    lastViewportInAcousticsZone = rawInZone
+    candidateViewportInAcousticsZone = null
+  }
 }
 
 /** Main canvas — wait for a viewport sample before assuming open acoustics. */
@@ -37,11 +74,11 @@ function shouldDeferMainCanvasAcousticsSync(): boolean {
   if (workspace.canvasSwapMode != null) return false
   if (workspace.isInsideSpace()) return false
   if (isStudyHubMenuFocusActive()) return false
-  if (useCanvasFisheyeStore.getState().engaged) return false
+  if (useCanvasOverviewStore.getState().engaged) return false
   return lastViewportInAcousticsZone === null
 }
 
-/** Resolve ambient music acoustics from workspace, fisheye, and viewport position. */
+/** Resolve ambient music acoustics from workspace, overview, and viewport position. */
 export function resolveBackgroundMusicAcousticsMode(
   opts?: BackgroundMusicAcousticsSyncOptions,
 ): BackgroundMusicAcousticsMode {
@@ -61,7 +98,7 @@ export function resolveBackgroundMusicAcousticsMode(
   if (workspace.canvasSwapMode === 'exit') return 'open'
   if (workspace.isInsideSpace() || isStudyHubMenuFocusActive()) return 'enclosed'
 
-  if (useCanvasFisheyeStore.getState().engaged) return 'open'
+  if (useCanvasOverviewStore.getState().engaged) return 'open'
 
   if (lastViewportInAcousticsZone === false) return 'distant'
 
@@ -92,11 +129,26 @@ export function syncBackgroundMusicEnclosedAcoustics(
 export function resetBackgroundMusicAcousticsCache(): void {
   lastMode = null
   lastViewportInAcousticsZone = null
+  candidateViewportInAcousticsZone = null
+  candidateViewportSinceMs = 0
 }
 
 /** Drop the last viewport sample so acoustics re-resolve after camera restore. */
 export function invalidateBackgroundMusicAcousticsViewportSample(): void {
   lastViewportInAcousticsZone = null
+  candidateViewportInAcousticsZone = null
+  candidateViewportSinceMs = 0
+}
+
+/** Debug-only snapshot for in-app diagnostics overlays. */
+export function readBackgroundMusicAcousticsDebugState(): BackgroundMusicAcousticsDebugState {
+  return {
+    lastMode,
+    currentMode: backgroundMusic.getAcousticsMode(),
+    lastViewportInAcousticsZone,
+    candidateViewportInAcousticsZone,
+    candidateViewportSinceMs,
+  }
 }
 
 /** @deprecated Use resetBackgroundMusicAcousticsCache */

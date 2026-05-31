@@ -27,7 +27,6 @@ export function useTextEditorShortcuts(
   const modifierLatchRef = useRef(false)
   const holdDirectionRef = useRef<FontSizeDirection | null>(null)
   const bracketEngagedRef = useRef(false)
-  const osBracketRepeatRef = useRef(false)
   const lastBracketPulseRef = useRef(0)
 
   useEffect(() => {
@@ -38,7 +37,6 @@ export function useTextEditorShortcuts(
       fontSizeHoldRef.current = null
       holdDirectionRef.current = null
       bracketEngagedRef.current = false
-      osBracketRepeatRef.current = false
       lastBracketPulseRef.current = 0
     }
 
@@ -49,9 +47,8 @@ export function useTextEditorShortcuts(
       }
     }
 
-    function pulseBracketShortcut(event: KeyboardEvent) {
+    function pulseBracketShortcut() {
       lastBracketPulseRef.current = performance.now()
-      if (event.repeat) osBracketRepeatRef.current = true
     }
 
     function trackKeyDown(event: KeyboardEvent) {
@@ -80,13 +77,11 @@ export function useTextEditorShortcuts(
     function bracketStillHeld() {
       if (!bracketEngagedRef.current) return false
       if (!modifierStillHeld()) return false
-      if (osBracketRepeatRef.current) {
-        return (
-          performance.now() - lastBracketPulseRef.current <
-          BRACKET_PULSE_TIMEOUT_MS
-        )
-      }
-      return true
+      // Bracket keyup is often missing while ⌘ is held — stop when key-repeat pulses end.
+      return (
+        performance.now() - lastBracketPulseRef.current <
+        BRACKET_PULSE_TIMEOUT_MS
+      )
     }
 
     function onBracketKeyUp(event: KeyboardEvent) {
@@ -122,7 +117,7 @@ export function useTextEditorShortcuts(
 
       if (isFontSizeShortcut(event)) {
         event.stopPropagation()
-        pulseBracketShortcut(event)
+        pulseBracketShortcut()
 
         if (!event.repeat) {
           handleFontSizeShortcutEvent(event, editor, defaultFontSize, onFormatApplied)
@@ -132,7 +127,6 @@ export function useTextEditorShortcuts(
           if (direction) {
             modifierLatchRef.current = event.metaKey || event.ctrlKey
             bracketEngagedRef.current = true
-            osBracketRepeatRef.current = false
             // Bracket keyup is often missing while ⌘ is held — don't trust keysDown for ].
             for (const code of FONT_SIZE_BRACKET_KEY_CODES) {
               keysDownRef.current.delete(code)

@@ -1,12 +1,12 @@
 import { useCallback, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { useCanvasFisheyeStore } from './canvasFisheyeStore'
+import { useCanvasOverviewStore } from './canvasOverviewStore'
 import {
   CANVAS_TAP_MOVE_THRESHOLD_PX,
   watchPendingTouchTap,
 } from './pointerTapGesture'
-import { runCanvasFisheyeExit } from './canvasBarrelPostProcess'
+import { runCanvasOverviewExit } from './canvasOverviewCamera'
 import {
   startStudioCentreDragAtScreen,
   STUDIO_CENTRE_HOLD_DRAG_PAN_EXCLUDE_CLASS,
@@ -37,7 +37,7 @@ function releasePointerFromBody(pointerId: number) {
 export function useStudioCentreHoldDrag(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
 ) {
-  const engaged = useCanvasFisheyeStore((s) => s.engaged)
+  const engaged = useCanvasOverviewStore((s) => s.engaged)
   const holdTimerRef = useRef<number | null>(null)
   const holdTargetRef = useRef<HTMLElement | null>(null)
   const holdPointerIdRef = useRef<number | null>(null)
@@ -96,7 +96,7 @@ export function useStudioCentreHoldDrag(
         startY,
         onComplete: () => {
           tapCancelRef.current = null
-          runCanvasFisheyeExit(transformRef.current, { x: startX, y: startY })
+          runCanvasOverviewExit(transformRef.current, { x: startX, y: startY })
         },
         onCancel: () => {
           tapCancelRef.current = null

@@ -2,18 +2,19 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import { PHONE_HEADER_BLOCK_HEIGHT } from '../styles/phoneChrome'
 import {
-  CANVAS_HEIGHT,
   CANVAS_MAX_SCALE,
-  CANVAS_WIDTH,
   CANVAS_ZOOM_EDGE_PADDING,
+  SPACE_CANVAS_HEIGHT,
+  SPACE_CANVAS_WIDTH,
   canvasLayoutHeight,
   canvasLayoutWidth,
   getCanvasMinScale,
   getCanvasHardMinScale,
+  getCanvasOverviewScale,
 } from '../drawing/canvasDimensions'
 import type { SpaceCamera } from '../spaces/types'
-import { EMPTY_EDGE_STRENGTHS } from '../canvasPanVignette'
-import { usePanMotionStore } from '../panMotionStore'
+import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { useCanvasOverviewStore } from './canvasOverviewStore'
 import { logicalMainCanvasPlateToLayoutRect } from '../drawing/canvasCoords'
 import { canvasItemTransformRect } from '../spaces/spaceCardRect'
 
@@ -98,67 +99,21 @@ export function restoreTransformMaxScale(
 
 let activeFocusRaf: number | null = null
 
-const CAMERA_FOCUS_ANIM_ATTR = 'data-camera-focus-anim'
-
-function beginCameraFocusAnimBlur(): void {
-  document.documentElement.setAttribute(CAMERA_FOCUS_ANIM_ATTR, '')
-  usePanMotionStore.getState().setCameraFlyActive(true)
-}
-
-function endCameraFocusAnimBlur(): void {
-  document.documentElement.removeAttribute(CAMERA_FOCUS_ANIM_ATTR)
-  usePanMotionStore.getState().setCameraFlyActive(false)
-  usePanMotionStore.getState().setPanStopped()
-}
-
 export function cancelFocusItemAnimation(): void {
   if (activeFocusRaf !== null) {
     cancelAnimationFrame(activeFocusRaf)
     activeFocusRaf = null
-    endCameraFocusAnimBlur()
   }
 }
 
-function cubicBezierComponent(a: number, b: number, t: number): number {
+function easeInOutCubic(t: number): number {
   const u = 1 - t
-  return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t
+  return 1 - u * u * u * u * u
 }
 
-/** CSS cubic-bezier(x1,y1,x2,y2) — progress in [0,1] → eased value in [0,1]. */
-function cubicBezierEase(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): (progress: number) => number {
-  return (progress: number) => {
-    if (progress <= 0) return 0
-    if (progress >= 1) return 1
-    let lo = 0
-    let hi = 1
-    for (let i = 0; i < 14; i++) {
-      const mid = (lo + hi) / 2
-      if (cubicBezierComponent(x1, x2, mid) < progress) lo = mid
-      else hi = mid
-    }
-    const t = (lo + hi) / 2
-    return cubicBezierComponent(y1, y2, t)
-  }
-}
-
-/** Fly-to destination — quick takeoff, long soft landing (matches chrome motion). */
-const easeCameraFocusIn = cubicBezierEase(0.22, 1, 0.36, 1)
-/** Pull back / dismiss — sustained glide (matches minimap plate navigate). */
-const easeCameraFocusOut = cubicBezierEase(0.37, 0, 0.21, 1)
-
-function cubicPoint(a: number, b: number, c: number, d: number, t: number): number {
+function quadraticPoint(a: number, b: number, c: number, t: number): number {
   const u = 1 - t
-  return (
-    u * u * u * a +
-    3 * u * u * t * b +
-    3 * u * t * t * c +
-    t * t * t * d
-  )
+  return u * u * a + 2 * u * t * b + t * t * c
 }
 
 function focusDurationMs(
@@ -169,29 +124,7 @@ function focusDurationMs(
   if (requestedMs != null) return requestedMs
   const panDist = Math.hypot(end.positionX - start.positionX, end.positionY - start.positionY)
   const scaleDelta = Math.abs(end.scale - start.scale)
-  return Math.min(920, Math.max(620, 520 + panDist * 0.045 + scaleDelta * 280))
-}
-
-/** Padded viewport area used by fit-to-item camera math. */
-export function focusFitAvailableViewportSize(
-  ref: ReactZoomPanPinchContentRef,
-  paddingOverrides?: Pick<
-    FocusItemOptions,
-    'fitPaddingX' | 'fitPaddingTop' | 'fitPaddingBottom'
-  >,
-): { width: number; height: number; aspect: number } | null {
-  const size = wrapperSize(ref)
-  if (!size) return null
-
-  const padding = defaultFitPadding()
-  const paddingX = paddingOverrides?.fitPaddingX ?? padding.paddingX
-  const paddingTop = paddingOverrides?.fitPaddingTop ?? padding.paddingTop
-  const paddingBottom =
-    paddingOverrides?.fitPaddingBottom ?? padding.paddingBottom
-
-  const width = Math.max(1, size.width - paddingX * 2)
-  const height = Math.max(1, size.height - paddingTop - paddingBottom)
-  return { width, height, aspect: width / height }
+  return Math.min(720, Math.max(460, 400 + panDist * 0.06 + scaleDelta * 260))
 }
 
 /** Fit padding for study-hub menu focus — equal gap below search bar and above viewport bottom. */
@@ -327,8 +260,6 @@ function animateCameraTo(
   const start = readCameraFromRef(ref)
   if (!start) return
 
-  beginCameraFocusAnimBlur()
-
   if (options?.bypassMaxScale) {
     elevateTransformMaxScale(ref, target.scale)
   }
@@ -339,79 +270,50 @@ function animateCameraTo(
   const duration = focusDurationMs(start, target, options?.animationMs)
   const startTime = performance.now()
 
+  const arcStrength = options?.curved
+    ? Math.min(120, Math.hypot(target.positionX - start.positionX, target.positionY - start.positionY) * 0.22)
+    : 0
+  const midX = (start.positionX + target.positionX) / 2
+  const midY = (start.positionY + target.positionY) / 2
   const panDx = target.positionX - start.positionX
   const panDy = target.positionY - start.positionY
   const panLen = Math.hypot(panDx, panDy)
-  const scaleDelta = target.scale - start.scale
-  const zoomingIn = scaleDelta > start.scale * 0.012
-  const zoomingOut = scaleDelta < -start.scale * 0.012
-  const panEase = zoomingOut ? easeCameraFocusOut : easeCameraFocusIn
-
-  const arcStrength = options?.curved
-    ? Math.min(300, Math.max(48, panLen * 0.34))
-    : 0
   const perpX = panLen > 0 ? (-panDy / panLen) * arcStrength : 0
   const perpY = panLen > 0 ? (panDx / panLen) * arcStrength : 0
-  const arcCtrl1X = start.positionX + panDx * 0.22 + perpX * 0.85
-  const arcCtrl1Y = start.positionY + panDy * 0.22 + perpY * 0.85
-  const arcCtrl2X = start.positionX + panDx * 0.78 + perpX * 0.55
-  const arcCtrl2Y = start.positionY + panDy * 0.78 + perpY * 0.55
+  const ctrlX = midX + perpX
+  const ctrlY = midY + perpY
   let prevX = start.positionX
   let prevY = start.positionY
 
   const tick = (now: number) => {
     const rawT = Math.min(1, (now - startTime) / duration)
-    const panT = panEase(rawT)
-
-    let scaleRawT = rawT
-    if (zoomingIn) {
-      scaleRawT = Math.min(1, Math.max(0, (rawT - 0.14) / 0.86))
-    } else if (zoomingOut) {
-      scaleRawT = Math.min(1, rawT / 0.82)
-    }
-    const scaleT = panEase(scaleRawT)
-    let nextScale = start.scale + scaleDelta * scaleT
-    if (zoomingIn && rawT > 0.68 && rawT < 1) {
-      const settle = Math.sin(((rawT - 0.68) / 0.32) * Math.PI)
-      nextScale += scaleDelta * 0.035 * settle
-    }
-
+    const t = easeInOutCubic(rawT)
+    const nextScale = start.scale + (target.scale - start.scale) * t
     const nextX = options?.curved
-      ? cubicPoint(
-          start.positionX,
-          arcCtrl1X,
-          arcCtrl2X,
-          target.positionX,
-          panT,
-        )
-      : start.positionX + panDx * panT
+      ? quadraticPoint(start.positionX, ctrlX, target.positionX, t)
+      : start.positionX + (target.positionX - start.positionX) * t
     const nextY = options?.curved
-      ? cubicPoint(
-          start.positionY,
-          arcCtrl1Y,
-          arcCtrl2Y,
-          target.positionY,
-          panT,
-        )
-      : start.positionY + panDy * panT
+      ? quadraticPoint(start.positionY, ctrlY, target.positionY, t)
+      : start.positionY + (target.positionY - start.positionY) * t
 
-    const frameDx = nextX - prevX
-    const frameDy = nextY - prevY
-    options?.onMotionFrame?.(frameDx, frameDy)
-    usePanMotionStore
-      .getState()
-      .setPanFrame(frameDx, frameDy, EMPTY_EDGE_STRENGTHS)
+    options?.onMotionFrame?.(nextX - prevX, nextY - prevY)
     prevX = nextX
     prevY = nextY
 
-    ref.setTransform(nextX, nextY, nextScale, 0)
+    writeCameraTransform(ref, nextX, nextY, nextScale, 0)
 
     if (rawT < 1) {
       activeFocusRaf = requestAnimationFrame(tick)
       return
     }
 
-    ref.setTransform(target.positionX, target.positionY, target.scale, 0)
+    writeCameraTransform(
+      ref,
+      target.positionX,
+      target.positionY,
+      target.scale,
+      0,
+    )
     syncLibraryBounds(ref)
     if (!options?.bypassPanBounds) {
       clampToLibraryBounds(ref)
@@ -420,7 +322,6 @@ function animateCameraTo(
     if (options?.restoreTransformMaxScale) {
       restoreTransformMaxScale(ref)
     }
-    endCameraFocusAnimBlur()
     options?.onComplete?.()
   }
 
@@ -454,24 +355,27 @@ export const UNINITIALIZED_MAIN_CAMERA: SpaceCamera = {
 
 export function isUninitializedMainCamera(
   camera: SpaceCamera | null | undefined,
-  viewportWidth = window.innerWidth,
-  viewportHeight = window.innerHeight,
 ): boolean {
   if (!camera) return true
-  if (
+  return (
     camera.positionX === UNINITIALIZED_MAIN_CAMERA.positionX &&
     camera.positionY === UNINITIALIZED_MAIN_CAMERA.positionY &&
     camera.scale === UNINITIALIZED_MAIN_CAMERA.scale
-  ) {
-    return true
-  }
-  // TransformWrapper default pan before the first centering pass — often persisted
-  // at cover-fit scale, which would reload into the top-left corner otherwise.
-  if (camera.positionX === 0 && camera.positionY === 0) {
-    const minScale = getCanvasMinScale(viewportWidth, viewportHeight)
-    if (camera.scale >= minScale * 0.95) return true
-  }
-  return false
+  )
+}
+
+/** Library default before centerView — top-left of the bleed, not the studio. */
+export function isDefaultUncenteredCamera(
+  camera: SpaceCamera,
+  ref: ReactZoomPanPinchContentRef | null,
+): boolean {
+  const size = ref ? wrapperSize(ref) : null
+  if (!size) return false
+  const minScale = getCanvasMinScale(size.width, size.height)
+  const atDefaultScale = Math.abs(camera.scale - minScale) < 0.004
+  const atOrigin =
+    Math.abs(camera.positionX) < 0.75 && Math.abs(camera.positionY) < 0.75
+  return atDefaultScale && atOrigin
 }
 
 function wrapperSize(ref: ReactZoomPanPinchContentRef): {
@@ -514,6 +418,58 @@ export function cancelLibraryAnimation(ref: ReactZoomPanPinchContentRef): void {
   instance.velocityTime = null
 }
 
+type DirectTransformInstance = ReactZoomPanPinchContentRef['instance'] & {
+  state: SpaceCamera
+  contentComponent?: HTMLElement | null
+  handleTransformStyles?: (x: number, y: number, scale: number) => string
+}
+
+/**
+ * Write pan/zoom straight to the transform layer. Required when TransformWrapper
+ * is disabled (direct pan mode) because the library's setTransform early-returns.
+ */
+export function applyDirectCameraTransform(
+  ref: ReactZoomPanPinchContentRef,
+  positionX: number,
+  positionY: number,
+  scale: number,
+): void {
+  const instance = ref.instance as DirectTransformInstance
+  if (!instance?.state) return
+
+  cancelLibraryAnimation(ref)
+  instance.state.positionX = positionX
+  instance.state.positionY = positionY
+  instance.state.scale = scale
+  ref.state.positionX = positionX
+  ref.state.positionY = positionY
+  ref.state.scale = scale
+
+  const content = instance.contentComponent
+  if (content) {
+    const transform =
+      typeof instance.handleTransformStyles === 'function'
+        ? instance.handleTransformStyles(positionX, positionY, scale)
+        : `translate(${positionX}px, ${positionY}px) scale(${scale})`
+    content.style.transform = transform
+  }
+}
+
+/** Pan/zoom write that works in both library and direct-input modes. */
+export function writeCameraTransform(
+  ref: ReactZoomPanPinchContentRef,
+  positionX: number,
+  positionY: number,
+  scale: number,
+  animationMs = 0,
+): void {
+  if (ref.instance.setup.disabled) {
+    applyDirectCameraTransform(ref, positionX, positionY, scale)
+    return
+  }
+  ref.setTransform(positionX, positionY, scale, animationMs)
+}
+
 /** Apply a trackpad wheel delta to the canvas camera (screen-space pan). */
 export function applyCanvasTrackpadPanDelta(
   ref: ReactZoomPanPinchContentRef,
@@ -529,7 +485,7 @@ export function applyCanvasTrackpadPanDelta(
   const nextY = positionY - deltaY * sensitivity
   if (nextX === positionX && nextY === positionY) return false
 
-  ref.setTransform(nextX, nextY, scale, 0)
+  writeCameraTransform(ref, nextX, nextY, scale, 0)
   syncLibraryBounds(ref)
   clampToLibraryBounds(ref)
   return true
@@ -542,17 +498,27 @@ type PanBounds = {
   maxPositionY: number
 }
 
-/** Pan limits for the cover-fit canvas (matches TransformWrapper config). */
-function canvasPanBoundsForScale(
+/** Transform content size in native layout pixels. */
+function activeTransformLayoutSize(): { width: number; height: number } {
+  const inside = useCanvasWorkspaceStore.getState().isInsideSpace()
+  return {
+    width: inside ? SPACE_CANVAS_WIDTH : canvasLayoutWidth(),
+    height: inside ? SPACE_CANVAS_HEIGHT : canvasLayoutHeight(),
+  }
+}
+
+/** Pan limits for the cover-fit canvas (matches TransformWrapper limitToBounds). */
+export function canvasPanBoundsForScale(
   wrapperWidth: number,
   wrapperHeight: number,
   scale: number,
 ): PanBounds {
-  const contentWidth = canvasLayoutWidth() * scale
-  const contentHeight = canvasLayoutHeight() * scale
+  const { width: contentWidth, height: contentHeight } = activeTransformLayoutSize()
+  const scaledWidth = contentWidth * scale
+  const scaledHeight = contentHeight * scale
 
   // disablePadding + content fully visible inside wrapper
-  if (wrapperWidth >= contentWidth && wrapperHeight >= contentHeight) {
+  if (wrapperWidth >= scaledWidth && wrapperHeight >= scaledHeight) {
     return {
       minPositionX: 0,
       maxPositionX: 0,
@@ -562,9 +528,9 @@ function canvasPanBoundsForScale(
   }
 
   return {
-    minPositionX: wrapperWidth - contentWidth,
+    minPositionX: wrapperWidth - scaledWidth,
     maxPositionX: 0,
-    minPositionY: wrapperHeight - contentHeight,
+    minPositionY: wrapperHeight - scaledHeight,
     maxPositionY: 0,
   }
 }
@@ -586,24 +552,31 @@ function clampPanPosition(
   }
 }
 
-function clampToLibraryBounds(
+/** Live pan limits from layout size + wrapper (not stale library bounds). */
+export function readCanvasPanBounds(
+  ref: ReactZoomPanPinchContentRef,
+): PanBounds | null {
+  const size = wrapperSize(ref)
+  const scale = ref.state?.scale
+  if (!size || !Number.isFinite(scale) || scale <= 0) return null
+  return canvasPanBoundsForScale(size.width, size.height, scale)
+}
+
+export function clampToLibraryBounds(
   ref: ReactZoomPanPinchContentRef,
 ): SpaceCamera | null {
-  const bounds = ref.instance.bounds
+  const bounds = readCanvasPanBounds(ref)
   const { positionX, positionY, scale } = ref.state
   if (!bounds) return readCameraFromRef(ref)
 
-  const x = Math.max(
-    bounds.minPositionX,
-    Math.min(bounds.maxPositionX, positionX),
-  )
-  const y = Math.max(
-    bounds.minPositionY,
-    Math.min(bounds.maxPositionY, positionY),
+  const { positionX: x, positionY: y } = clampPanPosition(
+    positionX,
+    positionY,
+    bounds,
   )
 
   if (x !== positionX || y !== positionY) {
-    ref.setTransform(x, y, scale, 0)
+    writeCameraTransform(ref, x, y, scale, 0)
     syncLibraryBounds(ref)
   }
 
@@ -635,7 +608,7 @@ function enforceCoverFit(
   }
 
   if (nextScale !== scale || nextX !== positionX || nextY !== positionY) {
-    ref.setTransform(nextX, nextY, nextScale, 0)
+    writeCameraTransform(ref, nextX, nextY, nextScale, 0)
   }
 
   syncLibraryBounds(ref)
@@ -676,7 +649,7 @@ export function applyAnchoredWheelZoom(
   // Interrupt any in-progress velocity / pan-bounce animation so our zoom
   // doesn't get overwritten one frame later.
   cancelLibraryAnimation(ref)
-  ref.setTransform(nextX, nextY, nextScale, 0)
+  writeCameraTransform(ref, nextX, nextY, nextScale, 0)
   syncLibraryBounds(ref)
   return true
 }
@@ -731,7 +704,7 @@ export function isCameraPlausible(
   return true
 }
 
-/** Center at min cover scale — main canvas spawns on the 15k canvas centre. */
+/** Center at min cover scale using the library (reads wrapper/content DOM). */
 export function resetToCoverFit(
   ref: ReactZoomPanPinchContentRef | null,
 ): SpaceCamera | null {
@@ -740,24 +713,6 @@ export function resetToCoverFit(
   if (!size) return null
 
   const minScale = getCanvasMinScale(size.width, size.height)
-  const content = ref.instance.contentComponent
-  const contentWidth = content?.offsetWidth ?? 0
-  const isMainExpandedCanvas = contentWidth >= canvasLayoutWidth() - 1
-
-  if (isMainExpandedCanvas) {
-    focusItemOnCanvas(
-      ref,
-      {
-        x: CANVAS_WIDTH / 2,
-        y: CANVAS_HEIGHT / 2,
-        width: 0,
-        height: 0,
-      },
-      { mainCanvasPlate: true, scale: minScale, animationMs: 0 },
-    )
-    return readCameraFromRef(ref)
-  }
-
   ref.centerView(minScale, 0)
   syncLibraryBounds(ref)
   return readCameraFromRef(ref)
@@ -792,7 +747,7 @@ export function applyCameraToRef(
     Math.max(minScale, camera.scale),
   )
 
-  ref.setTransform(camera.positionX, camera.positionY, scale, 0)
+  writeCameraTransform(ref, camera.positionX, camera.positionY, scale, 0)
   syncLibraryBounds(ref)
   clampToLibraryBounds(ref)
 }
@@ -811,9 +766,50 @@ export function applyCameraExact(
   ) {
     return
   }
-  ref.setTransform(camera.positionX, camera.positionY, camera.scale, 0)
+  writeCameraTransform(
+    ref,
+    camera.positionX,
+    camera.positionY,
+    camera.scale,
+    0,
+  )
   syncLibraryBounds(ref)
   clampToLibraryBounds(ref)
+}
+
+/** Wait until transform content matches expected layout size, then run `apply`. */
+export function applyCameraWhenTransformLayoutReady(
+  ref: ReactZoomPanPinchContentRef | null,
+  expectedWidth: number,
+  expectedHeight: number,
+  apply: () => void,
+  attempt = 0,
+): void {
+  if (!ref) {
+    apply()
+    return
+  }
+
+  const content = ref.instance.contentComponent
+  const contentWidth = content?.offsetWidth ?? 0
+  const contentHeight = content?.offsetHeight ?? 0
+  const layoutReady =
+    contentWidth >= expectedWidth - 1 && contentHeight >= expectedHeight - 1
+
+  if (layoutReady || attempt >= 16) {
+    apply()
+    return
+  }
+
+  requestAnimationFrame(() =>
+    applyCameraWhenTransformLayoutReady(
+      ref,
+      expectedWidth,
+      expectedHeight,
+      apply,
+      attempt + 1,
+    ),
+  )
 }
 
 /** Wait for expanded canvas dimensions, then restore the pre-pocket main camera. */
@@ -910,7 +906,7 @@ export function focusItemOnCanvas(
 
   cancelFocusItemAnimation()
   cancelLibraryAnimation(ref)
-  ref.setTransform(positionX, positionY, scale, animationMs)
+  writeCameraTransform(ref, positionX, positionY, scale, animationMs)
   syncLibraryBounds(ref)
 
   if (animationMs > 0) {
@@ -929,6 +925,11 @@ export function refitCameraAfterResize(
   if (!ref) return null
   const size = wrapperSize(ref)
   if (!size) return null
+
+  if (useCanvasOverviewStore.getState().engaged) {
+    settleCanvasBounds(ref)
+    return getCanvasOverviewScale(size.width, size.height)
+  }
 
   enforceCoverFit(ref)
   return getCanvasMinScale(size.width, size.height)

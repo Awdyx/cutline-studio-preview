@@ -1,13 +1,11 @@
 import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import {
-  CANVAS_EDGE_BLEED,
   CANVAS_HEIGHT,
   CANVAS_ORIGINAL_HEIGHT,
   CANVAS_ORIGINAL_WIDTH,
   CANVAS_WIDTH,
   STUDIO_STROKE_BLEED_PAD,
-  studioVisualToLogical,
 } from './canvasDimensions'
 import { useStudioCentrePositionStore } from '../canvas/studioCentrePositionStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
@@ -36,11 +34,8 @@ export function clientToCanvasFromElementForStroke(
 ): { x: number; y: number } | null {
   const pos = clientToCanvasFromElementRaw(clientX, clientY, canvasEl)
   if (!pos) return null
-  const insideSpace = useCanvasWorkspaceStore.getState().isInsideSpace()
-  const x = insideSpace ? pos.x : studioVisualToLogical(pos.x)
-  const y = insideSpace ? pos.y : studioVisualToLogical(pos.y)
-  if (!isStrokeBleedCoordSane(x, y)) return null
-  return { x, y }
+  if (!isStrokeBleedCoordSane(pos.x, pos.y)) return null
+  return { x: pos.x, y: pos.y }
 }
 
 /** Pointer tracking while dragging items — wide bleed so release outside still resolves. */
@@ -60,13 +55,10 @@ export function screenDeltaToLogicalCanvas(
 ): { dx: number; dy: number } {
   const rect = canvasEl.getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return { dx: 0, dy: 0 }
-  let dx = sdx * (canvasEl.offsetWidth / rect.width)
-  let dy = sdy * (canvasEl.offsetHeight / rect.height)
-  if (!useCanvasWorkspaceStore.getState().isInsideSpace()) {
-    dx = studioVisualToLogical(dx)
-    dy = studioVisualToLogical(dy)
+  return {
+    dx: sdx * (canvasEl.offsetWidth / rect.width),
+    dy: sdy * (canvasEl.offsetHeight / rect.height),
   }
-  return { dx, dy }
 }
 
 /**
@@ -80,13 +72,10 @@ export function clientToCanvasFromElement(
 ): { x: number; y: number } | null {
   const pos = clientToCanvasFromElementRaw(clientX, clientY, canvasEl)
   if (!pos) return null
-  const insideSpace = useCanvasWorkspaceStore.getState().isInsideSpace()
-  const x = insideSpace ? pos.x : studioVisualToLogical(pos.x)
-  const y = insideSpace ? pos.y : studioVisualToLogical(pos.y)
-  if (!isCanvasCoordSane(x, y, CANVAS_ORIGINAL_WIDTH, CANVAS_ORIGINAL_HEIGHT)) {
+  if (!isCanvasCoordSane(pos.x, pos.y, CANVAS_ORIGINAL_WIDTH, CANVAS_ORIGINAL_HEIGHT)) {
     return null
   }
-  return { x, y }
+  return { x: pos.x, y: pos.y }
 }
 
 /** Canvas coords without studio-centre clamping — for free item drag. */
@@ -129,18 +118,11 @@ export function clientToCanvas(
     : useStudioCentrePositionStore.getState()
   const x = (localX - positionX) / scale - offsetX
   const y = (localY - positionY) / scale - offsetY
-  const logicalX = insideSpace ? x : studioVisualToLogical(x)
-  const logicalY = insideSpace ? y : studioVisualToLogical(y)
 
-  if (!isCanvasCoordSane(logicalX, logicalY, CANVAS_ORIGINAL_WIDTH, CANVAS_ORIGINAL_HEIGHT)) {
+  if (!isCanvasCoordSane(x, y, CANVAS_ORIGINAL_WIDTH, CANVAS_ORIGINAL_HEIGHT)) {
     return null
   }
-  return { x: logicalX, y: logicalY }
-}
-
-/** Bleed inset between transform layout space and the 15k×15k logical canvas. */
-export function mainCanvasLogicalBleedOffset(): number {
-  return useCanvasWorkspaceStore.getState().isInsideSpace() ? 0 : CANVAS_EDGE_BLEED
+  return { x, y }
 }
 
 /** Map transform layout coords → logical main-canvas coords (plates, zones). */
@@ -148,8 +130,7 @@ export function layoutToLogicalMainCanvas(
   layoutX: number,
   layoutY: number,
 ): { x: number; y: number } {
-  const bleed = mainCanvasLogicalBleedOffset()
-  return { x: layoutX - bleed, y: layoutY - bleed }
+  return { x: layoutX, y: layoutY }
 }
 
 type CanvasPlateRect = {
@@ -163,13 +144,7 @@ type CanvasPlateRect = {
 export function logicalMainCanvasPlateToLayoutRect(
   rect: CanvasPlateRect,
 ): CanvasPlateRect {
-  const bleed = mainCanvasLogicalBleedOffset()
-  return {
-    x: rect.x + bleed,
-    y: rect.y + bleed,
-    width: rect.width,
-    height: rect.height,
-  }
+  return rect
 }
 
 /** Screen coords mapped to logical main-canvas space (not transform layout space). */

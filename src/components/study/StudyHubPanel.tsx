@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react'
 import { playSubmenuTap } from '../../sound/submenuSound'
 import { STUDY_SUBJECT_CATALOG, type StudySubjectId } from './studyHubData'
 import type { StudyPracticeSelection } from './StudyHubPracticePicker'
@@ -16,7 +17,12 @@ export default function StudyHubPanel({
     <div className="study-hub-panel-content ui-chrome-preserve-case">
       {catalog.modules.map((module) => (
         <section key={module.name} className="study-hub-module">
-          <p className="study-hub-module-label">{module.name}</p>
+          <div className="study-hub-module-head">
+            <p className="study-hub-module-label">{module.name}</p>
+            <span className="study-hub-module-count">
+              {module.lectures.length} lectures
+            </span>
+          </div>
           <ul className="study-hub-lecture-list">
             {module.lectures.map((lecture) => {
               lectureNumber += 1
@@ -33,6 +39,12 @@ export default function StudyHubPanel({
                   >
                     <span className="study-hub-lecture-num">{lectureNumber}</span>
                     <span className="study-hub-lecture-title">{lecture}</span>
+                    <ChevronRight
+                      className="study-hub-lecture-chevron"
+                      size={14}
+                      strokeWidth={2}
+                      aria-hidden
+                    />
                   </button>
                 </li>
               )

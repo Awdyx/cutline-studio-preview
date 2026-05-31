@@ -1,108 +1,23 @@
 import { create } from 'zustand'
-import {
-  EMPTY_EDGE_STRENGTHS,
-  MAX_VELOCITY,
-  type EdgeStrengths,
-} from './canvasPanVignette'
 
 interface PanMotionState {
-  vx: number
-  vy: number
-  intensity: number
-  active: boolean
   zoomActive: boolean
-  /** Programmatic menu / plate fly-to — suppress viewport chrome mid-flight. */
-  cameraFlyActive: boolean
-  edges: EdgeStrengths
-  zoomEdgeStrength: number
-  setPanFrame: (vx: number, vy: number, edges: EdgeStrengths) => void
-  setEdges: (edges: EdgeStrengths) => void
-  setZoomEdgeStrength: (strength: number) => void
-  setPanStopped: () => void
+  canvasPanActive: boolean
   setZoomActive: (active: boolean) => void
-  setCameraFlyActive: (active: boolean) => void
-}
-
-const EDGE_EPS = 0.001
-const VEL_EPS = 0.001
-
-function edgesEqual(a: EdgeStrengths, b: EdgeStrengths): boolean {
-  return (
-    Math.abs(a.top - b.top) < EDGE_EPS &&
-    Math.abs(a.bottom - b.bottom) < EDGE_EPS &&
-    Math.abs(a.left - b.left) < EDGE_EPS &&
-    Math.abs(a.right - b.right) < EDGE_EPS
-  )
+  setCanvasPanActive: (active: boolean) => void
 }
 
 export const usePanMotionStore = create<PanMotionState>((set, get) => ({
-  vx: 0,
-  vy: 0,
-  intensity: 0,
-  active: false,
   zoomActive: false,
-  cameraFlyActive: false,
-  edges: EMPTY_EDGE_STRENGTHS,
-  zoomEdgeStrength: 0,
-
-  setPanFrame: (vx, vy, edges) => {
-    const magnitude = Math.sqrt(vx * vx + vy * vy)
-    const intensity = Math.min(magnitude / MAX_VELOCITY, 1)
-    const active = magnitude > 0
-    const s = get()
-    if (
-      Math.abs(s.vx - vx) < VEL_EPS &&
-      Math.abs(s.vy - vy) < VEL_EPS &&
-      Math.abs(s.intensity - intensity) < EDGE_EPS &&
-      s.active === active &&
-      edgesEqual(s.edges, edges)
-    ) return
-    set({ vx, vy, edges, intensity, active })
-  },
-
-  setEdges: (edges) => {
-    if (edgesEqual(get().edges, edges)) return
-    set({ edges })
-  },
-
-  setZoomEdgeStrength: (strength) => {
-    if (Math.abs(get().zoomEdgeStrength - strength) < EDGE_EPS) return
-    set({ zoomEdgeStrength: strength })
-  },
-
-  setPanStopped: () => {
-    const s = get()
-    if (
-      !s.active &&
-      s.intensity === 0 &&
-      s.vx === 0 &&
-      s.vy === 0 &&
-      edgesEqual(s.edges, EMPTY_EDGE_STRENGTHS)
-    ) {
-      return
-    }
-    set({
-      active: false,
-      intensity: 0,
-      vx: 0,
-      vy: 0,
-      edges: EMPTY_EDGE_STRENGTHS,
-    })
-  },
+  canvasPanActive: false,
 
   setZoomActive: (active: boolean) => {
     if (get().zoomActive === active) return
     set({ zoomActive: active })
   },
 
-  setCameraFlyActive: (active: boolean) => {
-    if (get().cameraFlyActive === active) return
-    set({ cameraFlyActive: active })
+  setCanvasPanActive: (active: boolean) => {
+    if (get().canvasPanActive === active) return
+    set({ canvasPanActive: active })
   },
 }))
-
-export function isCameraFlyActive(): boolean {
-  return usePanMotionStore.getState().cameraFlyActive
-}
-
-export { MAX_VELOCITY } from './canvasPanVignette'

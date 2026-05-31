@@ -1,33 +1,28 @@
 import {
   CANVAS_STUDIO_ACOUSTICS_EDGE_PAD,
   CANVAS_STUDIO_EDGE_FADE,
-  STUDIO_VISUAL_HEIGHT,
-  STUDIO_VISUAL_WIDTH,
+  CANVAS_ORIGINAL_HEIGHT,
+  CANVAS_ORIGINAL_WIDTH,
 } from '../drawing/canvasDimensions'
 import { useStudioCentrePositionStore } from './studioCentrePositionStore'
-import type { RefObject } from 'react'
-import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { viewportCenterFullCanvas } from '../canvasItems/viewportCenter'
-import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
-import { useCanvasStudioViewportZoneStore } from './canvasStudioViewportZoneStore'
 
 /** Elliptical zone around the studio canvas — matches the void ramp (FAB chrome, etc.). */
 export function studioCanvasViewportZoneEllipse(studioX: number, studioY: number) {
   return {
-    cx: studioX + STUDIO_VISUAL_WIDTH / 2,
-    cy: studioY + STUDIO_VISUAL_HEIGHT / 2,
-    rx: STUDIO_VISUAL_WIDTH / 2 + CANVAS_STUDIO_EDGE_FADE,
-    ry: STUDIO_VISUAL_HEIGHT / 2 + CANVAS_STUDIO_EDGE_FADE,
+    cx: studioX + CANVAS_ORIGINAL_WIDTH / 2,
+    cy: studioY + CANVAS_ORIGINAL_HEIGHT / 2,
+    rx: CANVAS_ORIGINAL_WIDTH / 2 + CANVAS_STUDIO_EDGE_FADE,
+    ry: CANVAS_ORIGINAL_HEIGHT / 2 + CANVAS_STUDIO_EDGE_FADE,
   }
 }
 
 /** Tighter zone for ambient music — muffling starts nearer the studio edge. */
 export function studioCanvasAcousticsEllipse(studioX: number, studioY: number) {
   return {
-    cx: studioX + STUDIO_VISUAL_WIDTH / 2,
-    cy: studioY + STUDIO_VISUAL_HEIGHT / 2,
-    rx: STUDIO_VISUAL_WIDTH / 2 + CANVAS_STUDIO_ACOUSTICS_EDGE_PAD,
-    ry: STUDIO_VISUAL_HEIGHT / 2 + CANVAS_STUDIO_ACOUSTICS_EDGE_PAD,
+    cx: studioX + CANVAS_ORIGINAL_WIDTH / 2,
+    cy: studioY + CANVAS_ORIGINAL_HEIGHT / 2,
+    rx: CANVAS_ORIGINAL_WIDTH / 2 + CANVAS_STUDIO_ACOUSTICS_EDGE_PAD,
+    ry: CANVAS_ORIGINAL_HEIGHT / 2 + CANVAS_STUDIO_ACOUSTICS_EDGE_PAD,
   }
 }
 
@@ -82,34 +77,4 @@ export function isPointInStudioCanvasAcousticsZone(
   }
 
   return isPointInStudioEllipse(x, y, studioCanvasAcousticsEllipse(sx, sy))
-}
-
-/**
- * True when the viewport centre sits inside the studio ramp zone (main canvas).
- * Uses full canvas coordinates so panning into the void still resolves correctly.
- */
-export function isViewportCenterNearStudioCanvas(
-  transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
-  viewportHost?: HTMLElement | null,
-): boolean | null {
-  const center = viewportCenterFullCanvas(transformRef, viewportHost)
-  if (!center) return null
-  return isPointInStudioCanvasViewportZone(center.x, center.y)
-}
-
-/** Track whether the live viewport sits near the studio canvas (main canvas only). */
-export function syncStudioCanvasViewportZone(
-  transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
-  viewportRef: RefObject<HTMLElement | null>,
-): void {
-  const { setViewportZone } = useCanvasStudioViewportZoneStore.getState()
-
-  if (useCanvasWorkspaceStore.getState().isInsideSpace()) {
-    setViewportZone(true, 'studio')
-    return
-  }
-
-  const near = isViewportCenterNearStudioCanvas(transformRef, viewportRef.current)
-  if (near == null) return
-  setViewportZone(near, near ? 'studio' : null)
 }

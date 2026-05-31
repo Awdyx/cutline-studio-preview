@@ -622,43 +622,6 @@ function minimapCloseTick(context: AudioContext, t0: number): void {
 }
 
 /**
- * Fisheye / navigation-mode transition — a warm, dark sine glide (Animal
- * Crossing–ish), no noise. `out` = entering overview (glide down); `in` =
- * returning to normal (glide up). A soft sub-octave adds darkness/body.
- */
-function fisheyeTransition(
-  context: AudioContext,
-  t0: number,
-  dir: 'in' | 'out',
-): void {
-  const dur = dir === 'out' ? 0.4 : 0.36
-  const fromHz = dir === 'out' ? 330 : 247
-  const toHz = dir === 'out' ? 247 : 330
-
-  const glide = (freqFrom: number, freqTo: number, peak: number, lpHz: number) => {
-    const osc = context.createOscillator()
-    const g = env(context, peak, 0.018, dur * 0.72, t0)
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(freqFrom, t0)
-    osc.frequency.exponentialRampToValueAtTime(freqTo, t0 + dur * 0.64)
-    const lp = context.createBiquadFilter()
-    lp.type = 'lowpass'
-    lp.frequency.value = lpHz
-    lp.Q.value = 0.3
-    osc.connect(lp)
-    lp.connect(g)
-    g.connect(sfxOut())
-    osc.start(t0)
-    osc.stop(t0 + dur + 0.03)
-    track(osc)
-  }
-
-  glide(fromHz, toHz, 0.024, 1200)
-  // Sub-octave for a darker, rounder body.
-  glide(fromHz / 2, toHz / 2, 0.013, 700)
-}
-
-/**
  * Text entry confirmed (Enter) — a tactile keystroke: a short filtered noise
  * click (the key press) topped with a warm upward pluck (the satisfying commit).
  */
@@ -1029,14 +992,6 @@ const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
 
   aspectSnap(context, t0) {
     aspectSnapTick(context, t0)
-  },
-
-  fisheyeEnter(context, t0) {
-    fisheyeTransition(context, t0, 'out')
-  },
-
-  fisheyeExit(context, t0) {
-    fisheyeTransition(context, t0, 'in')
   },
 
   minimapOpen(context, t0) {

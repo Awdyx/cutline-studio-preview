@@ -1,16 +1,9 @@
-import { loadCanvasItemsFromStorage } from '../canvasItems/canvasItemsPersistence'
 import type { CanvasItem } from '../canvasItems/types'
-import { stripLegacyMediaFromItems } from '../media/stripLegacyMediaFields'
 import {
   filterItemsForStudioCentrePersist,
   filterStrokesForStudioCentrePersist,
 } from '../canvas/studioCentre'
-import { loadStrokesFromStorage } from '../drawing/strokesPersistence'
 import type { Stroke } from '../drawing/types'
-import {
-  normalizeFeaturePlatePositions,
-  type FeaturePlatePositions,
-} from '../canvas/featurePlatePositionStore'
 import type { StudioCentrePosition } from '../canvas/studioCentrePosition'
 import { normalizeStudioCentrePosition } from '../canvas/studioCentrePosition'
 import { isUninitializedMainCamera } from '../canvas/canvasCamera'
@@ -35,8 +28,6 @@ type PersistedSpace = {
   annotationStrokes?: Stroke[]
   name: string
   snapshotId?: string | null
-  /** @deprecated v1 inline snapshot — migrated to IndexedDB */
-  snapshot?: string | null
   camera?: SpaceCamera
 }
 
@@ -49,20 +40,16 @@ type PersistedPayload = {
   activeCanvasId: ActiveCanvasId
   mainCamera?: SpaceCamera
   studioCentrePosition?: StudioCentrePosition
-  featurePlatePositions?: FeaturePlatePositions
 }
 
 export type LoadedWorkspace = {
   mainItems: CanvasItem[]
   mainStrokes: Stroke[]
   mainAnnotationStrokes: Stroke[]
-  spaces: Record<string, SpaceCanvasData & { snapshot?: string }>
+  spaces: Record<string, SpaceCanvasData>
   activeCanvasId: ActiveCanvasId
   mainCamera: SpaceCamera | null
   studioCentrePosition: StudioCentrePosition | null
-  featurePlatePositions: FeaturePlatePositions | null
-  /** True when assembled from legacy per-layer storage keys. */
-  migratedFromLegacy?: boolean
   storageVersion: number
 }
 
@@ -118,7 +105,7 @@ export function flushScheduledWorkspaceSave(getSnapshot: () => LoadedWorkspace):
   if (snapshot) saveWorkspaceToStorage(snapshot())
 }
 
-/** Drop any pending debounced save *without* writing — used when resetting all data. */
+/** Drop any pending debounced save without writing to localStorage. */
 export function cancelScheduledWorkspaceSave(): void {
   if (saveTimer) {
     clearTimeout(saveTimer)
@@ -146,7 +133,7 @@ function serializeWorkspace(data: LoadedWorkspace): string | null {
   const spaces: Record<string, PersistedSpace> = {}
   for (const [id, space] of Object.entries(data.spaces)) {
     spaces[id] = {
-      items: stripLegacyMediaFromItems(space.items),
+      items: space.items,
       strokes: space.strokes,
       annotationStrokes:
         space.annotationStrokes.length > 0
@@ -160,9 +147,7 @@ function serializeWorkspace(data: LoadedWorkspace): string | null {
 
   const payload: PersistedPayload = {
     version: WORKSPACE_STORAGE_VERSION,
-    mainItems: filterItemsForStudioCentrePersist(
-      stripLegacyMediaFromItems(data.mainItems),
-    ),
+    mainItems: filterItemsForStudioCentrePersist(data.mainItems),
     mainStrokes: filterStrokesForStudioCentrePersist(data.mainStrokes),
     mainAnnotationStrokes:
       data.mainAnnotationStrokes.length > 0
@@ -176,10 +161,6 @@ function serializeWorkspace(data: LoadedWorkspace): string | null {
     payload.studioCentrePosition = data.studioCentrePosition
   }
 
-  if (data.featurePlatePositions) {
-    payload.featurePlatePositions = data.featurePlatePositions
-  }
-
   if (data.mainCamera && !isUninitializedMainCamera(data.mainCamera)) {
     payload.mainCamera = data.mainCamera
   }
@@ -189,9 +170,9 @@ function serializeWorkspace(data: LoadedWorkspace): string | null {
   return serialized
 }
 
-type LoadedSpaceRow = SpaceCanvasData & { snapshot?: string }
+type LoadedSpaceRow = SpaceCanvasData
 
-function normalizeSpace(raw: unknown, spaceId: string): LoadedSpaceRow | null {
+function normalizeSpace(raw: unknown, _spaceId: string): LoadedSpaceRow | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as PersistedSpace
   if (!Array.isArray(o.items)) return null
@@ -206,11 +187,9 @@ function normalizeSpace(raw: unknown, spaceId: string): LoadedSpaceRow | null {
       : DEFAULT_SPACE_CAMERA
 
   const snapshotId =
-    typeof o.snapshotId === 'string'
+    typeof o.snapshotId === 'string' && o.snapshotId.length > 0
       ? o.snapshotId
-      : typeof o.snapshot === 'string' && o.snapshot.length > 0
-        ? spaceId
-        : null
+      : null
 
   return {
     items: o.items,
@@ -224,9 +203,6 @@ function normalizeSpace(raw: unknown, spaceId: string): LoadedSpaceRow | null {
         : DEFAULT_SPACE_NAME,
     snapshotId,
     camera: normalizedCamera,
-    ...(typeof o.snapshot === 'string' && o.snapshot.length > 0
-      ? { snapshot: o.snapshot }
-      : {}),
   }
 }
 
@@ -248,11 +224,8 @@ export function loadWorkspaceFromStorage(): LoadedWorkspace {
       const studioCentrePosition = normalizeStudioCentrePosition(
         parsed.studioCentrePosition,
       )
-      const featurePlatePositions = normalizeFeaturePlatePositions(
-        parsed.featurePlatePositions,
-      )
 
-      return {
+      const loaded = {
         mainItems: filterItemsForStudioCentrePersist(
           Array.isArray(parsed.mainItems) ? parsed.mainItems : [],
         ),
@@ -273,52 +246,27 @@ export function loadWorkspaceFromStorage(): LoadedWorkspace {
             : 'main',
         mainCamera,
         studioCentrePosition,
-        featurePlatePositions,
         storageVersion,
       }
+
+      return loaded
     }
   } catch (err) {
     console.warn('[spaces] failed to load workspace', err)
   }
 
-  return migrateLegacyStorage()
+  return emptyWorkspace()
 }
 
-function migrateLegacyStorage(): LoadedWorkspace {
-  const mainItems = loadCanvasItemsFromStorage()
-  const { strokes, annotationStrokes } = loadStrokesFromStorage()
-  const spaces: Record<string, LoadedSpaceRow> = {}
-
-  for (const item of mainItems) {
-    if (item.type !== 'space') continue
-    const legacy = item as { snapshot?: string | null; snapshotId?: string | null }
-    spaces[item.id] = {
-      items: [],
-      strokes: [],
-      annotationStrokes: [],
-      name: item.name,
-      snapshotId:
-        legacy.snapshotId ??
-        (typeof legacy.snapshot === 'string' && legacy.snapshot.length > 0
-          ? item.id
-          : null),
-      ...(typeof legacy.snapshot === 'string' && legacy.snapshot.length > 0
-        ? { snapshot: legacy.snapshot }
-        : {}),
-      camera: DEFAULT_SPACE_CAMERA,
-    }
-  }
-
+function emptyWorkspace(): LoadedWorkspace {
   return {
-    mainItems: filterItemsForStudioCentrePersist(mainItems),
-    mainStrokes: filterStrokesForStudioCentrePersist(strokes),
-    mainAnnotationStrokes: filterStrokesForStudioCentrePersist(annotationStrokes),
-    spaces,
+    mainItems: [],
+    mainStrokes: [],
+    mainAnnotationStrokes: [],
+    spaces: {},
     activeCanvasId: 'main',
     mainCamera: null,
     studioCentrePosition: null,
-    featurePlatePositions: null,
-    migratedFromLegacy: true,
-    storageVersion: 1,
+    storageVersion: WORKSPACE_STORAGE_VERSION,
   }
 }

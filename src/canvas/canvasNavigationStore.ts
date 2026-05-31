@@ -4,9 +4,6 @@ type CanvasNavigationState = {
   /** Two or more fingers on the screen (pinch). */
   multiTouchActive: boolean
   setMultiTouchActive: (active: boolean) => void
-  /** Canvas pan burst (trackpad or touch) started outside a study hub — ignore widget hit-testing until it ends. */
-  trackpadPanLockActive: boolean
-  setTrackpadPanLock: (active: boolean) => void
   /** Ignore canvas background taps briefly after chrome actions (e.g. search pick). */
   suppressBackgroundSelectionClearUntil: number
   suppressBackgroundSelectionClear: (durationMs?: number) => void
@@ -18,21 +15,9 @@ type CanvasNavigationState = {
 
 export const useCanvasNavigationStore = create<CanvasNavigationState>((set, get) => ({
   multiTouchActive: false,
-  trackpadPanLockActive: false,
   suppressBackgroundSelectionClearUntil: 0,
 
   setMultiTouchActive: (active) => set({ multiTouchActive: active }),
-
-  setTrackpadPanLock: (active) => {
-    if (get().trackpadPanLockActive !== active) {
-      set({ trackpadPanLockActive: active })
-    }
-    if (active) {
-      document.documentElement.setAttribute('data-canvas-trackpad-pan-lock', '')
-    } else {
-      document.documentElement.removeAttribute('data-canvas-trackpad-pan-lock')
-    }
-  },
 
   suppressBackgroundSelectionClear: (durationMs = 600) => {
     set({
@@ -61,9 +46,6 @@ export const CANVAS_PAN_EXCLUDED = [
   'studio-centre-drag-handle-wrapper',
   'studio-centre-hold-drag-pending',
   'canvas-plate-reposition-btn',
-  'feature-plate-drag-handle',
-  'feature-plate-drag-handle-wrapper',
-  'canvas-feature-plate',
   'space-preview-adjust',
   'study-hub-scroll',
   'study-hub-practice',
@@ -77,7 +59,7 @@ export const CANVAS_PAN_EXCLUDED = [
  * works while hovering handles; selected item bodies are omitted so pan works
  * over a selected sticky/image too.
  */
-const CANVAS_TRACKPAD_PAN_EXCLUDED = [
+export const CANVAS_TRACKPAD_PAN_EXCLUDED = [
   'space-preview-adjust',
   'study-hub-scroll',
   'study-hub-practice',
@@ -85,16 +67,10 @@ const CANVAS_TRACKPAD_PAN_EXCLUDED = [
   'profile-media-frame-editor',
 ] as const
 
-const STUDY_HUB_PAN_EXCLUDED = new Set(['study-hub-scroll', 'study-hub-practice'])
-
-/** Mouse-drag pan excluded classes — study hub scroll areas drop out while a canvas pan burst is locked. */
-export function canvasPanExcludedClasses(trackpadPanLockActive: boolean): string[] {
-  if (!trackpadPanLockActive) return [...CANVAS_PAN_EXCLUDED]
-  return CANVAS_PAN_EXCLUDED.filter((cls) => !STUDY_HUB_PAN_EXCLUDED.has(cls))
+export function canvasPanExcludedClasses(): string[] {
+  return [...CANVAS_PAN_EXCLUDED]
 }
 
-/** Trackpad-pan excluded classes — study hub scroll areas drop out while a canvas pan burst is locked. */
-export function canvasTrackpadPanExcludedClasses(trackpadPanLockActive: boolean): string[] {
-  if (!trackpadPanLockActive) return [...CANVAS_TRACKPAD_PAN_EXCLUDED]
-  return CANVAS_TRACKPAD_PAN_EXCLUDED.filter((cls) => !STUDY_HUB_PAN_EXCLUDED.has(cls))
+export function canvasTrackpadPanExcludedClasses(): string[] {
+  return [...CANVAS_TRACKPAD_PAN_EXCLUDED]
 }

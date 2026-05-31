@@ -16,6 +16,7 @@ import {
 import { NOTIFICATION_ACTOR_PROFILES } from '../content/notificationActorProfiles'
 import type { Notification, NotificationTab } from '../types'
 import UserAvatar from './UserAvatar'
+import { chromePanelRight, desktopChromePanelTop } from '../platform/chromeLayout'
 
 interface NotificationsPanelProps {
   isOpen: boolean
@@ -53,8 +54,8 @@ const opacity = {
 
 const cardBase: React.CSSProperties = {
   position: 'fixed',
-  top: 64,
-  right: 80,
+  top: desktopChromePanelTop,
+  right: chromePanelRight(80),
   width: 360,
   height: 'min(72vh, 520px)',
   ...chromeFrostedMenuStyle,
@@ -276,6 +277,7 @@ function NotificationsPanelBody({
   return (
       <motion.div
         ref={panelRef}
+        data-top-chrome-panel=""
         data-notifications-panel=""
         className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
         style={{

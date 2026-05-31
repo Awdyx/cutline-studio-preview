@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState, type RefObject } from 'react'
+import { readChromeEdgeInset } from '../platform/chromeLayout'
 
 type SubmenuSide = 'left' | 'right'
 
@@ -25,7 +26,7 @@ export function useSubmenuPosition(
   const side = options?.side ?? 'right'
   const widthPx = options?.widthPx ?? 0
   const maxHeightPx = options?.maxHeightPx ?? 0
-  const viewportPadPx = options?.viewportPadPx ?? 16
+  const viewportPadPx = options?.viewportPadPx ?? readChromeEdgeInset()
   const alignBottomToRef = options?.alignBottomToRef
   const alignCenterToRef = options?.alignCenterToRef
   const panelRef = options?.panelRef

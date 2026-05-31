@@ -1,47 +1,43 @@
 import { create } from 'zustand'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { clearHistory } from '../canvasHistory/canvasHistory'
-import { useFeaturePlatePositionStore } from '../canvas/featurePlatePositionStore'
 import { useStudioCentrePositionStore } from '../canvas/studioCentrePositionStore'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import type { CanvasItem } from '../canvasItems/types'
 import { useStrokesStore } from '../drawing/strokesStore'
 import type { Stroke } from '../drawing/types'
 import {
+  cancelScheduledWorkspaceSave,
   loadWorkspaceFromStorage,
   flushScheduledWorkspaceSave,
   scheduleSaveWorkspace,
   saveWorkspaceToStorage,
-  cancelScheduledWorkspaceSave,
   WORKSPACE_STORAGE_VERSION,
   type LoadedWorkspace,
 } from './workspacePersistence'
-import {
-  migrateWorkspaceMediaToIdb,
-  workspaceNeedsMediaMigration,
-} from '../media/workspaceMediaMigration'
 import { backfillCanvasItemsImportDimensions } from '../media/mediaImportDimensions'
-import { recoverMissingWorkspaceMedia } from '../media/workspaceMediaRecovery'
-import {
-  resetLegacyMediaSrcIndex,
-  rehydrateMissingBlobsForItems,
-} from '../media/tryRecoverMediaBlob'
 import { putSnapshotFromDataUrl } from '../media/mediaBlobStore'
 import { normalizeLoadedWorkspace } from './normalizeWorkspace'
+import { resetCanvasMinimapUiState } from '../canvas/canvasMinimapOpen'
+import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
 import {
-  ensureNotInFisheyeOverview,
-  updateCanvasBarrelAfterCamera,
-} from '../canvas/canvasBarrelPostProcess'
-import {
+  applyCameraWhenTransformLayoutReady,
   applyCameraToRef,
   isCameraPlausible,
+  isDefaultUncenteredCamera,
   isUninitializedMainCamera,
   readCameraFromRef,
   resetToCoverFit,
   restoreMainCameraAfterPocketExit,
 } from '../canvas/canvasCamera'
 import { hardClampScale } from '../canvas/canvasZoomEdgeEase'
-import { getCanvasHardMinScale } from '../drawing/canvasDimensions'
+import {
+  canvasLayoutHeight,
+  canvasLayoutWidth,
+  getCanvasHardMinScale,
+  SPACE_CANVAS_HEIGHT,
+  SPACE_CANVAS_WIDTH,
+} from '../drawing/canvasDimensions'
 import { captureCanvasSnapshot } from './spaceSnapshot'
 import { syncBackgroundMusicEnclosedAcoustics, invalidateBackgroundMusicAcousticsViewportSample } from '../sound/backgroundMusicAcoustics'
 import type { SpaceCanvasItem } from '../canvasItems/types'
@@ -120,11 +116,11 @@ let mainItemsCache: CanvasItem[] = []
 let mainStrokesCache: Stroke[] = []
 let mainAnnotationStrokesCache: Stroke[] = []
 let mainCameraCache: SpaceCamera | null = null
+/** Blocks persisting the library's pre-centerView camera during startup. */
+let mainCameraApplied = false
 /** Main pan/zoom captured the moment a pocket is opened — restored on exit. */
 let mainCameraBeforePocket: SpaceCamera | null = null
 let pendingMainCameraRestore = false
-/** False until applyCameraForActiveCanvas has centered the main canvas once. */
-let mainCameraSpawnApplied = false
 
 function patchMainSpaceItem(
   spaceId: string,
@@ -152,7 +148,6 @@ function workspaceSnapshot(
       x: useStudioCentrePositionStore.getState().x,
       y: useStudioCentrePositionStore.getState().y,
     },
-    featurePlatePositions: useFeaturePlatePositionStore.getState().positions,
     storageVersion: WORKSPACE_STORAGE_VERSION,
   }
 }
@@ -183,30 +178,15 @@ function runCanvasSpaceSwap(
   get: () => CanvasWorkspaceState,
   mode: 'enter' | 'exit',
   performSwap: () => void,
-  opts?: { exitSpaceId?: string },
+  opts?: {
+    exitSpaceId?: string
+    /** Runs after workspace swap; call `startReveal` once camera + layout are ready. */
+    afterSwap?: (startReveal: () => void) => void
+  },
 ) {
   if (get().canvasSwapBusy) return
 
-  set({
-    canvasSwapBusy: true,
-    canvasSwapMode: mode,
-    canvasSwapPhase: 'blank',
-    canvasSwapSpaceId: opts?.exitSpaceId ?? null,
-    canvasFadeMs: CANVAS_SWAP_FADE_OUT_MS,
-    canvasFadeEase: CANVAS_SWAP_FADE_OUT_EASE,
-    canvasFadeOpacity: 1,
-    canvasVeilOpacity: 0,
-  })
-  syncBackgroundMusicEnclosedAcoustics()
-
-  requestAnimationFrame(() => {
-    set({ canvasFadeOpacity: 0, canvasVeilOpacity: 1 })
-  })
-
-  window.setTimeout(() => {
-    performSwap()
-    syncBackgroundMusicEnclosedAcoustics()
-
+  const beginReveal = () => {
     const revealEase =
       mode === 'exit'
         ? CANVAS_SWAP_EXIT_REVEAL_EASE
@@ -228,27 +208,45 @@ function runCanvasSpaceSwap(
             canvasSwapPhase: null,
             canvasSwapSpaceId: null,
             canvasVeilOpacity: 0,
+            canvasFadeOpacity: 1,
           })
           syncBackgroundMusicEnclosedAcoustics()
         }, CANVAS_SWAP_FADE_IN_MS)
       })
     })
+  }
+
+  set({
+    canvasSwapBusy: true,
+    canvasSwapMode: mode,
+    canvasSwapPhase: 'blank',
+    canvasSwapSpaceId: opts?.exitSpaceId ?? null,
+    canvasFadeMs: CANVAS_SWAP_FADE_OUT_MS,
+    canvasFadeEase: CANVAS_SWAP_FADE_OUT_EASE,
+    canvasFadeOpacity: 1,
+    canvasVeilOpacity: 0,
+  })
+  syncBackgroundMusicEnclosedAcoustics()
+
+  requestAnimationFrame(() => {
+    set({ canvasFadeOpacity: 0, canvasVeilOpacity: 1 })
+  })
+
+  window.setTimeout(() => {
+    performSwap()
+    syncBackgroundMusicEnclosedAcoustics()
+
+    if (opts?.afterSwap) {
+      opts.afterSwap(beginReveal)
+      return
+    }
+
+    beginReveal()
   }, CANVAS_SWAP_FADE_OUT_MS)
 }
 
 export function isWorkspaceHydrated(): boolean {
   return workspaceHydrated
-}
-
-/**
- * Permanently stop persisting workspace state for the current page session.
- * Used by the full reset so nothing re-writes localStorage while the page
- * reloads (camera-persist unload handlers + any pending debounced save). The
- * flag resets naturally on the next page load via hydrate().
- */
-export function disableWorkspacePersist(): void {
-  persistEnabled = false
-  cancelScheduledWorkspaceSave()
 }
 
 export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) => ({
@@ -265,30 +263,8 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
 
   hydrate: async () => {
     workspaceHydrated = false
-    mainCameraSpawnApplied = false
-    resetLegacyMediaSrcIndex()
-    let loaded = loadWorkspaceFromStorage()
-    if (
-      workspaceNeedsMediaMigration(loaded, loaded.storageVersion) ||
-      loaded.migratedFromLegacy
-    ) {
-      const migrated = await migrateWorkspaceMediaToIdb(loaded)
-      if (migrated) {
-        loaded = { ...migrated, storageVersion: WORKSPACE_STORAGE_VERSION }
-        saveWorkspaceToStorage(loaded)
-      } else {
-        console.warn(
-          '[spaces] media migration to IndexedDB failed — keeping inline localStorage data',
-        )
-      }
-    }
-
-    const recovered = await recoverMissingWorkspaceMedia(loaded)
-    loaded = recovered.workspace
-    if (recovered.recoveredCount > 0) {
-      saveWorkspaceToStorage(loaded)
-    }
-
+    mainCameraApplied = false
+    const loaded = loadWorkspaceFromStorage()
     const normalized = normalizeLoadedWorkspace(loaded)
 
     const mainItems = await backfillCanvasItemsImportDimensions(normalized.mainItems)
@@ -312,34 +288,20 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     useStudioCentrePositionStore
       .getState()
       .hydrate(normalized.studioCentrePosition)
-    useFeaturePlatePositionStore
-      .getState()
-      .hydrate(normalized.featurePlatePositions)
 
     set({
       spaces,
-      activeCanvasId: normalized.activeCanvasId,
+      activeCanvasId: 'main',
     })
 
-    get().loadActiveFromSlot(normalized.activeCanvasId)
+    get().loadActiveFromSlot('main')
     persistEnabled = true
     workspaceHydrated = true
-
-    const allCanvasItems = [
-      ...mainItems,
-      ...Object.values(spaces).flatMap((space) => space.items),
-    ]
-    const runtimeRecovered = await rehydrateMissingBlobsForItems(allCanvasItems)
-    if (runtimeRecovered > 0) {
-      console.info(
-        `[media] recovered ${runtimeRecovered} blob(s) on post-hydrate media pass`,
-      )
-    }
 
     if (importDimsChanged) {
       saveWorkspaceToStorage(
         workspaceSnapshot({
-          activeCanvasId: normalized.activeCanvasId,
+          activeCanvasId: 'main',
           spaces,
         }),
       )
@@ -492,13 +454,10 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     set((state) => {
       const current = state.spaces[spaceId]
       if (!current) return state
-      const { snapshot: _legacy, ...rest } = current as SpaceCanvasData & {
-        snapshot?: string
-      }
       return {
         spaces: {
           ...state.spaces,
-          [spaceId]: { ...rest, snapshotId },
+          [spaceId]: { ...current, snapshotId },
         },
       }
     })
@@ -537,20 +496,40 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
       mainCameraBeforePocket = savedMain
     }
 
-    runCanvasSpaceSwap(set, get, 'enter', () => {
-      useCanvasItemsStore.getState().clearSelection({ silent: true })
-      get().flushActiveToSlot()
-      get().loadActiveFromSlot(spaceId)
-      clearHistory()
-      // Pocket camera runs from App after pocket canvas dimensions paint.
-      get().flushPersistWorkspace()
-    })
+    runCanvasSpaceSwap(
+      set,
+      get,
+      'enter',
+      () => {
+        useCanvasItemsStore.getState().clearSelection({ silent: true })
+        get().flushActiveToSlot()
+        get().loadActiveFromSlot(spaceId)
+        clearHistory()
+        get().flushPersistWorkspace()
+      },
+      {
+        afterSwap: (startReveal) => {
+          if (!transformRef) {
+            startReveal()
+            return
+          }
+          applyCameraWhenTransformLayoutReady(
+            transformRef,
+            SPACE_CANVAS_WIDTH,
+            SPACE_CANVAS_HEIGHT,
+            () => {
+              get().applyCameraForActiveCanvas(transformRef)
+              startReveal()
+            },
+          )
+        },
+      },
+    )
   },
 
   syncMainCamera: (transformRef) => {
-    if (get().activeCanvasId !== 'main' || !transformRef || !mainCameraSpawnApplied) {
-      return
-    }
+    if (get().activeCanvasId !== 'main' || !transformRef) return
+    if (!mainCameraApplied) return
     const camera = readCameraFromRef(transformRef)
     if (!camera) return
 
@@ -586,33 +565,28 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
         pendingMainCameraRestore = false
         const snapshot = mainCameraBeforePocket
         restoreMainCameraAfterPocketExit(transformRef, snapshot, {
-          onComplete: () => {
-            if (!transformRef) return
-            updateCanvasBarrelAfterCamera(transformRef, { silent: true })
-          },
+          onComplete: () => {},
         })
         mainCameraCache = snapshot
         return
       }
 
       const cached = mainCameraCache ?? DEFAULT_SPACE_CAMERA
-      const wrapper = transformRef.instance.wrapperComponent
-      const viewportWidth = wrapper?.offsetWidth ?? window.innerWidth
-      const viewportHeight = wrapper?.offsetHeight ?? window.innerHeight
       if (
-        isUninitializedMainCamera(cached, viewportWidth, viewportHeight) ||
+        isUninitializedMainCamera(cached) ||
+        isDefaultUncenteredCamera(cached, transformRef) ||
         !isCameraPlausible(cached, transformRef)
       ) {
         resetToCoverFit(transformRef)
       } else {
         applyCameraToRef(transformRef, cached)
       }
-      ensureNotInFisheyeOverview(transformRef)
+      useCanvasOverviewStore.getState().setEngaged(false)
+      resetCanvasMinimapUiState()
       const synced = readCameraFromRef(transformRef)
       if (synced) mainCameraCache = synced
-      mainCameraSpawnApplied = true
+      mainCameraApplied = true
       invalidateBackgroundMusicAcousticsViewportSample()
-      updateCanvasBarrelAfterCamera(transformRef, { silent: true })
       return
     }
 
@@ -630,13 +604,13 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
 
     if (isDefaultCamera && isEmpty) {
       resetToCoverFit(transformRef)
-      ensureNotInFisheyeOverview(transformRef)
-      updateCanvasBarrelAfterCamera(transformRef, { silent: true })
+      useCanvasOverviewStore.getState().setEngaged(false)
+      resetCanvasMinimapUiState()
       requestAnimationFrame(() => {
-        ensureNotInFisheyeOverview(transformRef)
+        useCanvasOverviewStore.getState().setEngaged(false)
+        resetCanvasMinimapUiState()
         const synced = readCameraFromRef(transformRef)
         if (synced) get().saveCameraForActive(synced)
-        updateCanvasBarrelAfterCamera(transformRef, { silent: true })
       })
     } else {
       applyCameraToRef(
@@ -644,8 +618,8 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
         isCameraPlausible(camera, transformRef) ? camera : DEFAULT_SPACE_CAMERA,
         { centerIfUninitialized: true },
       )
-      ensureNotInFisheyeOverview(transformRef)
-      updateCanvasBarrelAfterCamera(transformRef, { silent: true })
+      useCanvasOverviewStore.getState().setEngaged(false)
+      resetCanvasMinimapUiState()
     }
   },
 
@@ -670,13 +644,44 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
       })
     }
 
-    runCanvasSpaceSwap(set, get, 'exit', () => {
-      get().flushActiveToSlot()
-      get().loadActiveFromSlot('main')
-      clearHistory()
-      // Camera restore runs from App after expanded canvas dimensions paint.
-      get().flushPersistWorkspace()
-    }, { exitSpaceId: spaceId })
+    const snapshot = mainCameraBeforePocket
+    runCanvasSpaceSwap(
+      set,
+      get,
+      'exit',
+      () => {
+        // afterSwap owns camera restore once expanded layout has painted.
+        pendingMainCameraRestore = false
+        get().flushActiveToSlot()
+        get().loadActiveFromSlot('main')
+        clearHistory()
+        get().flushPersistWorkspace()
+      },
+      {
+        exitSpaceId: spaceId,
+        afterSwap: (startReveal) => {
+          if (!transformRef) {
+            startReveal()
+            return
+          }
+          applyCameraWhenTransformLayoutReady(
+            transformRef,
+            canvasLayoutWidth(),
+            canvasLayoutHeight(),
+            () => {
+              if (snapshot) {
+                restoreMainCameraAfterPocketExit(transformRef, snapshot, {
+                  onComplete: startReveal,
+                })
+                return
+              }
+              get().applyCameraForActiveCanvas(transformRef)
+              startReveal()
+            },
+          )
+        },
+      },
+    )
   },
 }))
 
@@ -701,4 +706,10 @@ export function collectWorkspaceMediaIds(): Set<string> {
 /** Called by items/strokes stores whenever active canvas data changes. */
 export function notifyWorkspacePersist() {
   useCanvasWorkspaceStore.getState().persistWorkspace()
+}
+
+/** Stops all workspace persistence writes until next app bootstrap. */
+export function disableWorkspacePersist(): void {
+  persistEnabled = false
+  cancelScheduledWorkspaceSave()
 }

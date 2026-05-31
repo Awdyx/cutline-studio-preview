@@ -1,112 +1,67 @@
 /** Logical canvas size in px — studio centre stays centred at (½, ½). */
-export const CANVAS_WIDTH = 15000
-export const CANVAS_HEIGHT = 15000
+export const CANVAS_WIDTH = 7000
+export const CANVAS_HEIGHT = 4000
 
-/**
- * Grey margin painted outside the logical canvas so zoom-out overshoot at pan
- * limits never exposes the void background behind the transform layer.
- */
-export const CANVAS_EDGE_BLEED = 2800
-
+/** Pan/zoom transform content size on the main canvas (matches logical canvas). */
 export function canvasLayoutWidth(): number {
-  return CANVAS_WIDTH + CANVAS_EDGE_BLEED * 2
+  return CANVAS_WIDTH
 }
 
 export function canvasLayoutHeight(): number {
-  return CANVAS_HEIGHT + CANVAS_EDGE_BLEED * 2
+  return CANVAS_HEIGHT
 }
 export const CANVAS_ASPECT = CANVAS_WIDTH / CANVAS_HEIGHT
 
-/** Prior canvas size — migrates saved studio positions (equal border crop). */
-export const PREV_CANVAS_WIDTH = 20200
-export const PREV_CANVAS_HEIGHT = 20000
-
-/** Original square canvas — migrates saved studio positions (equal border crop). */
-export const LEGACY_CANVAS_WIDTH = 40000
-export const LEGACY_CANVAS_HEIGHT = 40000
-
 /** Original 4:3 working area — logical coords for items, strokes, and pockets. */
-export const CANVAS_ORIGINAL_WIDTH = 3000
-export const CANVAS_ORIGINAL_HEIGHT = 2250
-
-/**
- * Main-canvas studio render scale — plate footprint and ink/items scale up together;
- * persisted coordinates stay in the logical 3000×2250 space.
- */
-export const STUDIO_CONTENT_SCALE = 1.4
-
-/** Studio plate footprint on the expanded canvas (visual, not logical). */
-export const STUDIO_VISUAL_WIDTH = Math.round(CANVAS_ORIGINAL_WIDTH * STUDIO_CONTENT_SCALE)
-export const STUDIO_VISUAL_HEIGHT = Math.round(CANVAS_ORIGINAL_HEIGHT * STUDIO_CONTENT_SCALE)
-
-/** Feature plates (forum, rankings, etc.) — width tracks live viewport aspect. */
-export const FEATURE_PLATE_SCALE = 0.75
-export const FEATURE_PLATE_WIDTH = Math.round(CANVAS_ORIGINAL_WIDTH * FEATURE_PLATE_SCALE)
-export const FEATURE_PLATE_HEIGHT = Math.round(FEATURE_PLATE_WIDTH * (10 / 16))
-/** Fallback aspect before viewport sync — runtime uses featurePlateViewportStore. */
-export const FEATURE_PLATE_ASPECT = FEATURE_PLATE_WIDTH / FEATURE_PLATE_HEIGHT
+export const CANVAS_ORIGINAL_WIDTH = 2026
+export const CANVAS_ORIGINAL_HEIGHT = 1520
 
 /** Pocket interior — same logical working area as the studio centre. */
 export const SPACE_CANVAS_WIDTH = CANVAS_ORIGINAL_WIDTH
 export const SPACE_CANVAS_HEIGHT = CANVAS_ORIGINAL_HEIGHT
-export const CANVAS_CONTENT_OFFSET_X = (CANVAS_WIDTH - STUDIO_VISUAL_WIDTH) / 2
-export const CANVAS_CONTENT_OFFSET_Y = (CANVAS_HEIGHT - STUDIO_VISUAL_HEIGHT) / 2
-
-/** Map studio-local pointer coords from the scaled draw target into logical space. */
-export function studioVisualToLogical(value: number): number {
-  return value / STUDIO_CONTENT_SCALE
-}
-
-/** Map logical studio coords to draw-target visual space. */
-export function studioLogicalToVisual(value: number): number {
-  return value * STUDIO_CONTENT_SCALE
-}
+/** Default studio-centre top-left on the main canvas. */
+export const CANVAS_CONTENT_OFFSET_X = (CANVAS_WIDTH - CANVAS_ORIGINAL_WIDTH) / 2
+export const CANVAS_CONTENT_OFFSET_Y = (CANVAS_HEIGHT - CANVAS_ORIGINAL_HEIGHT) / 2
 
 /** Soft ramp width between studio centre fill and outer margin. */
-export const CANVAS_STUDIO_EDGE_FADE = 920
+export const CANVAS_STUDIO_EDGE_FADE = Math.round(920 * 0.75)
 
 /** Extra reach for plate focus detection — wider than edge fade, visuals unchanged. */
-export const CANVAS_PLATE_VIEWPORT_ZONE_PAD = 1560
+export const CANVAS_PLATE_VIEWPORT_ZONE_PAD = Math.round(1560 * 0.75)
 
 /**
  * Open ambient music zone beyond the studio canvas bounds.
  * Negative values pull muffling in toward the studio edge; keep smaller than edge fade.
  */
-export const CANVAS_STUDIO_ACOUSTICS_EDGE_PAD = -240
-
-/** Void grid mask — inner stop (% of canvas half-axis) through studio + edge fade. */
-export const CANVAS_VOID_GRID_MASK_INNER_STOP =
-  ((STUDIO_VISUAL_WIDTH / 2 + CANVAS_STUDIO_EDGE_FADE) / (CANVAS_WIDTH / 2)) * 100
+export const CANVAS_STUDIO_ACOUSTICS_EDGE_PAD = Math.round(-240 * 0.75)
 
 /** Rounded corners on plate working surfaces (visual clip only). */
-export const STUDIO_CENTRE_CORNER_RADIUS = 40
+export const STUDIO_CENTRE_CORNER_RADIUS = Math.round(40 * 0.75)
 
-/** Studio surface radius — scales with content zoom so corners stay proportional. */
-export const STUDIO_SURFACE_CORNER_RADIUS = Math.round(
-  STUDIO_CENTRE_CORNER_RADIUS * STUDIO_CONTENT_SCALE,
-)
+export const STUDIO_SURFACE_CORNER_RADIUS = STUDIO_CENTRE_CORNER_RADIUS
 
 /** Extra SVG pad for session-only strokes drawn outside the studio-centre box. */
-export const STUDIO_STROKE_BLEED_PAD = 6000
+export const STUDIO_STROKE_BLEED_PAD = Math.round(6000 * 0.75)
 
-/** Stay 20% more zoomed-in than the edge-to-edge cover fit (scale × 1.2). */
-const MIN_SCALE_COVER_FACTOR = 1.2
+/** Stay well zoomed-in vs edge-to-edge cover fit — limits how far pinch/wheel can zoom out. */
+const MIN_SCALE_COVER_FACTOR = 2.25
 
 export const CANVAS_MAX_SCALE = 2
 
 /** Soft overshoot past hard zoom limits (scale units); snaps back on release. */
 export const CANVAS_ZOOM_EDGE_PADDING = 0.1
-/** Slightly less give when zooming out — lighter settle at min zoom. */
-export const CANVAS_ZOOM_MIN_EDGE_PADDING = 0.0425
+/** No extra give when zooming out — hard stop at min zoom. */
+export const CANVAS_ZOOM_MIN_EDGE_PADDING = 0
 
-/** Extra zoom-out range beyond the cover-fit floor (1.5× farther out). */
-export const CANVAS_ZOOM_OUT_RANGE_FACTOR = 1.5
+/** Pinch-out floor matches resting min — no zoom-out below default. */
+const LEGACY_ZOOM_OUT_RANGE_FACTOR = 1
 
 /**
- * Minimum zoom scale: cover the viewport against the logical studio area, then
- * zoom in 20% further. Uses logical (not visual) dimensions so a scaled-up studio
- * plate still feels zoomed-in when working — visual footprint is STUDIO_VISUAL_*.
+ * Pinch-out slack below resting min (0 = no extra zoom-out past resting scale).
  */
+export const CANVAS_MAX_ZOOM_OUT_RETENTION = 0
+
+/** Minimum zoom scale: cover the viewport against the studio area, then zoom in further. */
 export function getCanvasMinScale(
   viewportWidth = window.innerWidth,
   viewportHeight = window.innerHeight,
@@ -118,10 +73,27 @@ export function getCanvasMinScale(
   return coverScale * MIN_SCALE_COVER_FACTOR
 }
 
-/** Hard zoom-out floor — cover fit divided by CANVAS_ZOOM_OUT_RANGE_FACTOR. */
+/** Pinch zoom-out floor (viewport-aware). Overview uses `getCanvasOverviewScale`. */
 export function getCanvasHardMinScale(
   viewportWidth = window.innerWidth,
   viewportHeight = window.innerHeight,
 ): number {
-  return getCanvasMinScale(viewportWidth, viewportHeight) / CANVAS_ZOOM_OUT_RANGE_FACTOR
+  const softMin = getCanvasMinScale(viewportWidth, viewportHeight)
+  const legacyFloor = softMin / LEGACY_ZOOM_OUT_RANGE_FACTOR
+  const slack = softMin - legacyFloor
+  return legacyFloor + slack * CANVAS_MAX_ZOOM_OUT_RETENTION
+}
+
+/** Overview mode scale — wider than normal max zoom-out, but not full-canvas fit. */
+const OVERVIEW_SCALE_COVER_FACTOR = 1.0
+
+export function getCanvasOverviewScale(
+  viewportWidth = window.innerWidth,
+  viewportHeight = window.innerHeight,
+): number {
+  const studioCover = Math.max(
+    viewportWidth / CANVAS_ORIGINAL_WIDTH,
+    viewportHeight / CANVAS_ORIGINAL_HEIGHT,
+  )
+  return studioCover * OVERVIEW_SCALE_COVER_FACTOR
 }

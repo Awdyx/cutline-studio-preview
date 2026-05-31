@@ -22,9 +22,7 @@ import {
 } from '../canvas/studioCentre'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import { triggerBoundsSnapBack } from './canvasItemDragStore'
-import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { isImageInSticky } from './types'
-import { STUDIO_CONTENT_SCALE } from '../drawing/canvasDimensions'
 import {
   setActiveResizeItem,
   triggerResizeSnapBack,
@@ -123,13 +121,10 @@ function pointerDeltaToLogical(
   const ref = transformRef.current
   if (!ref) return null
   const scale = ref.state.scale
-  let dx = (clientX - startClientX) / scale
-  let dy = (clientY - startClientY) / scale
-  if (!useCanvasWorkspaceStore.getState().isInsideSpace()) {
-    dx /= STUDIO_CONTENT_SCALE
-    dy /= STUDIO_CONTENT_SCALE
+  return {
+    dx: (clientX - startClientX) / scale,
+    dy: (clientY - startClientY) / scale,
   }
-  return { dx, dy }
 }
 
 function removeResizeListeners() {

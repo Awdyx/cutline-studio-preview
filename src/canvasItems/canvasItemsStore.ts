@@ -25,7 +25,7 @@ import type { DrawTool, Stroke, StrokePoint } from '../drawing/types'
 import { notifyWorkspacePersist, useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import type { SpaceCamera } from '../spaces/types'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
-import { duplicateMediaForItem } from '../media/workspaceMediaMigration'
+import { copyMediaBlob } from '../media/mediaBlobStore'
 import { scheduleMediaBlobGc } from '../media/mediaBlobGc'
 import { generateItemId } from './itemId'
 import {
@@ -161,7 +161,9 @@ type CanvasItemsState = {
   zMenuSuppressedItemId: string | null
   /** Camera to restore when dismissing a menu-driven study hub focus. */
   menuFocusReturnCamera: SpaceCamera | null
-  /** Portal stays mounted while the return zoom animation plays. */
+  /** True once the fly-to camera has landed — gates the menu-focus portal. */
+  menuFocusRevealed: boolean
+  /** Return zoom animation in progress after dismiss. */
   menuFocusDismissing: boolean
   /** Study hub that owns the dismissing portal (set before focus chrome clears). */
   menuFocusDismissItemId: string | null
@@ -188,6 +190,7 @@ type CanvasItemsState = {
     },
   ) => void
   clearMenuFocusChrome: () => void
+  revealMenuFocus: () => void
   takeMenuFocusReturnCamera: () => SpaceCamera | null
   clearSelection: (opts?: { silent?: boolean }) => void
   parkSelectionOffScreen: () => void
@@ -421,6 +424,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   zOrderPulse: null,
   zMenuSuppressedItemId: null,
   menuFocusReturnCamera: null,
+  menuFocusRevealed: false,
   menuFocusDismissing: false,
   menuFocusDismissItemId: null,
   pendingEditorFocusId: null,
@@ -474,6 +478,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
             selectedIds: state.selectedIds.filter((x) => x !== id),
             zMenuSuppressedItemId: null,
             menuFocusReturnCamera: null,
+            menuFocusRevealed: false,
             viewportSelectionPark: null,
           }
         }
@@ -482,6 +487,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           selectedIds: [...state.selectedIds, id],
           zMenuSuppressedItemId: null,
           menuFocusReturnCamera: null,
+          menuFocusRevealed: false,
           viewportSelectionPark: null,
         }
       }
@@ -491,10 +497,15 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
             zMenuSuppressedItemId: id,
             menuFocusReturnCamera:
               options.menuFocusReturnCamera ?? state.menuFocusReturnCamera,
+            menuFocusRevealed: false,
           }
         }
         if (state.zMenuSuppressedItemId === id) {
-          return { zMenuSuppressedItemId: null, menuFocusReturnCamera: null }
+          return {
+            zMenuSuppressedItemId: null,
+            menuFocusReturnCamera: null,
+            menuFocusRevealed: false,
+          }
         }
         return state
       }
@@ -506,6 +517,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           options?.suppressZMenu && options.menuFocusReturnCamera
             ? options.menuFocusReturnCamera
             : null,
+        menuFocusRevealed: false,
         viewportSelectionPark: null,
       }
     })
@@ -528,7 +540,19 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   },
 
   clearMenuFocusChrome: () => {
-    set({ zMenuSuppressedItemId: null, menuFocusReturnCamera: null, menuFocusDismissing: false, menuFocusDismissItemId: null })
+    set({
+      zMenuSuppressedItemId: null,
+      menuFocusReturnCamera: null,
+      menuFocusRevealed: false,
+      menuFocusDismissing: false,
+      menuFocusDismissItemId: null,
+    })
+  },
+
+  revealMenuFocus: () => {
+    if (!get().menuFocusReturnCamera || get().menuFocusDismissing) return
+    if (get().menuFocusRevealed) return
+    set({ menuFocusRevealed: true })
   },
 
   takeMenuFocusReturnCamera: () => {
@@ -539,6 +563,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       selectedIds: [],
       zMenuSuppressedItemId: null,
       menuFocusReturnCamera: null,
+      menuFocusRevealed: false,
       previewAdjustSpaceId: null,
       viewportSelectionPark: null,
     })
@@ -558,6 +583,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       previewAdjustSpaceId: null,
       zMenuSuppressedItemId: null,
       menuFocusReturnCamera: null,
+      menuFocusRevealed: false,
       menuFocusDismissing: false,
       menuFocusDismissItemId: null,
       viewportSelectionPark: null,
@@ -578,6 +604,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       previewAdjustSpaceId: null,
       zMenuSuppressedItemId: null,
       menuFocusReturnCamera: null,
+      menuFocusRevealed: false,
       menuFocusDismissing: false,
       menuFocusDismissItemId: null,
       viewportSelectionPark: {
@@ -658,7 +685,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
         }
         const id = generateItemId()
         if (source.type === 'image' || source.type === 'video') {
-          const copied = await duplicateMediaForItem(source.mediaId, id)
+          const copied = await copyMediaBlob(source.mediaId, id)
           if (!copied) continue
         }
         clones.push(cloneItem(source, offset, id, items))

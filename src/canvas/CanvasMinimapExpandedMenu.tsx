@@ -6,7 +6,6 @@ import {
   CANVAS_MINIMAP_EXPANDED_WIDTH_PX,
   type CanvasMinimapRect,
 } from './canvasMinimapGeometry'
-import { FEATURE_PLATE_DESTINATIONS } from './canvasPlate'
 import CanvasMinimapDestinationPlate from './CanvasMinimapDestinationPlate'
 import { useCanvasMinimapStore } from './canvasMinimapStore'
 import { playSound } from '../sound/playSound'
@@ -35,7 +34,7 @@ export default function CanvasMinimapExpandedMenu({
   transformRef,
 }: Props) {
   const reduceMotion = useReducedMotion()
-  const viewportSquish = useCanvasMinimapViewportSquish(open, reduceMotion)
+  const viewportSquish = useCanvasMinimapViewportSquish(open, reduceMotion, transformRef)
   const frameRef = useRef<HTMLDivElement>(null)
   const spacesHintHoveredRef = useRef(false)
   const repositionHintOpen = useCanvasMinimapStore((s) => s.repositionHintOpen)
@@ -156,23 +155,10 @@ export default function CanvasMinimapExpandedMenu({
                   <div className="canvas-minimap-expanded-menu__grid" />
                 </div>
 
-                {FEATURE_PLATE_DESTINATIONS.map((dest) => (
-                  <CanvasMinimapDestinationPlate
-                    key={dest}
-                    destination={dest}
-                    mapRegion={MAP_REGION}
-                    transformRef={transformRef}
-                    frameRef={frameRef}
-                    variant="feature"
-                  />
-                ))}
-
                 <CanvasMinimapDestinationPlate
-                  destination="studio"
                   mapRegion={MAP_REGION}
                   transformRef={transformRef}
                   frameRef={frameRef}
-                  variant="studio"
                 />
 
                 {viewportPct && (

@@ -123,8 +123,8 @@ export type CanvasItem =
   | SpaceCanvasItem
   | StudyHubCanvasItem
 
-/** Cumulative spawn footprint vs original design (×1.3, then +20%). */
-export const STUDIO_SPAWN_SIZE_SCALE = 1.3 * 1.2
+/** Spawn footprint vs original design — tuned for the smaller studio canvas. */
+export const STUDIO_SPAWN_SIZE_SCALE = 0.65
 
 export const STICKY_WIDTH = Math.round(200 * STUDIO_SPAWN_SIZE_SCALE)
 export const STICKY_HEIGHT = Math.round(200 * STUDIO_SPAWN_SIZE_SCALE)
@@ -147,8 +147,8 @@ export const TEXT_HEIGHT = Math.round(120 * STUDIO_SPAWN_SIZE_SCALE)
 /** Max width while auto-fitting content during the first edit. */
 export const TEXT_MAX_AUTO_WIDTH = Math.round(320 * STUDIO_SPAWN_SIZE_SCALE)
 export const TEXT_BOX_PADDING = `${TEXT_BOX_INSET_Y}px ${TEXT_BOX_INSET_X}px`
-export const STUDY_HUB_WIDTH = 460
-export const STUDY_HUB_HEIGHT = 580
+export const STUDY_HUB_WIDTH = 580
+export const STUDY_HUB_HEIGHT = 520
 export const STUDY_HUB_ASPECT = STUDY_HUB_WIDTH / STUDY_HUB_HEIGHT
 /** Muted yellow — slightly desaturated vs classic sticky note. */
 export const STICKY_COLOR = '#F0EBC6'

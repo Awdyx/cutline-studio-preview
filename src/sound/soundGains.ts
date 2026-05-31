@@ -34,8 +34,6 @@ export const SOUND_LEVELS: Record<SoundId, number> = {
   zOrderFront: 0.53,
   zOrderBack: 0.56,
   aspectSnap: 0.88,
-  fisheyeEnter: 0.62,
-  fisheyeExit: 0.62,
   minimapOpen: 1.02,
   minimapClose: 0.98,
   textCommit: 0.9,
@@ -57,4 +55,3 @@ export const RESIZE_SFX_LEVEL = 0.216
 export const STUDIO_CENTRE_DRAG_SFX_LEVEL = 0.92
 
 /** Canvas pan whoosh — airy/bright bed, kept subtle since panning is frequent. */
-export const PAN_SFX_LEVEL = 2.08

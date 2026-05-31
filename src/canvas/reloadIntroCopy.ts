@@ -1,12 +1,7 @@
 import {
   APP_DESTINATION_LABELS,
   useAppDestinationStore,
-  type AppDestination,
 } from '../navigation/appDestinationStore'
-import {
-  FEATURE_PLATE_TITLE_SUFFIX,
-  isFeaturePlateDestination,
-} from './canvasPlate'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import {
   DEFAULT_SPACE_NAME,
@@ -20,14 +15,6 @@ export type ReloadIntroCopy = {
 }
 
 const STUDIO_SUFFIX = '<3'
-
-export function reloadIntroSuffixForDestination(destination: AppDestination): string {
-  if (destination === 'studio') return STUDIO_SUFFIX
-  if (isFeaturePlateDestination(destination)) {
-    return FEATURE_PLATE_TITLE_SUFFIX[destination]
-  }
-  return STUDIO_SUFFIX
-}
 
 /** Title copy for the reload intro — last focused main-canvas plate, or pocket name. */
 export function resolveReloadIntroCopy(): ReloadIntroCopy {
@@ -43,6 +30,6 @@ export function resolveReloadIntroCopy(): ReloadIntroCopy {
 
   return {
     name: APP_DESTINATION_LABELS[destination],
-    suffix: reloadIntroSuffixForDestination(destination),
+    suffix: STUDIO_SUFFIX,
   }
 }

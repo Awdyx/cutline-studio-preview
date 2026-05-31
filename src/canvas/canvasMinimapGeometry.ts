@@ -2,13 +2,9 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
-  STUDIO_VISUAL_HEIGHT,
-  STUDIO_VISUAL_WIDTH,
+  CANVAS_ORIGINAL_HEIGHT,
+  CANVAS_ORIGINAL_WIDTH,
 } from '../drawing/canvasDimensions'
-import { getFeaturePlateDimensions } from './featurePlateViewportStore'
-import { mainCanvasLogicalBleedOffset } from '../drawing/canvasCoords'
-import type { FeaturePlateDestination } from './canvasPlate'
-import { useFeaturePlatePositionStore } from './featurePlatePositionStore'
 import { useStudioCentrePositionStore } from './studioCentrePositionStore'
 
 export type CanvasMinimapRect = {
@@ -35,18 +31,9 @@ export function canvasMinimapStudioRect(): CanvasMinimapRect {
   return {
     x,
     y,
-    width: STUDIO_VISUAL_WIDTH,
-    height: STUDIO_VISUAL_HEIGHT,
+    width: CANVAS_ORIGINAL_WIDTH,
+    height: CANVAS_ORIGINAL_HEIGHT,
   }
-}
-
-/** Feature plate on the full canvas — reads live position from store. */
-export function canvasMinimapFeaturePlateRect(
-  dest: FeaturePlateDestination,
-): CanvasMinimapRect {
-  const { x, y } = useFeaturePlatePositionStore.getState().positions[dest]
-  const { width, height } = getFeaturePlateDimensions()
-  return { x, y, width, height }
 }
 
 export function canvasRectToMinimapPercent(
@@ -114,8 +101,8 @@ export function canvasMinimapFocusRegion(
   const padY = 3800
   let x = studioX - padX
   let y = studioY - padY
-  let width = STUDIO_VISUAL_WIDTH + padX * 2
-  let height = STUDIO_VISUAL_HEIGHT + padY * 2
+  let width = CANVAS_ORIGINAL_WIDTH + padX * 2
+  let height = CANVAS_ORIGINAL_HEIGHT + padY * 2
 
   if (x < 0) {
     width += x
@@ -135,8 +122,8 @@ export function canvasMinimapFocusRegion(
   return {
     x,
     y,
-    width: Math.max(width, STUDIO_VISUAL_WIDTH),
-    height: Math.max(height, STUDIO_VISUAL_HEIGHT),
+    width: Math.max(width, CANVAS_ORIGINAL_WIDTH),
+    height: Math.max(height, CANVAS_ORIGINAL_HEIGHT),
   }
 }
 
@@ -153,11 +140,10 @@ export function readCanvasMinimapViewport(
   const { positionX, positionY, scale } = ref.state
   if (!Number.isFinite(scale) || scale <= 0) return null
 
-  const bleed = mainCanvasLogicalBleedOffset()
-  const x = clamp(-positionX / scale - bleed, 0, canvasWidth)
-  const y = clamp(-positionY / scale - bleed, 0, canvasHeight)
-  const right = clamp((wrapperWidth - positionX) / scale - bleed, 0, canvasWidth)
-  const bottom = clamp((wrapperHeight - positionY) / scale - bleed, 0, canvasHeight)
+  const x = clamp(-positionX / scale, 0, canvasWidth)
+  const y = clamp(-positionY / scale, 0, canvasHeight)
+  const right = clamp((wrapperWidth - positionX) / scale, 0, canvasWidth)
+  const bottom = clamp((wrapperHeight - positionY) / scale, 0, canvasHeight)
 
   return {
     x,

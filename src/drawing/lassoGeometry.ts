@@ -1,11 +1,8 @@
 import {
   CANVAS_ORIGINAL_HEIGHT,
   CANVAS_ORIGINAL_WIDTH,
-  studioLogicalToVisual,
-  studioVisualToLogical,
 } from './canvasDimensions'
 import { clientToCanvasFromElement } from './canvasCoords'
-import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import type { Stroke } from './types'
 import type { CanvasItemBase } from '../canvasItems/types'
 
@@ -74,14 +71,6 @@ export function itemIntersectsPolygon(item: CanvasItemBase, poly: Pt[]): boolean
   return corners.some((c) => pointInPolygon(c.x, c.y, poly))
 }
 
-function studioContentScaleActive(): boolean {
-  return !useCanvasWorkspaceStore.getState().isInsideSpace()
-}
-
-function visualDrawTargetCoord(logical: number): number {
-  return studioContentScaleActive() ? studioLogicalToVisual(logical) : logical
-}
-
 /** Convert screen-space lasso points → logical canvas coordinates. */
 export function screenPolyToCanvas(
   screenPoly: Pt[],
@@ -91,14 +80,10 @@ export function screenPolyToCanvas(
   if (rect.width <= 0 || rect.height <= 0) return []
   const scaleX = canvasEl.offsetWidth / rect.width
   const scaleY = canvasEl.offsetHeight / rect.height
-  return screenPoly.map((p) => {
-    const visualX = (p.x - rect.left) * scaleX
-    const visualY = (p.y - rect.top) * scaleY
-    return {
-      x: studioContentScaleActive() ? studioVisualToLogical(visualX) : visualX,
-      y: studioContentScaleActive() ? studioVisualToLogical(visualY) : visualY,
-    }
-  })
+  return screenPoly.map((p) => ({
+    x: (p.x - rect.left) * scaleX,
+    y: (p.y - rect.top) * scaleY,
+  }))
 }
 
 /** Canvas-space bounds for the current lasso selection (optional drag preview offset). */
@@ -178,10 +163,10 @@ export function lassoSelectionScreenBounds(
   const pad = LASSO_CHROME_PAD_SCREEN
 
   return {
-    left: rect.left + visualDrawTargetCoord(canvasBounds.left) * scaleX - pad,
-    top: rect.top + visualDrawTargetCoord(canvasBounds.top) * scaleY - pad,
-    right: rect.left + visualDrawTargetCoord(canvasBounds.right) * scaleX + pad,
-    bottom: rect.top + visualDrawTargetCoord(canvasBounds.bottom) * scaleY + pad,
+    left: rect.left + canvasBounds.left * scaleX - pad,
+    top: rect.top + canvasBounds.top * scaleY - pad,
+    right: rect.left + canvasBounds.right * scaleX + pad,
+    bottom: rect.top + canvasBounds.bottom * scaleY + pad,
   }
 }
 

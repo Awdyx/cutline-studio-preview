@@ -26,6 +26,7 @@ import ProfilePinnedTrack from '../music/ProfilePinnedTrack'
 import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
+import { desktopChromePanelAnchorRight, desktopChromePanelTop } from '../platform/chromeLayout'
 import { useVisualViewportOffset } from '../platform/useVisualViewportOffset'
 
 type ProfileDestination = 'profile' | 'subscription' | 'help'
@@ -38,7 +39,6 @@ interface ProfilePanelProps {
   onSignOut: () => void
 }
 
-const PROFILE_PANEL_TOP = 64
 const HELP_TAUNT_GAP = 12
 const HELP_TAUNT_TEXT = "we aren't a corporation just text us"
 
@@ -62,8 +62,8 @@ const headerItemVariants = {
 
 const cardBase: React.CSSProperties = {
   position: 'fixed',
-  top: PROFILE_PANEL_TOP,
-  right: 16,
+  top: desktopChromePanelTop,
+  right: desktopChromePanelAnchorRight,
   width: 280,
   ...chromeFrostedMenuStyle,
   fontFamily: font.family,
@@ -257,6 +257,7 @@ export default function ProfilePanel({
     <>
       <motion.div
         ref={panelRef}
+        data-top-chrome-panel=""
         className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
         style={{
           ...(isPhone
@@ -273,7 +274,10 @@ export default function ProfilePanel({
                 ),
                 transformOrigin: phoneTopPanelTransformOrigin,
               }
-            : { ...cardBase, top: PROFILE_PANEL_TOP + visualViewportOffsetTop }),
+            : {
+                ...cardBase,
+                top: `calc(${desktopChromePanelTop} + ${visualViewportOffsetTop}px)`,
+              }),
           ...chromeFrostedMenuStyle,
           fontFamily: font.family,
           color: font.colorPrimary,

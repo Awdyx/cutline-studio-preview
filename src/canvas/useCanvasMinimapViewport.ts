@@ -31,6 +31,7 @@ export function useCanvasMinimapViewport(
     }
 
     let raf = 0
+
     const tick = () => {
       const ref = transformRef.current
       const wrapper =
@@ -38,15 +39,17 @@ export function useCanvasMinimapViewport(
       const width = wrapper?.clientWidth ?? 0
       const height = wrapper?.clientHeight ?? 0
       const next = readCanvasMinimapViewport(ref, width, height)
-      // readCanvasMinimapViewport returns a fresh object each frame; only push a
-      // new state when the rect actually moved so the minimap doesn't re-render
-      // 60 times a second while the overview sits idle.
+
       setViewport((prev) => (minimapRectsEqual(prev, next) ? prev : next))
       raf = requestAnimationFrame(tick)
     }
 
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    window.addEventListener('resize', tick)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', tick)
+    }
   }, [active, transformRef, viewportRef])
 
   return viewport

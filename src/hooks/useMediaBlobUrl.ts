@@ -13,10 +13,9 @@ const BLOB_RESOLVE_RETRY_MS = 100
 
 async function resolveMediaObjectUrlWithRetry(
   mediaId: string,
-  itemId?: string,
 ): Promise<string | null> {
   for (let attempt = 0; attempt < BLOB_RESOLVE_MAX_ATTEMPTS; attempt++) {
-    const objectUrl = await resolveMediaObjectUrl(mediaId, itemId)
+    const objectUrl = await resolveMediaObjectUrl(mediaId)
     if (objectUrl) return objectUrl
     if (attempt < BLOB_RESOLVE_MAX_ATTEMPTS - 1) {
       await new Promise((resolve) => {
@@ -48,7 +47,7 @@ export function useMediaBlobUrl(
     setStatus('loading')
     setUrl(undefined)
 
-    void resolveMediaObjectUrlWithRetry(mediaId, itemId)
+    void resolveMediaObjectUrlWithRetry(mediaId)
       .then((objectUrl) => {
         if (cancelled) {
           if (objectUrl) releaseMediaObjectUrl(mediaId)

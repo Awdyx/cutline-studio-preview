@@ -1,4 +1,5 @@
 import type { ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
+import { readCanvasPanBounds } from './canvas/canvasCamera'
 
 export const MAX_VELOCITY = 14
 
@@ -24,7 +25,8 @@ const BOUND_EPS = 1.5
 const HOLD_STRENGTH = 0.66
 const AWAY_VELOCITY = 0.4
 /** Per-frame pan delta that counts as intentional movement while approaching an edge. */
-const MOTION_EPS = 0.08
+export const PAN_MOTION_EPS = 0.08
+const MOTION_EPS = PAN_MOTION_EPS
 /** Ignore velocity decay / touch jitter when latched at an edge. */
 export const EDGE_HOLD_MOTION_EPS = 1.4
 /** Pause at the edge before the held vignette starts fading. */
@@ -45,7 +47,7 @@ const edgeRuntime: Record<EdgeKey, EdgeRuntime> = {
 }
 
 function readEdgeContact(ref: ReactZoomPanPinchRef): Record<EdgeKey, boolean> {
-  const bounds = ref.instance.bounds
+  const bounds = readCanvasPanBounds(ref) ?? ref.instance.bounds
   if (!bounds) {
     return { left: false, right: false, top: false, bottom: false }
   }

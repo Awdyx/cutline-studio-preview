@@ -6,23 +6,15 @@ import {
   canvasOuterBackgroundColor,
   canvasVoidBackgroundColor,
   generatePalette,
-  panEdgeGlowColor,
 } from './paletteGenerator'
 import {
-  CANVAS_EDGE_BLEED,
   CANVAS_ORIGINAL_HEIGHT,
   CANVAS_ORIGINAL_WIDTH,
   CANVAS_STUDIO_EDGE_FADE,
-  CANVAS_VOID_GRID_MASK_INNER_STOP,
   canvasLayoutHeight,
   canvasLayoutWidth,
-  FEATURE_PLATE_HEIGHT,
-  FEATURE_PLATE_WIDTH,
   STUDIO_CENTRE_CORNER_RADIUS,
-  STUDIO_CONTENT_SCALE,
   STUDIO_SURFACE_CORNER_RADIUS,
-  STUDIO_VISUAL_HEIGHT,
-  STUDIO_VISUAL_WIDTH,
 } from '../drawing/canvasDimensions'
 import {
   STICKY_DEFAULT_FONT_SIZE,
@@ -84,24 +76,13 @@ export function useThemeCssVars() {
     root.style.setProperty('--canvas-outer-bg', canvasOuterBg)
     root.style.setProperty('--canvas-blend-mid', canvasBlendMid)
     root.style.setProperty('--canvas-void-bg', canvasVoidBg)
-    root.style.setProperty('--pan-edge-glow', panEdgeGlowColor(effectiveMode))
     root.style.setProperty('--canvas-width', `${canvasLayoutWidth()}px`)
     root.style.setProperty('--canvas-height', `${canvasLayoutHeight()}px`)
-    root.style.setProperty('--canvas-edge-bleed', `${CANVAS_EDGE_BLEED}px`)
     root.style.setProperty('--canvas-studio-edge-fade', `${CANVAS_STUDIO_EDGE_FADE}px`)
-    root.style.setProperty(
-      '--canvas-void-grid-mask-inner',
-      `${CANVAS_VOID_GRID_MASK_INNER_STOP}%`,
-    )
     root.style.setProperty('--studio-centre-radius', `${STUDIO_CENTRE_CORNER_RADIUS}px`)
     root.style.setProperty('--studio-surface-radius', `${STUDIO_SURFACE_CORNER_RADIUS}px`)
-    root.style.setProperty('--canvas-studio-w', `${STUDIO_VISUAL_WIDTH}px`)
-    root.style.setProperty('--canvas-studio-h', `${STUDIO_VISUAL_HEIGHT}px`)
-    root.style.setProperty('--studio-logical-w', `${CANVAS_ORIGINAL_WIDTH}px`)
-    root.style.setProperty('--studio-logical-h', `${CANVAS_ORIGINAL_HEIGHT}px`)
-    root.style.setProperty('--studio-content-scale', `${STUDIO_CONTENT_SCALE}`)
-    root.style.setProperty('--feature-plate-width', `${FEATURE_PLATE_WIDTH}px`)
-    root.style.setProperty('--feature-plate-height', `${FEATURE_PLATE_HEIGHT}px`)
+    root.style.setProperty('--canvas-studio-w', `${CANVAS_ORIGINAL_WIDTH}px`)
+    root.style.setProperty('--canvas-studio-h', `${CANVAS_ORIGINAL_HEIGHT}px`)
     root.style.setProperty(
       '--canvas-text-default-font-size',
       `${TEXT_ITEM_DEFAULT_FONT_SIZE}px`,

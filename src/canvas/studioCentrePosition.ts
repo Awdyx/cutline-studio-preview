@@ -5,14 +5,7 @@ import {
   CANVAS_ORIGINAL_HEIGHT,
   CANVAS_ORIGINAL_WIDTH,
   CANVAS_WIDTH,
-  LEGACY_CANVAS_HEIGHT,
-  LEGACY_CANVAS_WIDTH,
-  PREV_CANVAS_HEIGHT,
-  PREV_CANVAS_WIDTH,
-  STUDIO_VISUAL_HEIGHT,
-  STUDIO_VISUAL_WIDTH,
 } from '../drawing/canvasDimensions'
-import { getFeaturePlateDimensions } from './featurePlateViewportStore'
 import type { CanvasMinimapRect } from './canvasMinimapGeometry'
 
 export type StudioCentrePosition = {
@@ -53,22 +46,8 @@ export function clampStudioCentrePosition(x: number, y: number): StudioCentrePos
   const topInset = STUDIO_CENTRE_POSITION_BORDER_INSET_TOP
   const minX = inset
   const minY = topInset
-  const maxX = CANVAS_WIDTH - STUDIO_VISUAL_WIDTH - inset
-  const maxY = CANVAS_HEIGHT - STUDIO_VISUAL_HEIGHT - inset
-  return {
-    x: Math.min(Math.max(minX, x), maxX),
-    y: Math.min(Math.max(minY, y), maxY),
-  }
-}
-
-export function clampFeaturePlatePosition(x: number, y: number): StudioCentrePosition {
-  const { width, height } = getFeaturePlateDimensions()
-  const inset = STUDIO_CENTRE_POSITION_BORDER_INSET
-  const topInset = STUDIO_CENTRE_POSITION_BORDER_INSET_TOP
-  const minX = inset
-  const minY = topInset
-  const maxX = CANVAS_WIDTH - width - inset
-  const maxY = CANVAS_HEIGHT - height - inset
+  const maxX = CANVAS_WIDTH - CANVAS_ORIGINAL_WIDTH - inset
+  const maxY = CANVAS_HEIGHT - CANVAS_ORIGINAL_HEIGHT - inset
   return {
     x: Math.min(Math.max(minX, x), maxX),
     y: Math.min(Math.max(minY, y), maxY),
@@ -79,8 +58,8 @@ export function studioCentreRectAt(x: number, y: number): CanvasMinimapRect {
   return {
     x,
     y,
-    width: STUDIO_VISUAL_WIDTH,
-    height: STUDIO_VISUAL_HEIGHT,
+    width: CANVAS_ORIGINAL_WIDTH,
+    height: CANVAS_ORIGINAL_HEIGHT,
   }
 }
 
@@ -95,30 +74,6 @@ export function syncStudioCentreCssVars(x: number, y: number): void {
   syncStudioCentreLayoutVars(x, y)
 }
 
-function fitsCanvasBounds(x: number, y: number, width: number, height: number): boolean {
-  return (
-    x + STUDIO_VISUAL_WIDTH <= width &&
-    y + STUDIO_VISUAL_HEIGHT <= height
-  )
-}
-
-/** Prior centred default before studio content scale — migrate saved positions. */
-const LEGACY_STUDIO_CONTENT_OFFSET_X = (CANVAS_WIDTH - CANVAS_ORIGINAL_WIDTH) / 2
-const LEGACY_STUDIO_CONTENT_OFFSET_Y = (CANVAS_HEIGHT - CANVAS_ORIGINAL_HEIGHT) / 2
-const STUDIO_POSITION_MIGRATION_TOLERANCE = 2
-
-function cropFromPriorCanvas(
-  x: number,
-  y: number,
-  priorWidth: number,
-  priorHeight: number,
-): StudioCentrePosition {
-  return {
-    x: x - (priorWidth - CANVAS_WIDTH) / 2,
-    y: y - (priorHeight - CANVAS_HEIGHT) / 2,
-  }
-}
-
 export function normalizeStudioCentrePosition(
   raw: unknown,
 ): StudioCentrePosition | null {
@@ -126,32 +81,5 @@ export function normalizeStudioCentrePosition(
   const o = raw as StudioCentrePosition
   if (typeof o.x !== 'number' || typeof o.y !== 'number') return null
   if (!Number.isFinite(o.x) || !Number.isFinite(o.y)) return null
-
-  let { x, y } = o
-  if (
-    Math.abs(x - LEGACY_STUDIO_CONTENT_OFFSET_X) < STUDIO_POSITION_MIGRATION_TOLERANCE &&
-    Math.abs(y - LEGACY_STUDIO_CONTENT_OFFSET_Y) < STUDIO_POSITION_MIGRATION_TOLERANCE
-  ) {
-    x = CANVAS_CONTENT_OFFSET_X
-    y = CANVAS_CONTENT_OFFSET_Y
-  }
-  if (!fitsCanvasBounds(x, y, CANVAS_WIDTH, CANVAS_HEIGHT)) {
-    if (fitsCanvasBounds(x, y, PREV_CANVAS_WIDTH, PREV_CANVAS_HEIGHT)) {
-      ;({ x, y } = cropFromPriorCanvas(
-        x,
-        y,
-        PREV_CANVAS_WIDTH,
-        PREV_CANVAS_HEIGHT,
-      ))
-    } else {
-      ;({ x, y } = cropFromPriorCanvas(
-        x,
-        y,
-        LEGACY_CANVAS_WIDTH,
-        LEGACY_CANVAS_HEIGHT,
-      ))
-    }
-  }
-
-  return clampStudioCentrePosition(x, y)
+  return clampStudioCentrePosition(o.x, o.y)
 }

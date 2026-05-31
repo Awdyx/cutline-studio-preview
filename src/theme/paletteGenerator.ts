@@ -208,13 +208,6 @@ export function canvasVoidBackgroundColor(
   return monotone(0.14)
 }
 
-/** Opaque pan-edge glow — animated via opacity, not alpha gradients. */
-export function panEdgeGlowColor(mode: 'light' | 'dark'): string {
-  return mode === 'light'
-    ? neutral(0.76, uiChroma(0.005))
-    : neutral(0.46, uiChroma(0.01))
-}
-
 /** Sticky note surface — warm paper in light mode; lifted light grey on dark canvas. */
 export function resolveStickyColor(mode: 'light' | 'dark'): string {
   return mode === 'light' ? '#F5F1D4' : neutral(0.30, uiChroma(0.006))

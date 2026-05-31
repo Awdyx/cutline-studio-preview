@@ -3,25 +3,20 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { syncLayoutProfileAttribute } from './platform/layoutProfile'
 import { syncTouchFirstAttribute } from './platform/compositor'
-import { applyDefaultSeedForFirstVisit } from './defaults/bootstrapDefaultSeed'
+import { syncTauriDesktopAttribute } from './platform/tauriDesktop'
 import App from './App.tsx'
 import AppAccessGate from './components/AppAccessGate.tsx'
-import { loadAppAccessUnlocked, saveAppAccessUnlocked } from './components/appAccessPersistence'
 
 syncLayoutProfileAttribute()
 syncTouchFirstAttribute()
+syncTauriDesktopAttribute()
 
 function Root() {
-  const [unlocked, setUnlocked] = useState(loadAppAccessUnlocked)
-
-  const handleUnlock = (persist: boolean) => {
-    if (persist) saveAppAccessUnlocked()
-    setUnlocked(true)
-  }
+  const [unlocked, setUnlocked] = useState(false)
 
   return (
     <>
-      {!unlocked && <AppAccessGate onUnlock={handleUnlock} />}
+      {!unlocked && <AppAccessGate onUnlock={() => setUnlocked(true)} />}
       {unlocked && (
         <StrictMode>
           <App />
@@ -31,12 +26,4 @@ function Root() {
   )
 }
 
-async function boot() {
-  await applyDefaultSeedForFirstVisit()
-  if (import.meta.env.DEV) {
-    void import('./defaults/devDefaultSeedCapture')
-  }
-  createRoot(document.getElementById('root')!).render(<Root />)
-}
-
-void boot()
+createRoot(document.getElementById('root')!).render(<Root />)

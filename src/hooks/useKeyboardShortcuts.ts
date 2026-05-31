@@ -11,12 +11,10 @@ import { useStrokesStore } from '../drawing/strokesStore'
 import { useLassoStore } from '../drawing/useLassoStore'
 import { dismissCanvasSelection } from '../canvas/canvasSelectionDismiss'
 import { canvasEditingAllowed } from '../canvasEdit/layer'
-import { runCanvasFisheyeExit } from '../canvas/canvasBarrelPostProcess'
+import { runCanvasOverviewExit } from '../canvas/canvasOverviewCamera'
 import { dismissMinimapMode, toggleCanvasMinimap } from '../canvas/canvasMinimapOpen'
-import { useCanvasFisheyeStore } from '../canvas/canvasFisheyeStore'
+import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
 import { useCanvasMinimapStore } from '../canvas/canvasMinimapStore'
-import { dismissAppDestinationFocus } from '../navigation/appDestinationFocus'
-import { useAppDestinationFocusStore } from '../navigation/appDestinationFocusStore'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { SHORTCUTS_BY_ID } from '../shortcuts/shortcutDefs'
@@ -141,13 +139,8 @@ function handleEscape(
     return true
   }
 
-  if (useAppDestinationFocusStore.getState().panLocked) {
-    dismissAppDestinationFocus(transformRef)
-    return true
-  }
-
-  if (useCanvasFisheyeStore.getState().engaged) {
-    runCanvasFisheyeExit(transformRef.current, null)
+  if (useCanvasOverviewStore.getState().engaged) {
+    runCanvasOverviewExit(transformRef.current, null)
     return true
   }
 
@@ -243,7 +236,7 @@ export function useKeyboardShortcuts(
 
       // ── Select all (studio centre) ────────────────────────────────────────
       if (matchesShortcut(e, 'select-all')) {
-        if (!canvasEditingAllowed() || useCanvasFisheyeStore.getState().engaged) return
+        if (!canvasEditingAllowed() || useCanvasOverviewStore.getState().engaged) return
         e.preventDefault()
         if (useLassoStore.getState().selectAllInStudioCentre()) {
           fireToast('select-all')
@@ -317,7 +310,7 @@ export function useKeyboardShortcuts(
         return
       }
 
-      // ── Canvas map (fisheye) ───────────────────────────────────────────────
+      // ── Canvas map ─────────────────────────────────────────────────────────
       if (matchesShortcut(e, 'open-canvas-map')) {
         e.preventDefault()
         toggleCanvasMinimap(transformRef)

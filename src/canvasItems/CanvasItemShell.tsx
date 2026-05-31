@@ -10,7 +10,6 @@ import {
   useCanvasItemsStore,
   useItemIsSoleSelected,
   useItemSelected,
-  useItemZOrderPulse,
 } from './canvasItemsStore'
 import { useCanvasEditingAllowed } from '../canvasEdit/layer'
 import { useSpaceDropStore } from '../spaces/spaceDropStore'
@@ -143,29 +142,14 @@ export default function CanvasItemShell({
   const isSoleSelected = useItemIsSoleSelected(item.id)
   const selectedIds = useCanvasItemsStore((s) => s.selectedIds)
   const allItems = useCanvasItemsStore((s) => s.items)
-  const zOrderPulse = useItemZOrderPulse(item.id)
   const editingAllowed = useCanvasEditingAllowed()
   const zMenuSuppressedItemId = useCanvasItemsStore((s) => s.zMenuSuppressedItemId)
+  const menuFocusRevealed = useCanvasItemsStore((s) => s.menuFocusRevealed)
   const menuFocusReturnCamera = useCanvasItemsStore((s) => s.menuFocusReturnCamera)
   const hideItemHandles = zMenuSuppressedItemId === item.id
   const hideDragHandle =
     hideItemHandles ||
     (isSoleSelected && editingAllowed && zMenuSuppressedItemId !== item.id)
-  const [zPulseClass, setZPulseClass] = useState<string | null>(null)
-  const lastZPulseNonce = useRef(0)
-
-  useEffect(() => {
-    if (!zOrderPulse || embeddedInSticky) return
-    if (zOrderPulse.nonce === lastZPulseNonce.current) return
-    lastZPulseNonce.current = zOrderPulse.nonce
-    setZPulseClass(
-      zOrderPulse.dir === 'front'
-        ? 'canvas-item-z-pulse-front'
-        : 'canvas-item-z-pulse-back',
-    )
-    const timer = window.setTimeout(() => setZPulseClass(null), 360)
-    return () => window.clearTimeout(timer)
-  }, [zOrderPulse, embeddedInSticky])
   const focusStudyHubMenu = useCallback(() => {
     focusStudyHubOnCanvas(transformRef.current, item.id)
   }, [item.id, transformRef])
@@ -281,6 +265,7 @@ export default function CanvasItemShell({
     : '0 2px 10px rgba(20, 30, 50, 0.12)'
   const studyHubPortalActive =
     isStudyHub &&
+    menuFocusRevealed &&
     menuFocusReturnCamera != null &&
     zMenuSuppressedItemId === item.id
   const peelLiftShadow = '0 10px 32px rgba(20, 30, 50, 0.2)'
@@ -312,11 +297,11 @@ export default function CanvasItemShell({
     <motion.div
       key="item-handles"
       data-lock-flatten-skip
-      initial={{ opacity: 0 }}
+      initial={false}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
-      style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6 }}
     >
       {!hideDragHandle && (
         <DragHandle
@@ -399,30 +384,6 @@ export default function CanvasItemShell({
               : 8,
       }}
     >
-      {!portHandlesOutsideClip && (
-        <AnimatePresence>{itemHandleLayer}</AnimatePresence>
-      )}
-      {portHandlesOutsideClip &&
-        handlesPortal &&
-        showItemHandles &&
-        createPortal(
-          <div
-            data-canvas-item={item.type}
-            data-item-id={item.id}
-            data-selected={isSelected || undefined}
-            style={{
-              position: 'absolute',
-              left: item.x,
-              top: item.y,
-              width: item.width,
-              height: item.height,
-              pointerEvents: 'none',
-            }}
-          >
-            <AnimatePresence>{itemHandleLayer}</AnimatePresence>
-          </div>,
-          handlesPortal,
-        )}
       <div
         onPointerDown={(e) => {
           if (e.target instanceof HTMLElement && e.target.closest('button')) return
@@ -432,12 +393,9 @@ export default function CanvasItemShell({
         onPointerUp={areaPointer.onPointerUp}
         onPointerCancel={areaPointer.onPointerCancel}
         onContextMenu={areaPointer.onContextMenu}
-        className={[
-          isSelected || embeddedParentSelected ? 'canvas-item-selected-focus' : null,
-          zPulseClass,
-        ]
-          .filter(Boolean)
-          .join(' ') || undefined}
+        className={
+          isSelected || embeddedParentSelected ? 'canvas-item-selected-focus' : undefined
+        }
         style={{
           position: 'relative',
           width: '100%',
@@ -458,6 +416,31 @@ export default function CanvasItemShell({
       >
         {children}
       </div>
+      {!portHandlesOutsideClip && (
+        <AnimatePresence>{itemHandleLayer}</AnimatePresence>
+      )}
+      {portHandlesOutsideClip &&
+        handlesPortal &&
+        showItemHandles &&
+        createPortal(
+          <div
+            data-canvas-item={item.type}
+            data-item-id={item.id}
+            data-selected={isSelected || undefined}
+            style={{
+              position: 'absolute',
+              left: item.x,
+              top: item.y,
+              width: item.width,
+              height: item.height,
+              pointerEvents: 'none',
+              zIndex: 6,
+            }}
+          >
+            <AnimatePresence>{itemHandleLayer}</AnimatePresence>
+          </div>,
+          handlesPortal,
+        )}
     </motion.div>
   )
 }

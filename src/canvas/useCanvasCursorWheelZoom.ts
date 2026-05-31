@@ -5,8 +5,14 @@ import {
   CANVAS_WHEEL_ZOOM_STEP,
 } from './canvasCamera'
 import { shouldBlockCanvasZoomForStudyHubMenuFocus } from '../canvasItems/studyHubMenuFocus'
-import { shouldBlockCanvasZoomForAppDestinationFocus } from '../navigation/appDestinationFocus'
+import { useCanvasOverviewStore } from './canvasOverviewStore'
 import { CANVAS_PAN_SESSION_GAP_MS } from './studyHubPanScroll'
+
+type WheelZoomFrame = {
+  deltaY: number
+  anchor: { x: number; y: number } | null
+}
+
 function isModifierWheelZoom(event: WheelEvent): boolean {
   return event.ctrlKey || event.metaKey
 }
@@ -53,10 +59,38 @@ export function useCanvasCursorWheelZoom({
   step?: number
 }) {
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const frameRef = useRef(0)
+  const queueRef = useRef<WheelZoomFrame[]>([])
 
   useEffect(() => {
     const viewport = viewportRef.current
     if (!viewport || disabled) return
+
+    const scheduleZoomStop = (ref: ReactZoomPanPinchContentRef) => {
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
+      stopTimerRef.current = setTimeout(() => {
+        stopTimerRef.current = null
+        const live = transformRef.current
+        if (live) onZoomStop(live)
+      }, CANVAS_PAN_SESSION_GAP_MS)
+    }
+
+    const flushWheelZoomQueue = () => {
+      frameRef.current = 0
+      const ref = transformRef.current
+      const queue = queueRef.current
+      queueRef.current = []
+      if (!ref || queue.length === 0) return
+
+      let changed = false
+      for (const { deltaY, anchor } of queue) {
+        if (applyAnchoredWheelZoom(ref, deltaY, anchor, step)) changed = true
+      }
+      if (!changed) return
+
+      onZoom(ref)
+      scheduleZoomStop(ref)
+    }
 
     function onWheel(event: WheelEvent) {
       if (!isModifierWheelZoom(event)) return
@@ -69,7 +103,7 @@ export function useCanvasCursorWheelZoom({
         return
       }
 
-      if (shouldBlockCanvasZoomForAppDestinationFocus(event.target)) {
+      if (useCanvasOverviewStore.getState().engaged) {
         event.stopPropagation()
         return
       }
@@ -77,28 +111,29 @@ export function useCanvasCursorWheelZoom({
       if (isExcludedWheelTarget(event.target, zoomExcluded)) return
 
       const ref = transformRef.current
-      if (!ref || ref.instance.setup.disabled || ref.instance.setup.wheel.disabled) {
+      if (!ref || ref.instance.setup.wheel.disabled) {
         return
       }
 
       event.stopPropagation()
 
-      const anchor = wrapperLocalAnchor(ref, event)
-      if (!applyAnchoredWheelZoom(ref, event.deltaY, anchor, step)) return
-
-      onZoom(ref)
-
-      if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
-      stopTimerRef.current = setTimeout(() => {
-        stopTimerRef.current = null
-        const live = transformRef.current
-        if (live) onZoomStop(live)
-      }, CANVAS_PAN_SESSION_GAP_MS)
+      queueRef.current.push({
+        deltaY: event.deltaY,
+        anchor: wrapperLocalAnchor(ref, event),
+      })
+      if (!frameRef.current) {
+        frameRef.current = requestAnimationFrame(flushWheelZoomQueue)
+      }
     }
 
     viewport.addEventListener('wheel', onWheel, { passive: false, capture: true })
     return () => {
       viewport.removeEventListener('wheel', onWheel, { capture: true })
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current)
+        frameRef.current = 0
+      }
+      queueRef.current = []
       if (stopTimerRef.current) {
         clearTimeout(stopTimerRef.current)
         stopTimerRef.current = null

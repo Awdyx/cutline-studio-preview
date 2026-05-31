@@ -32,6 +32,7 @@ import ProfileBannerHeader from './ProfileBannerHeader'
 import ProfileIdentityTags from './ProfileIdentityTags'
 import ProfileSocialPills from './ProfileSocialPills'
 import UserAvatar from './UserAvatar'
+import { ComingSoonOverlay } from './ComingSoonOverlay'
 import ResolvedProfilePinnedTrack from '../music/ResolvedProfilePinnedTrack'
 import { stopActiveProfilePreviewPlayback } from '../music/previewAudioEffects'
 
@@ -42,41 +43,6 @@ const FLYOUT_TRANSITION = { duration: 0.18, ease: 'easeOut' as const }
 type PreviewCoords = {
   top: number
   left: number
-}
-
-function ComingSoonOverlay({ onDismiss }: { onDismiss: () => void }) {
-  return createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      onClick={onDismiss}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: '#000',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer',
-      }}
-    >
-      <motion.p
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.22 }}
-        style={{
-          margin: 0,
-          color: '#fff',
-          fontFamily: font.family,
-          fontSize: 20,
-          fontWeight: 500,
-          letterSpacing: '-0.02em',
-        }}
-      >
-        coming soon {'<3'}
-      </motion.p>
-    </motion.div>,
-    document.body,
-  )
 }
 
 function BioMention({

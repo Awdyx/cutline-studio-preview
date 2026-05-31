@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState, type RefObject } from 'react'
 import { readLayoutViewport } from '../platform/viewportSize'
+import { readChromeEdgeInset } from '../platform/chromeLayout'
 
 const EDGE_MARGIN = 8
 
@@ -24,13 +25,14 @@ export function usePanelAlignedSubmenuLayout(
       let left = r.left - gap - width
       let height = r.height
 
+      const chromeEdge = readChromeEdgeInset()
       const minTop = vp.top + EDGE_MARGIN
       const maxBottom = vp.top + vp.height - EDGE_MARGIN
       top = Math.max(minTop, top)
       height = Math.min(height, Math.max(0, maxBottom - top))
 
-      const minLeft = vp.left + EDGE_MARGIN
-      const maxLeft = vp.left + vp.width - width - EDGE_MARGIN
+      const minLeft = vp.left + chromeEdge
+      const maxLeft = vp.left + vp.width - width - chromeEdge
       left = Math.max(minLeft, Math.min(left, maxLeft))
 
       setLayout({ top, left, height })

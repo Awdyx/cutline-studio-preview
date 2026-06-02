@@ -1,105 +1,140 @@
-import { useMemo } from 'react'
-import { motion } from 'framer-motion'
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
+import { useReducedMotion } from 'framer-motion'
 import { useMediaBlobUrl } from '../hooks/useMediaBlobUrl'
 import { mediaLoadOpacity, mediaLoadTransitionStyle } from '../components/MediaLoadPlaceholder'
 import { useCanvasItemsStore, useItemSelected } from './canvasItemsStore'
 import { useCanvasItemDragStore } from './canvasItemDragStore'
-import { useCanvasItemResizeStore } from './canvasItemResizeStore'
-import { canvasItemLiftSpring } from './canvasItemMotion'
+import { attachCanvasItemDragPointerDown } from './canvasItemDrag'
 import { stickyEmbeddedImageCssZ } from './stickyImageLayers'
 import {
-  embeddedImageOverflowRects,
-  overflowFragmentBorderRadius,
-} from './stickyImagePlacement'
+  buildOverflowDistanceMask,
+  buildOverflowPreviewLayout,
+  embeddedImageOverflowUnion,
+} from './stickyOverflowPreview'
 import { isImageInSticky, type ImageCanvasItem } from './types'
+import { useCanvasCustomizeItemHandoff } from '../canvasItemCustomize/canvasCustomizeStore'
+import { useLassoStore } from '../drawing/useLassoStore'
 
-const overflowPreviewStyle = {
+const overflowEnter = { duration: 0.48, ease: [0.16, 1, 0.3, 1] as const }
+const overflowExit = { duration: 0.4, ease: [0.4, 0, 0.2, 1] as const }
+
+const overflowFilteredStyle = {
   opacity: 0.42,
   filter: 'saturate(0.35) brightness(0.92) blur(1.5px)',
-  pointerEvents: 'none' as const,
 }
 
-function OverflowImageFragments({
+function OverflowImagePreview({
   image,
   stickyWidth,
   stickyHeight,
+  interactive,
+  fadeRevealed,
+  instant,
 }: {
   image: ImageCanvasItem
   stickyWidth: number
   stickyHeight: number
+  interactive: boolean
+  fadeRevealed: boolean
+  instant: boolean
 }) {
   const { url, status } = useMediaBlobUrl(image.mediaId, image.id)
   const isDragging = useCanvasItemDragStore((s) => s.activeItemId === image.id)
-  const isResizing = useCanvasItemResizeStore((s) => s.activeItemId === image.id)
-  const parentStickyDragging = useCanvasItemDragStore(
-    (s) => s.activeItemId === image.stickyId,
-  )
-  const lifted = (isDragging || isResizing) && !parentStickyDragging
 
-  const rects = useMemo(
-    () =>
-      embeddedImageOverflowRects(image, {
-        width: stickyWidth,
-        height: stickyHeight,
-      }),
-    [image, stickyWidth, stickyHeight],
+  const stickyBounds = useMemo(
+    () => ({ width: stickyWidth, height: stickyHeight }),
+    [stickyWidth, stickyHeight],
   )
 
-  if (!url || rects.length === 0) return null
+  const layout = useMemo(
+    () => buildOverflowPreviewLayout(image, stickyBounds),
+    [image, stickyBounds],
+  )
+
+  const distanceMask = useMemo(() => {
+    if (!layout) return null
+    return buildOverflowDistanceMask(layout.union, image, stickyBounds)
+  }, [image, layout, stickyBounds])
+
+  const onOverflowPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!interactive) return
+      attachCanvasItemDragPointerDown(image.id, e)
+    },
+    [image.id, interactive],
+  )
+
+  if (!url || !layout || !distanceMask) return null
+
+  const { union, clipPath } = layout
+  const fadeEase = fadeRevealed ? overflowEnter.ease : overflowExit.ease
+  const fadeDuration = fadeRevealed ? overflowEnter.duration : overflowExit.duration
 
   return (
-    <motion.div
+    <div
       aria-hidden
-      animate={{ scale: lifted ? 1.03 : 1 }}
-      transition={canvasItemLiftSpring}
+      data-item-id={image.id}
+      onPointerDown={interactive ? onOverflowPointerDown : undefined}
       style={{
         position: 'absolute',
-        left: image.x,
-        top: image.y,
-        width: image.width,
-        height: image.height,
+        left: union.x,
+        top: union.y,
+        width: union.width,
+        height: union.height,
         zIndex: stickyEmbeddedImageCssZ(image.zIndex),
-        transformOrigin: 'top left',
-        overflow: 'visible',
-        pointerEvents: 'none',
+        overflow: 'hidden',
+        clipPath,
+        WebkitClipPath: clipPath,
+        opacity: fadeRevealed ? 1 : 0,
+        transition: instant
+          ? 'none'
+          : `opacity ${fadeDuration}s cubic-bezier(${fadeEase.join(', ')})`,
+        touchAction: interactive ? 'none' : undefined,
+        cursor: interactive ? (isDragging ? 'grabbing' : 'grab') : undefined,
+        pointerEvents: interactive ? 'auto' : 'none',
+        WebkitMaskImage: distanceMask.maskImage,
+        maskImage: distanceMask.maskImage,
+        WebkitMaskComposite: distanceMask.webkitMaskComposite,
+        maskComposite: distanceMask.maskComposite,
+        WebkitMaskSize: '100% 100%',
+        maskSize: '100% 100%',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
       }}
     >
-      {rects.map((rect, index) => (
-        <div
-          key={`${image.id}-${index}`}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          ...overflowFilteredStyle,
+        }}
+      >
+        <img
+          src={url}
+          alt=""
+          draggable={false}
           style={{
             position: 'absolute',
-            left: rect.x - image.x,
-            top: rect.y - image.y,
-            width: rect.width,
-            height: rect.height,
-            overflow: 'hidden',
-            borderRadius: overflowFragmentBorderRadius(rect, image, {
-              width: stickyWidth,
-              height: stickyHeight,
-            }),
-            ...overflowPreviewStyle,
+            left: image.x - union.x,
+            top: image.y - union.y,
+            width: image.width,
+            height: image.height,
+            objectFit: 'fill',
+            display: 'block',
+            pointerEvents: 'none',
+            opacity: url ? 1 : mediaLoadOpacity(status),
+            ...(url ? {} : mediaLoadTransitionStyle()),
           }}
-        >
-          <img
-            src={url}
-            alt=""
-            draggable={false}
-            style={{
-              position: 'absolute',
-              left: image.x - rect.x,
-              top: image.y - rect.y,
-              width: image.width,
-              height: image.height,
-              objectFit: 'fill',
-              display: 'block',
-              opacity: mediaLoadOpacity(status),
-              ...mediaLoadTransitionStyle(),
-            }}
-          />
-        </div>
-      ))}
-    </motion.div>
+        />
+      </div>
+    </div>
   )
 }
 
@@ -107,14 +142,20 @@ export default function StickyEmbeddedImageOverflow({
   stickyId,
   stickyWidth,
   stickyHeight,
+  interactive = false,
 }: {
   stickyId: string
   stickyWidth: number
   stickyHeight: number
+  /** Allow dragging embedded images from their outside-the-sticky previews. */
+  interactive?: boolean
 }) {
   const items = useCanvasItemsStore((s) => s.items)
   const selectedIds = useCanvasItemsStore((s) => s.selectedIds)
   const stickySelected = useItemSelected(stickyId)
+  const stickyCustomizeHandoff = useCanvasCustomizeItemHandoff(stickyId)
+  const stickyLassoSelected = useLassoStore((s) => s.selectedItemIds.includes(stickyId))
+  const reduceMotion = useReducedMotion()
 
   const sorted = useMemo(
     () =>
@@ -129,38 +170,76 @@ export default function StickyEmbeddedImageOverflow({
     [items, stickyId],
   )
 
-  if (sorted.length === 0) return null
+  const stickyBounds = useMemo(
+    () => ({ width: stickyWidth, height: stickyHeight }),
+    [stickyWidth, stickyHeight],
+  )
+
+  const hasOverflow = useMemo(
+    () => sorted.some((image) => embeddedImageOverflowUnion(image, stickyBounds) != null),
+    [sorted, stickyBounds],
+  )
 
   const anyImageSelected = sorted.some((image) => selectedIds.includes(image.id))
   const active = stickySelected || anyImageSelected
-  if (!active) return null
+  const overflowRevealed = active && hasOverflow
+  const overflowInteractive =
+    interactive && overflowRevealed && !stickyCustomizeHandoff && !stickyLassoSelected
+  const instant = reduceMotion
+  const [fadeRevealed, setFadeRevealed] = useState(false)
 
-  const hasOverflow = sorted.some(
-    (image) =>
-      embeddedImageOverflowRects(image, {
-        width: stickyWidth,
-        height: stickyHeight,
-      }).length > 0,
-  )
-  if (!hasOverflow) return null
+  // CSS opacity transition — rAF ensures fade-in always starts from 0 (not first-paint snap).
+  useLayoutEffect(() => {
+    if (instant) {
+      setFadeRevealed(overflowRevealed && !stickyCustomizeHandoff)
+      return
+    }
+    if (stickyCustomizeHandoff && hasOverflow) {
+      setFadeRevealed(true)
+      const id = requestAnimationFrame(() => setFadeRevealed(false))
+      return () => cancelAnimationFrame(id)
+    }
+    if (!overflowRevealed) {
+      setFadeRevealed(false)
+      return
+    }
+    if (fadeRevealed) return
+    setFadeRevealed(false)
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setFadeRevealed(true))
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [overflowRevealed, instant, stickyCustomizeHandoff, hasOverflow, fadeRevealed])
+
+  if (sorted.length === 0 || !hasOverflow) return null
 
   return (
     <div
       aria-hidden
+      data-sticky-embedded-overflow=""
+      data-lock-flatten-skip=""
       style={{
         position: 'absolute',
         inset: 0,
         zIndex: 0,
         overflow: 'visible',
         pointerEvents: 'none',
+        opacity: 1,
       }}
     >
       {sorted.map((image) => (
-        <OverflowImageFragments
+        <OverflowImagePreview
           key={image.id}
           image={image}
           stickyWidth={stickyWidth}
           stickyHeight={stickyHeight}
+          interactive={overflowInteractive}
+          fadeRevealed={fadeRevealed}
+          instant={instant}
         />
       ))}
     </div>

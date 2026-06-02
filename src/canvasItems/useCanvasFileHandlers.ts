@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { focusStudyHubOnCanvas } from './studyHubMenuFocus'
+import {
+  focusStudyHubOnCanvas,
+  isStudyHubMenuFocusActive,
+  openStudyHubEphemeralOverlay,
+} from './studyHubMenuFocus'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
+import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { readActiveCanvasLogicalWidth } from '../spaces/activeCanvasLayout'
+import { usePocketStripStore } from '../spaces/pocketStripStore'
 import { clientToCanvas } from '../drawing/canvasCoords'
 import { putMediaBlob } from '../media/mediaBlobStore'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import { generateItemId } from './itemId'
-import { findStudyHubForSubject, useCanvasItemsStore } from './canvasItemsStore'
+import { findStudyHubForSubject, findReplaceableSelectedImage, useCanvasItemsStore } from './canvasItemsStore'
 import { showMediaImportToast } from './mediaImportFeedback'
 import { readCanvasTransformScale } from './studyHubSpawnScale'
 import {
@@ -22,6 +29,24 @@ import { TEXT_HEIGHT, type StudySubjectId } from './types'
 import { viewportCenterCanvas, viewportItemSpawnCanvas } from './viewportCenter'
 import type { CanvasAddType } from '../components/PlusFab'
 
+type CanvasImagePickerOpen = () => void
+
+let canvasImagePickerOpen: CanvasImagePickerOpen | null = null
+
+/** Opens the hidden canvas image file input (registered by useCanvasFileHandlers). */
+export function openCanvasImagePicker(): void {
+  canvasImagePickerOpen?.()
+}
+
+function readActiveCanvasSpawnScale(
+  transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
+): number {
+  if (useCanvasWorkspaceStore.getState().isInsideSpace()) {
+    return usePocketStripStore.getState().scale
+  }
+  return readCanvasTransformScale(transformRef)
+}
+
 function spawnPointCanvas(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
   viewportHost: HTMLElement | null | undefined,
@@ -29,8 +54,12 @@ function spawnPointCanvas(
 ): { x: number; y: number } {
   return (
     viewportItemSpawnCanvas(transformRef, viewportHost, canvasEl) ?? {
-      x: CANVAS_ORIGINAL_WIDTH / 2,
-      y: CANVAS_ORIGINAL_HEIGHT / 2,
+      x: useCanvasWorkspaceStore.getState().isInsideSpace()
+        ? readActiveCanvasLogicalWidth() / 2
+        : CANVAS_ORIGINAL_WIDTH / 2,
+      y: useCanvasWorkspaceStore.getState().isInsideSpace()
+        ? 0
+        : CANVAS_ORIGINAL_HEIGHT / 2,
     }
   )
 }
@@ -71,16 +100,32 @@ export function useCanvasFileHandlers(
           return
         }
 
-        const saved = await putMediaBlob(mediaId, image.blob)
+        const replaceTarget = findReplaceableSelectedImage()
+        const imageMediaId = generateItemId()
+        const saved = await putMediaBlob(imageMediaId, image.blob)
         if (!saved) {
           showMediaImportToast('save_failed')
           return
         }
 
-        addImage(canvasX, canvasY, mediaId, image.width, image.height)
+        if (replaceTarget) {
+          const { replaceImageMedia } = useCanvasItemsStore.getState()
+          const replaced = replaceImageMedia(
+            replaceTarget.id,
+            imageMediaId,
+            image.width,
+            image.height,
+          )
+          if (!replaced) {
+            showMediaImportToast('save_failed')
+            return
+          }
+        } else {
+          addImage(canvasX, canvasY, imageMediaId, image.width, image.height)
+        }
 
         if (shouldCompressImageAfterImport(file.type)) {
-          scheduleImageImportCompression(mediaId, file)
+          scheduleImageImportCompression(imageMediaId, file)
         }
         return
       }
@@ -107,6 +152,15 @@ export function useCanvasFileHandlers(
     pendingSpawnCanvasRef.current = null
     imageInputRef.current?.click()
   }, [])
+
+  useEffect(() => {
+    canvasImagePickerOpen = openImagePicker
+    return () => {
+      if (canvasImagePickerOpen === openImagePicker) {
+        canvasImagePickerOpen = null
+      }
+    }
+  }, [openImagePicker])
 
   const spawnStickyAtViewportCenter = useCallback(() => {
     const center = viewportItemSpawnCanvas(
@@ -140,7 +194,12 @@ export function useCanvasFileHandlers(
   }, [transformRef, viewportRef, canvasRef])
 
   const spawnOrFocusStudyHub = useCallback(
-    (canvasX: number, canvasY: number, subjectId: StudySubjectId) => {
+    (
+      canvasX: number,
+      canvasY: number,
+      subjectId: StudySubjectId,
+      opts?: { ephemeral?: boolean },
+    ) => {
       const items = useCanvasItemsStore.getState().items
       const existing = findStudyHubForSubject(items, subjectId)
 
@@ -153,7 +212,12 @@ export function useCanvasFileHandlers(
         useCanvasEditStore.getState().setEnabled(true)
       }
 
-      const spawnScale = readCanvasTransformScale(transformRef)
+      if (opts?.ephemeral) {
+        openStudyHubEphemeralOverlay(subjectId)
+        return
+      }
+
+      const spawnScale = readActiveCanvasSpawnScale(transformRef)
       const id = useCanvasItemsStore
         .getState()
         .addStudyHub(canvasX, canvasY, subjectId, spawnScale)
@@ -168,18 +232,23 @@ export function useCanvasFileHandlers(
 
   const spawnStudyHubAtViewportCenter = useCallback(
     (subjectId: StudySubjectId) => {
-      const center =
-        viewportItemSpawnCanvas(
-          transformRef,
-          viewportRef.current,
-          canvasRef.current,
-        ) ??
-        viewportCenterCanvas(
-          transformRef,
-          viewportRef.current,
-          canvasRef.current,
-        ) ?? { x: CANVAS_ORIGINAL_WIDTH / 2, y: CANVAS_ORIGINAL_HEIGHT / 2 }
-      spawnOrFocusStudyHub(center.x, center.y, subjectId)
+      const items = useCanvasItemsStore.getState().items
+      if (findStudyHubForSubject(items, subjectId)) {
+        spawnOrFocusStudyHub(0, 0, subjectId)
+        return
+      }
+
+      if (isStudyHubMenuFocusActive()) {
+        spawnOrFocusStudyHub(0, 0, subjectId, { ephemeral: true })
+        return
+      }
+
+      const point = spawnPointCanvas(
+        transformRef,
+        viewportRef.current,
+        canvasRef.current,
+      )
+      spawnOrFocusStudyHub(point.x, point.y, subjectId)
     },
     [spawnOrFocusStudyHub, transformRef, viewportRef, canvasRef],
   )
@@ -261,6 +330,16 @@ export function useCanvasFileHandlers(
 
   useEffect(() => {
     async function onPaste(e: ClipboardEvent) {
+      const target = e.target
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA')
+      ) {
+        return
+      }
+
       const items = e.clipboardData?.items
       if (!items) return
 

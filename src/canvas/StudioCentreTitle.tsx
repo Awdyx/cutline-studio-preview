@@ -1,4 +1,3 @@
-import { useCanvasOverviewStore } from './canvasOverviewStore'
 import { useAppDestinationActive } from '../navigation/useAppDestinationActive'
 
 const STUDIO_TITLE_WORD = 'studio'
@@ -6,10 +5,7 @@ const STUDIO_TITLE_HEART = '<3'
 
 /** Label above the studio-centre, shown in canvas overview. */
 export default function StudioCentreTitle() {
-  const engaged = useCanvasOverviewStore((s) => s.engaged)
   const active = useAppDestinationActive('studio')
-
-  if (!engaged) return null
 
   return (
     <p

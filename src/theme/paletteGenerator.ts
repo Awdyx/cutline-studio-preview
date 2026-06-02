@@ -217,13 +217,14 @@ export function resolveStickyTextColor(mode: 'light' | 'dark'): string {
   return mode === 'light' ? '#423a24' : neutral(0.9, uiChroma(0.006))
 }
 
-type StickyColorId = 'yellow' | 'pink' | 'blue'
+type StickyColorId = 'yellow' | 'pink' | 'blue' | 'green'
 
 /** Light-mode sticky surface colours for each preset. */
 const STICKY_BG_LIGHT: Record<StickyColorId, string> = {
   yellow: '#F5F1D4',
   pink: '#FAE1EF',
   blue: '#DBECF9',
+  green: '#EBF2E0',
 }
 
 /** Resolve the background colour for a sticky preset in a given theme mode. */
@@ -238,4 +239,5 @@ export const STICKY_SWATCH_COLORS: Record<StickyColorId, string> = {
   yellow: '#F5F1D4',
   pink: '#FAE1EF',
   blue: '#DBECF9',
+  green: '#EBF2E0',
 }

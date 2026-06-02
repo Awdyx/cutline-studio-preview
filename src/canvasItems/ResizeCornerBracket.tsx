@@ -1,6 +1,6 @@
 /** Bottom-right corner bracket (┘): arms along bottom + right, opening toward the item. */
 export default function ResizeCornerBracket({
-  arm = 11,
+  arm = 13,
   stroke = 2,
 }: {
   arm?: number

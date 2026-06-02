@@ -68,14 +68,34 @@ function sampleViewportAcousticsZone(
   }
 }
 
+/** Overview muffling stays on for the zoomed-out map; drops when exit zoom begins. */
+export function isCanvasOverviewMusicAcousticsActive(): boolean {
+  const { engaged } = useCanvasOverviewStore.getState()
+  if (!engaged) return false
+  return !document.documentElement.hasAttribute('data-canvas-overview-exiting')
+}
+
 /** Main canvas — wait for a viewport sample before assuming open acoustics. */
 function shouldDeferMainCanvasAcousticsSync(): boolean {
   const workspace = useCanvasWorkspaceStore.getState()
   if (workspace.canvasSwapMode != null) return false
   if (workspace.isInsideSpace()) return false
   if (isStudyHubMenuFocusActive()) return false
-  if (useCanvasOverviewStore.getState().engaged) return false
-  return lastViewportInAcousticsZone === null
+  if (isCanvasOverviewMusicAcousticsActive()) return false
+  // Leaving overview: engaged can stay true during exit zoom — still sync ramp-off.
+  const overview = useCanvasOverviewStore.getState()
+  if (overview.engaged) return false
+  if (document.documentElement.hasAttribute('data-canvas-overview-exiting')) {
+    return false
+  }
+  if (backgroundMusic.getAcousticsMode() === 'overview') return false
+  if (lastViewportInAcousticsZone !== null) return false
+  // Study-hub focus exit can leave enclosed while viewport sampling is still deferred.
+  return !(
+    backgroundMusic.getAcousticsMode() === 'enclosed' &&
+    !workspace.isInsideSpace() &&
+    !isStudyHubMenuFocusActive()
+  )
 }
 
 /** Resolve ambient music acoustics from workspace, overview, and viewport position. */
@@ -98,7 +118,7 @@ export function resolveBackgroundMusicAcousticsMode(
   if (workspace.canvasSwapMode === 'exit') return 'open'
   if (workspace.isInsideSpace() || isStudyHubMenuFocusActive()) return 'enclosed'
 
-  if (useCanvasOverviewStore.getState().engaged) return 'open'
+  if (isCanvasOverviewMusicAcousticsActive()) return 'overview'
 
   if (lastViewportInAcousticsZone === false) return 'distant'
 

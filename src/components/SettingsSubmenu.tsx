@@ -4,11 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   GraduationCap,
   Lock,
-  Monitor,
-  Moon,
+  Palette,
   PencilLine,
   PencilOff,
-  Sun,
+  SquareMenu,
   Volume2,
   VolumeX,
 } from 'lucide-react'
@@ -80,10 +79,7 @@ export default function SettingsSubmenu({
 
   const effectiveMode = useEffectiveMode(mode)
   const quickMenuStudy = quickMenuMode === 'study'
-  const QuickMenuRowIcon = quickMenuStudy ? GraduationCap : PencilLine
   const soundOn = !soundMuted && musicEnabled
-  const ThemeRowIcon =
-    mode === 'auto' ? Monitor : effectiveMode === 'dark' ? Moon : Sun
 
   const [activeHint, setActiveHint] = useState<HintKey | null>(null)
   const [hintY, setHintY] = useState(0)
@@ -195,7 +191,7 @@ export default function SettingsSubmenu({
         {hintRow(
           'quickMenu',
           <MenuToggleRow
-            icon={QuickMenuRowIcon}
+            icon={SquareMenu}
             label="Quick menu"
             enabled={quickMenuStudy}
             onChange={(study) => setQuickMenuMode(study ? 'study' : 'shortcut')}
@@ -206,7 +202,7 @@ export default function SettingsSubmenu({
         {hintRow(
           'theme',
           <ThemeToggleRow
-            icon={ThemeRowIcon}
+            icon={Palette}
             dark={effectiveMode === 'dark'}
             onChange={handleThemeChange}
           />,

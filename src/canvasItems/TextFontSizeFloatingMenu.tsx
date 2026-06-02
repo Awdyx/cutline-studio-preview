@@ -16,6 +16,7 @@ import {
   TEXT_ITEM_DEFAULT_FONT_SIZE,
 } from './textEditorFontSize'
 import { useTextFontSizeMenuLayout } from './textFontSizeMenuLayout'
+import { useCanvasCustomizeStore } from '../canvasItemCustomize/canvasCustomizeStore'
 
 function readActiveEditor(itemId: string): {
   editor: HTMLElement
@@ -114,6 +115,9 @@ export default function TextFontSizeFloatingMenu() {
   const editingAllowed = useCanvasEditingAllowed()
 
   const itemId = getSoleSelectedItemId(selectedIds)
+  const customizeTargetId = useCanvasCustomizeStore((s) =>
+    s.active ? s.itemId : null,
+  )
   const menuItem = useCanvasItemsStore((s) =>
     itemId
       ? (s.items.find((item) => item.id === itemId) as
@@ -130,7 +134,8 @@ export default function TextFontSizeFloatingMenu() {
     activeDragItemId !== itemId &&
     editingAllowed &&
     itemId !== zMenuSuppressedItemId &&
-    !hasLassoItemSelection
+    !hasLassoItemSelection &&
+    itemId !== customizeTargetId
 
   const menuLayout = useTextFontSizeMenuLayout(menuRef, itemId, showMenu)
 

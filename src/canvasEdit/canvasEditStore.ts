@@ -45,7 +45,6 @@ function applyDisabledSideEffects() {
   strokes.cancelActiveStroke()
   strokes.cancelEraseSession()
   useCanvasItemsStore.getState().cancelActiveStickyStroke()
-  useCanvasItemsStore.getState().setPreviewAdjustSpace(null)
 }
 
 export const useCanvasEditStore = create<CanvasEditState>((set, get) => ({

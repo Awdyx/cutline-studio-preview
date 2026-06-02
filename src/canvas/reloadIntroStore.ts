@@ -22,8 +22,10 @@ const DEFAULT_COPY: ReloadIntroCopy = { name: 'studio', suffix: '<3' }
 
 function syncDom(phase: ReloadIntroPhase) {
   const root = document.documentElement
-  if (phase === 'armed' || phase === 'revealing') {
-    root.setAttribute('data-reload-intro', '')
+  if (phase === 'armed') {
+    root.setAttribute('data-reload-intro', 'armed')
+  } else if (phase === 'revealing') {
+    root.setAttribute('data-reload-intro', 'revealing')
   } else {
     root.removeAttribute('data-reload-intro')
   }

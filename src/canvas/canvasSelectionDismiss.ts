@@ -71,6 +71,11 @@ export function shouldDismissSelectionForPointer(
   return !isPointerOnSelectedItem(target, selectedIds)
 }
 
+/** Swallow the follow-up click/tap after a dismiss-only outside tap (e.g. pocket open). */
+export function suppressItemActivationAfterSelectionDismiss(): void {
+  useCanvasNavigationStore.getState().suppressItemTap()
+}
+
 /** Clear canvas item or lasso selection. */
 export function dismissCanvasSelection(): void {
   const lasso = useLassoStore.getState()
@@ -97,5 +102,6 @@ export function dismissSelectionForOutsideItemTap(itemId: string): boolean {
     return true
   }
   dismissCanvasSelection()
+  suppressItemActivationAfterSelectionDismiss()
   return true
 }

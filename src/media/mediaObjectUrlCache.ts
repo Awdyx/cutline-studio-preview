@@ -28,6 +28,19 @@ function release(map: Map<string, CacheEntry>, key: string): void {
   }
 }
 
+/** Cached object URL if already resolved (does not change ref count). */
+export function peekMediaObjectUrl(mediaId: string): string | null {
+  return mediaUrls.get(mediaId)?.url ?? null
+}
+
+/** Keep a resolved URL alive across a brief remount (e.g. customize portal handoff). */
+export function holdMediaObjectUrl(mediaId: string): boolean {
+  const entry = mediaUrls.get(mediaId)
+  if (!entry) return false
+  entry.refCount += 1
+  return true
+}
+
 export async function resolveMediaObjectUrl(
   mediaId: string,
 ): Promise<string | null> {

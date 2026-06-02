@@ -1,5 +1,10 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { isEditorEmpty } from './textEditorContent'
+import {
+  rememberEditorSelection,
+  resolveEditorSelectionBookmark,
+  restoreEditorBookmark,
+} from './textEditorSelectionBookmark'
 import { STUDIO_SPAWN_SIZE_SCALE } from './types'
 
 export const TEXT_ITEM_DEFAULT_FONT_SIZE = Math.round(16 * STUDIO_SPAWN_SIZE_SCALE)
@@ -321,10 +326,14 @@ export function isFontSizeShortcut(e: {
   ctrlKey: boolean
   altKey?: boolean
   key: string
+  code?: string
 }): boolean {
   if (!(e.metaKey || e.ctrlKey)) return false
   if (e.altKey) return false
-  return fontSizeDirectionFromKey(e.key) !== null
+  return (
+    fontSizeDirectionFromKey(e.key) !== null ||
+    (e.code != null && fontSizeDirectionFromCode(e.code) !== null)
+  )
 }
 
 export function handleFontSizeShortcutEvent(
@@ -335,11 +344,18 @@ export function handleFontSizeShortcutEvent(
 ): boolean {
   if (!isFontSizeShortcut(event)) return false
 
-  const direction = fontSizeDirectionFromKey(event.key)
+  const direction = fontSizeDirectionFromKeyboardEvent(event)
   if (!direction) return false
 
-  if (changeEditorFontSize(editor, direction, defaultPx)) {
-    onApplied?.()
-  }
+  event.preventDefault()
+
+  rememberEditorSelection(editor)
+  const bookmark = resolveEditorSelectionBookmark(editor)
+  if (bookmark) restoreEditorBookmark(editor, bookmark)
+
+  const changed = changeEditorFontSize(editor, direction, defaultPx)
+  if (bookmark) restoreEditorBookmark(editor, bookmark)
+
+  if (changed) onApplied?.()
   return true
 }

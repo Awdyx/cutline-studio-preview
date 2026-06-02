@@ -21,6 +21,7 @@ export const HIGHLIGHTER_PRESETS = [
   'rgba(255, 245, 140, 0.35)',
   'rgba(255, 140, 180, 0.35)',
   'rgba(120, 180, 255, 0.35)',
+  'rgba(197, 217, 165, 0.35)',
 ] as const
 
 export const DEFAULT_HIGHLIGHTER_COLOR = HIGHLIGHTER_PRESETS[0]
@@ -30,6 +31,7 @@ export const HIGHLIGHTER_DARK_GLOW = [
   'rgba(255, 238, 130, 0.38)',
   'rgba(255, 158, 210, 0.36)',
   'rgba(150, 200, 255, 0.36)',
+  'rgba(210, 232, 178, 0.38)',
 ] as const
 
 const LEGACY_CONTRAST_HEX = new Set(

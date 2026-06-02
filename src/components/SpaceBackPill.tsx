@@ -15,7 +15,16 @@ import {
   clampSpaceName,
   isDefaultSpaceName,
 } from '../spaces/types'
-import { CHROME_GLASS_CLASS, CHROME_PRESERVE_CASE_CLASS, glass, font } from '../styles/tokens'
+import {
+  CHROME_GLASS_CLASS,
+  CHROME_PRESERVE_CASE_CLASS,
+  CHROME_SURFACE_BG_TRANSITION,
+  CHROME_TAP_SQUEEZE_TARGET_CLASS,
+  chromeGlassSurfaceBg,
+  glass,
+  font,
+} from '../styles/tokens'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import { desktopChromePanelAnchorLeft, desktopChromePanelTop } from '../platform/chromeLayout'
 
 const SPACE_NAME_PLACEHOLDER = DEFAULT_SPACE_NAME_PLACEHOLDER
@@ -67,6 +76,9 @@ export default function SpaceBackPill({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [nameWidth, setNameWidth] = useState(0)
+  const [hovered, setHovered] = useState(false)
+  const editingUi = useUiCustomizationStore((s) => s.editing)
+  const showHoverBackground = hovered && !editingUi
   const inputRef = useRef<HTMLInputElement>(null)
   const measureRef = useRef<HTMLSpanElement>(null)
 
@@ -106,7 +118,6 @@ export default function SpaceBackPill({
     padding: `6px ${PILL_INSET_RIGHT}px 6px ${PILL_INSET_LEFT}px`,
     borderRadius: 999,
     border: glass.border,
-    background: glass.bg,
     boxShadow: glass.shadow,
     fontFamily: font.family,
     color: font.colorPrimary,
@@ -158,9 +169,19 @@ export default function SpaceBackPill({
         {measureText}
       </span>
 
-      <div className={`theme-surface ${CHROME_GLASS_CLASS}`} style={pillShellStyle}>
+      <div
+        className={`theme-surface ${CHROME_GLASS_CLASS} ${CHROME_TAP_SQUEEZE_TARGET_CLASS}`}
+        style={{
+          ...pillShellStyle,
+          transition: editingUi ? undefined : CHROME_SURFACE_BG_TRANSITION,
+          background: chromeGlassSurfaceBg({ hoverLift: showHoverBackground }),
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
         <button
           type="button"
+          data-space-back-trigger
           onClick={onExit}
           aria-label="Back to main canvas"
           className="space-back-pill-chevron"

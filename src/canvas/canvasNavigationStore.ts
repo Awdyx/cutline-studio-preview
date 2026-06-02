@@ -8,6 +8,9 @@ type CanvasNavigationState = {
   suppressBackgroundSelectionClearUntil: number
   suppressBackgroundSelectionClear: (durationMs?: number) => void
   shouldSuppressBackgroundSelectionClear: () => boolean
+  /** Block pocket open / item select briefly after dismiss-only outside taps. */
+  suppressItemTapUntil: number
+  suppressItemTap: (durationMs?: number) => void
   shouldSuppressItemTap: () => boolean
   /** Pinch / multi-finger navigation — block drag, resize, and tap chrome. */
   shouldSuppressHandleGesture: () => boolean
@@ -16,6 +19,7 @@ type CanvasNavigationState = {
 export const useCanvasNavigationStore = create<CanvasNavigationState>((set, get) => ({
   multiTouchActive: false,
   suppressBackgroundSelectionClearUntil: 0,
+  suppressItemTapUntil: 0,
 
   setMultiTouchActive: (active) => set({ multiTouchActive: active }),
 
@@ -28,7 +32,12 @@ export const useCanvasNavigationStore = create<CanvasNavigationState>((set, get)
   shouldSuppressBackgroundSelectionClear: () =>
     Date.now() < get().suppressBackgroundSelectionClearUntil,
 
-  shouldSuppressItemTap: () => get().multiTouchActive,
+  suppressItemTap: (durationMs = 450) => {
+    set({ suppressItemTapUntil: Date.now() + durationMs })
+  },
+
+  shouldSuppressItemTap: () =>
+    get().multiTouchActive || Date.now() < get().suppressItemTapUntil,
 
   shouldSuppressHandleGesture: () => get().multiTouchActive,
 }))
@@ -45,11 +54,10 @@ export const CANVAS_PAN_EXCLUDED = [
   'studio-centre-drag-handle',
   'studio-centre-drag-handle-wrapper',
   'studio-centre-hold-drag-pending',
-  'canvas-plate-reposition-btn',
-  'space-preview-adjust',
   'study-hub-scroll',
   'study-hub-practice',
   'study-hub-menu-dismiss',
+  'study-hub-scratch-pad',
   'profile-media-frame-editor',
 ] as const
 
@@ -60,10 +68,10 @@ export const CANVAS_PAN_EXCLUDED = [
  * over a selected sticky/image too.
  */
 export const CANVAS_TRACKPAD_PAN_EXCLUDED = [
-  'space-preview-adjust',
   'study-hub-scroll',
   'study-hub-practice',
   'study-hub-menu-dismiss',
+  'study-hub-scratch-pad',
   'profile-media-frame-editor',
 ] as const
 

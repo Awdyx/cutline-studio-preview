@@ -1,11 +1,21 @@
 import { idleAfterFirstPaint, isTouchFirstDevice } from '../platform/compositor'
-import { resumePreviewAudioContext } from '../music/previewAudioEffects'
+import {
+  resumePreviewAudioContext,
+  TRACK_PREVIEW_TRIGGER,
+} from '../music/previewAudioEffects'
 import { backgroundMusic } from './backgroundMusic'
 import { resumeAudioContext, setMasterOutputGain } from './soundEngine'
 import { SFX_ON_GAIN } from './soundLevels'
 import { useSoundStore } from './soundStore'
 
 let touchAudioPrimed = false
+
+function isTrackPreviewTrigger(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(`[${TRACK_PREVIEW_TRIGGER}]`) != null
+  )
+}
 
 function applyTouchSfxGain(): void {
   const { muted, hydrated } = useSoundStore.getState()
@@ -14,12 +24,16 @@ function applyTouchSfxGain(): void {
 }
 
 /** Resume audio contexts and retry background music after a user gesture. */
-export function unlockAudioFromUserGesture(): void {
+export function unlockAudioFromUserGesture(event?: Event): void {
   void resumeAudioContext().then(applyTouchSfxGain)
   void resumePreviewAudioContext()
+  void backgroundMusic.resumeContext()
+
+  if (isTrackPreviewTrigger(event?.target ?? null)) {
+    return
+  }
 
   if (isTouchFirstDevice()) {
-    void backgroundMusic.resumeContext()
     if (touchAudioPrimed) return
     touchAudioPrimed = true
     void idleAfterFirstPaint(400).then(() => {
@@ -28,6 +42,5 @@ export function unlockAudioFromUserGesture(): void {
     return
   }
 
-  void backgroundMusic.resumeContext()
   backgroundMusic.unlock()
 }

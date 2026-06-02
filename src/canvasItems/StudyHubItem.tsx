@@ -18,7 +18,7 @@ import {
   studyHubContentScaleForSize,
 } from './studyHubSpawnScale'
 import type { StudyHubCanvasItem } from './types'
-import { STUDY_HUB_HEIGHT, STUDY_HUB_WIDTH } from './types'
+import { STUDY_HUB_ASPECT, STUDY_HUB_HEIGHT, STUDY_HUB_WIDTH } from './types'
 
 function StudyHubItem({
   item,
@@ -44,13 +44,23 @@ function StudyHubItem({
   const menuFocusDismissing = useCanvasItemsStore(
     (s) => s.menuFocusDismissing && s.menuFocusDismissItemId === item.id,
   )
-  const showFocusPortal = portalFocused || menuFocusDismissing
-  const hideCanvasStudyHubContent = useCanvasItemsStore(
-    (s) => s.menuFocusReturnCamera != null && s.zMenuSuppressedItemId === item.id,
+  const dismissScratchClosing = useCanvasItemsStore(
+    (s) => s.menuFocusDismissScratchClosing,
   )
+  const showFocusPortal = portalFocused || menuFocusDismissing
+  const hideCanvasStudyHubDuringPortal =
+    portalFocused || dismissScratchClosing
   useCanvasItemScrollCapture(canvasScrollRef)
 
-  const contentScale = studyHubContentScaleForSize(item.width)
+  const aspectSnapAnimating = useCanvasItemsStore(
+    (s) => s.boundsSnapAnimatingId === item.id,
+  )
+  const aspectDrift =
+    Math.abs(item.width / item.height - STUDY_HUB_ASPECT) > 0.004
+  const contentScale =
+    (isResizing || aspectSnapAnimating) && aspectDrift
+      ? Math.min(item.width / STUDY_HUB_WIDTH, item.height / STUDY_HUB_HEIGHT)
+      : studyHubContentScaleForSize(item.width)
   const borderRadius = studyHubBorderRadiusCss(item.width)
 
   function handleDismissMenuFocus(e: React.MouseEvent | React.PointerEvent) {
@@ -74,6 +84,7 @@ function StudyHubItem({
             borderRadius,
             overflow: 'hidden',
             contain: perfDrag ? 'layout style paint' : undefined,
+            opacity: hideCanvasStudyHubDuringPortal ? 0 : 1,
           }}
         >
           <div
@@ -85,7 +96,7 @@ function StudyHubItem({
               transformOrigin: 'center center',
               borderRadius,
               overflow: 'hidden',
-              opacity: hideCanvasStudyHubContent ? 0 : 1,
+              opacity: hideCanvasStudyHubDuringPortal ? 0 : 1,
               pointerEvents: showFocusPortal ? 'none' : undefined,
             }}
           >

@@ -9,7 +9,34 @@ export const UI_ANCHOR_IDS = [
   'plus-fab',
 ] as const
 
-export type UiAnchorId = (typeof UI_ANCHOR_IDS)[number]
+export type ChromeUiAnchorId = (typeof UI_ANCHOR_IDS)[number]
+
+/** Pins on canvas widgets — `canvas-item:{itemId}`. */
+export type CanvasItemUiAnchorId = `canvas-item:${string}`
+
+export type UiAnchorId = ChromeUiAnchorId | CanvasItemUiAnchorId
+
+export const CANVAS_ITEM_UI_ANCHOR_PREFIX = 'canvas-item:' as const
+
+export function isCanvasItemUiAnchorId(id: string): id is CanvasItemUiAnchorId {
+  return id.startsWith(CANVAS_ITEM_UI_ANCHOR_PREFIX) && id.length > CANVAS_ITEM_UI_ANCHOR_PREFIX.length
+}
+
+export function canvasItemUiAnchorId(itemId: string): CanvasItemUiAnchorId {
+  return `${CANVAS_ITEM_UI_ANCHOR_PREFIX}${itemId}`
+}
+
+export function parseCanvasItemIdFromUiAnchor(id: string): string | null {
+  if (!isCanvasItemUiAnchorId(id)) return null
+  return id.slice(CANVAS_ITEM_UI_ANCHOR_PREFIX.length)
+}
+
+export function isUiAnchorId(id: string): id is UiAnchorId {
+  return (
+    (UI_ANCHOR_IDS as readonly string[]).includes(id) ||
+    isCanvasItemUiAnchorId(id)
+  )
+}
 
 export type UiPinAsset =
   | { kind: 'emoji'; char: string }

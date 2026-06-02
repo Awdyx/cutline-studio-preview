@@ -1,22 +1,11 @@
 import { memo } from 'react'
 import { resolveStrokeFill } from '../drawing/colorUtils'
+import { ErasingStrokePaths } from '../drawing/ErasingStrokePaths'
 import { strokeToSvgPath } from '../drawing/strokePath'
 import { useThemeStore } from '../theme/themeStore'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
 import type { Stroke } from '../drawing/types'
 import { useCanvasItemsStore } from './canvasItemsStore'
-
-const StrokePath = memo(function StrokePath({
-  stroke,
-  fill,
-}: {
-  stroke: Stroke
-  fill: string
-}) {
-  const d = stroke.path
-  if (!d) return null
-  return <path d={d} fill={fill} />
-})
 
 const ActiveStrokePath = memo(function ActiveStrokePath({
   stroke,
@@ -29,20 +18,6 @@ const ActiveStrokePath = memo(function ActiveStrokePath({
   if (!d) return null
   return <path d={d} fill={fill} />
 })
-
-function renderStrokeList(
-  strokes: Stroke[],
-  effectiveMode: 'light' | 'dark',
-  keyPrefix: string,
-) {
-  return strokes.map((stroke) => (
-    <StrokePath
-      key={`${keyPrefix}-${stroke.id}`}
-      stroke={stroke}
-      fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
-    />
-  ))
-}
 
 export default function StickyStrokesSvg({
   strokes,
@@ -63,6 +38,8 @@ export default function StickyStrokesSvg({
     (s) =>
       s.activeStickyStroke?.stickyId === stickyId ? s.activeStickyStroke.stroke : null,
   )
+  const strokeFill = (stroke: Stroke) =>
+    resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)
 
   return (
     <svg
@@ -76,9 +53,13 @@ export default function StickyStrokesSvg({
         pointerEvents: 'none',
       }}
     >
-      {renderStrokeList(strokes, effectiveMode, 'c')}
+      <ErasingStrokePaths strokes={strokes} pathD={(s) => s.path} fill={strokeFill} />
       <g data-lock-sticky-annotation>
-        {renderStrokeList(annotationStrokes, effectiveMode, 'a')}
+        <ErasingStrokePaths
+          strokes={annotationStrokes}
+          pathD={(s) => s.path}
+          fill={strokeFill}
+        />
         {active && (
           <ActiveStrokePath
             stroke={active}

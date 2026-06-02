@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { RotateCcw, Trash2 } from 'lucide-react'
 import { playSubmenuTap } from '../sound/submenuSound'
+import { uiPinScreenRect } from './uiPinDom'
 import { font } from '../styles/tokens'
 import { isFreeFormPin, readPinDimensions, clampPinSize, type UiPin } from './types'
+import { useCanvasCustomizeActive } from '../canvasItemCustomize/canvasCustomizeStore'
 import { useUiCustomizationStore } from './uiCustomizationStore'
 
 // ─── Drag-control hook ───────────────────────────────────────────────────────
@@ -263,6 +266,7 @@ interface UiPinToolbarProps {
 function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
   const pin = useUiCustomizationStore((s) => s.pins.find((p) => p.id === pinId))
   const deletePin = useUiCustomizationStore((s) => s.deletePin)
+  const canvasItemCustomize = useCanvasCustomizeActive()
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -280,9 +284,8 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
   const rafRef = useRef<number | null>(null)
 
   const updatePos = useCallback(() => {
-    const pinEl = document.querySelector(`[data-ui-pin="${pinId}"]`)
-    if (!pinEl) return
-    const rect = pinEl.getBoundingClientRect()
+    const rect = uiPinScreenRect(pinId)
+    if (!rect) return
     setPos({
       x: rect.left + rect.width / 2,
       y: rect.bottom + 14,
@@ -291,9 +294,13 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
 
   useLayoutEffect(() => {
     updatePos()
-    // Re-measure whenever anything changes (the anchor is spring-animated)
-    const id = setInterval(updatePos, 32)
-    return () => clearInterval(id)
+    let raf = 0
+    const tick = () => {
+      updatePos()
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
   }, [updatePos])
 
   // Clean up raf on unmount
@@ -307,25 +314,29 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
 
   const free = isFreeFormPin(pin)
 
-  return (
+  const toolbar = (
     // Outer div handles centering so Framer Motion's scale/y don't fight translateX(-50%)
     <div
       data-ui-pin-toolbar=""
       style={{
         position: 'fixed',
-        left: pos.x,
-        top: pos.y,
-        transform: 'translateX(-50%)',
-        zIndex: 62,
+        left: 0,
+        top: 0,
+        transform: `translate(${pos.x}px, ${pos.y}px) translateX(-50%)`,
+        zIndex: canvasItemCustomize ? 102 : 90,
         pointerEvents: 'auto',
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
     <motion.div
-      initial={{ opacity: 0, y: 6, scale: 0.95 }}
+      initial={canvasItemCustomize ? false : { opacity: 0, y: 6, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 4, scale: 0.96 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 28, mass: 0.6 }}
+      exit={canvasItemCustomize ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
+      transition={
+        canvasItemCustomize
+          ? { duration: 0 }
+          : { type: 'spring', stiffness: 400, damping: 28, mass: 0.6 }
+      }
       style={{
         display: 'flex',
         alignItems: 'stretch',
@@ -393,6 +404,11 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
     </motion.div>
     </div>
   )
+
+  if (canvasItemCustomize && typeof document !== 'undefined') {
+    return createPortal(toolbar, document.body)
+  }
+  return toolbar
 }
 
 export default function UiPinToolbar({ pinId }: UiPinToolbarProps) {

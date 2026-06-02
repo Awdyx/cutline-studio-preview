@@ -1,16 +1,16 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { writeCameraTransform } from './canvasCamera'
+import { readCameraFromRef, writeCameraTransform } from './canvasCamera'
+import { isOverviewHyperPanActive } from './canvasVirtualPan'
 import { isTouchFirstDevice } from '../platform/compositor'
 import { usePanMotionStore } from '../panMotionStore'
 import { holdMeshPauseSync } from './useCanvasMeshPause'
 const PANNING_ATTR_HOLD_MS = 48
 const PANNING_ATTR_STUCK_CLEAR_MS = 180
-const CANVAS_FROST_SELECTOR = '.study-hub-frost.plus-fab-menu-glass, .ui-space-glass'
+const CANVAS_FROST_SELECTOR = '.ui-space-glass'
 
-function refreshCanvasFrostedSurfaces(root: HTMLElement | null | undefined): void {
-  if (!root || isTouchFirstDevice()) return
-  root.querySelectorAll(CANVAS_FROST_SELECTOR).forEach((node) => {
+function nudgeBackdropFilterOnNodes(root: ParentNode, selector: string): void {
+  root.querySelectorAll(selector).forEach((node) => {
     if (!(node instanceof HTMLElement)) return
     node.style.setProperty('-webkit-backdrop-filter', 'none')
     node.style.setProperty('backdrop-filter', 'none')
@@ -18,6 +18,27 @@ function refreshCanvasFrostedSurfaces(root: HTMLElement | null | undefined): voi
     node.style.removeProperty('-webkit-backdrop-filter')
     node.style.removeProperty('backdrop-filter')
   })
+}
+
+const OVERVIEW_EXIT_COMPOSITOR_SELECTOR =
+  '[data-canvas-item="study_hub"], [data-canvas-item="image"]'
+
+/** Force eager layout on compositor-heavy canvas items after overview exit. */
+export function refreshOverviewExitCompositorItems(
+  root: HTMLElement | null | undefined,
+): void {
+  if (!root) return
+  root.querySelectorAll(OVERVIEW_EXIT_COMPOSITOR_SELECTOR).forEach((node) => {
+    if (!(node instanceof HTMLElement)) return
+    node.style.setProperty('content-visibility', 'visible')
+    void node.offsetHeight
+    node.style.removeProperty('content-visibility')
+  })
+}
+
+export function refreshCanvasFrostedSurfaces(root: HTMLElement | null | undefined): void {
+  if (!root || isTouchFirstDevice()) return
+  nudgeBackdropFilterOnNodes(root, CANVAS_FROST_SELECTOR)
 }
 
 export function resolveCanvasTransformLayer(
@@ -43,13 +64,28 @@ export function flushCanvasTransformLayer(
   if (isTouchFirstDevice()) return
   if (!transformRef) return
 
-  const { positionX, positionY, scale } = transformRef.state
+  const camera = readCameraFromRef(transformRef)
+  if (!camera) return
+
   layer.style.willChange = 'auto'
-  writeCameraTransform(transformRef, positionX, positionY, scale * 1.000001, 0)
+  writeCameraTransform(
+    transformRef,
+    camera.positionX,
+    camera.positionY,
+    camera.scale * 1.000001,
+    0,
+  )
   void layer.offsetHeight
 
   requestAnimationFrame(() => {
-    writeCameraTransform(transformRef, positionX, positionY, scale, 0)
+    const settled = readCameraFromRef(transformRef) ?? camera
+    writeCameraTransform(
+      transformRef,
+      settled.positionX,
+      settled.positionY,
+      settled.scale,
+      0,
+    )
     void layer.offsetHeight
     refreshCanvasFrostedSurfaces(layer)
     requestAnimationFrame(() => {
@@ -124,7 +160,9 @@ export function useCanvasGestureCompositor(
         panningStuckClearRef.current = null
       }
       root.removeAttribute('data-canvas-panning')
-      refreshCanvasFrostedSurfaces(canvasRef.current)
+      if (!isOverviewHyperPanActive()) {
+        refreshCanvasFrostedSurfaces(canvasRef.current)
+      }
     }
 
     const schedulePanningAttrClear = () => {
@@ -150,8 +188,10 @@ export function useCanvasGestureCompositor(
     }
 
     const syncPanningAttr = () => {
+      const overviewHyperPan = isOverviewHyperPanActive()
+
       if (isCanvasGesturing()) {
-        if (!meshPauseReleaseRef.current) {
+        if (!overviewHyperPan && !meshPauseReleaseRef.current) {
           meshPauseReleaseRef.current = holdMeshPauseSync()
         }
         if (panningClearRef.current != null) {
@@ -170,7 +210,9 @@ export function useCanvasGestureCompositor(
 
       if (!root.hasAttribute('data-canvas-panning')) return
 
-      scheduleCanvasTransformLayerFlush(canvasRef.current, transformRef.current)
+      if (!overviewHyperPan) {
+        scheduleCanvasTransformLayerFlush(canvasRef.current, transformRef.current)
+      }
       schedulePanningAttrClear()
       scheduleStuckPanningAttrClear()
     }

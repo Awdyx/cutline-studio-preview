@@ -17,11 +17,14 @@ import { MIN_ITEM_HEIGHT, MIN_ITEM_WIDTH } from './grabZone'
 import { canvasEditingAllowed } from '../canvasEdit/layer'
 import { primaryPointerReleased } from './canvasPointerSession'
 import {
-  isItemWithinStudioCentre,
-  showStudioCentreBoundsToast,
-} from '../canvas/studioCentre'
+  isItemWithinActiveCanvas,
+  isPocketStripActive,
+  showActiveCanvasBoundsToast,
+} from '../spaces/activeCanvasLayout'
+import { usePocketStripStore } from '../spaces/pocketStripStore'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import { triggerBoundsSnapBack } from './canvasItemDragStore'
+import { STUDY_HUB_ASPECT } from './types'
 import { isImageInSticky } from './types'
 import {
   setActiveResizeItem,
@@ -43,9 +46,9 @@ type ResizeLimits = {
 }
 
 export type ResizeOptions = ResizeLimits & {
-  /** Keep aspect ratio and grow/shrink from the item centre (study hubs). */
-  mode?: 'corner' | 'center-uniform'
-  /** Width / height — required when mode is `center-uniform`. */
+  /** Keep aspect ratio — `corner-uniform` anchors top-left; `center-uniform` anchors centre. */
+  mode?: 'corner' | 'corner-uniform' | 'center-uniform'
+  /** Width / height — required for uniform modes. */
   aspectRatio?: number
   /** Original import dimensions — enables aspect-ratio proximity snap on hold. */
   importWidth?: number
@@ -119,8 +122,8 @@ function pointerDeltaToLogical(
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>,
 ): { dx: number; dy: number } | null {
   const ref = transformRef.current
-  if (!ref) return null
-  const scale = ref.state.scale
+  const scale = ref?.state.scale ?? (isPocketStripActive() ? usePocketStripStore.getState().scale : null)
+  if (scale == null || scale <= 0) return null
   return {
     dx: (clientX - startClientX) / scale,
     dy: (clientY - startClientY) / scale,
@@ -164,13 +167,14 @@ function finishResizeSession() {
   if (ended.resizeActivated) {
     stopItemResizeSound()
 
-    if (ended.options?.mode === 'center-uniform') {
-      const clamped = computeCenterUniformRect(
+    if (isUniformResizeMode(ended.options?.mode)) {
+      const clamped = computeUniformRect(
         ended.lastClientX,
         ended.lastClientY,
         ended,
         ended.options,
         false,
+        ended.options.mode === 'center-uniform' ? 'center' : 'top-left',
       )
       if (clamped) {
         const item = useCanvasItemsStore.getState().items.find((i) => i.id === ended.itemId)
@@ -192,12 +196,27 @@ function finishResizeSession() {
     } else {
       const item = useCanvasItemsStore.getState().items.find((i) => i.id === ended.itemId)
       if (item) {
-        useCanvasItemsStore.getState().updateItemSize(
-          ended.itemId,
-          item.width,
-          item.height,
-          { persist: true },
-        )
+        if (item.type === 'study_hub') {
+          const drift = Math.abs(item.width / item.height - STUDY_HUB_ASPECT)
+          if (drift > 0.008) {
+            useCanvasItemsStore.getState().snapStudyHubAspectRatio(ended.itemId)
+            triggerResizeSnapBack(ended.itemId)
+          } else {
+            useCanvasItemsStore.getState().updateItemSize(
+              ended.itemId,
+              item.width,
+              item.height,
+              { persist: true, clampStudyHub: true },
+            )
+          }
+        } else {
+          useCanvasItemsStore.getState().updateItemSize(
+            ended.itemId,
+            item.width,
+            item.height,
+            { persist: true },
+          )
+        }
       }
     }
   }
@@ -213,7 +232,7 @@ function finishResizeSession() {
   if (
     item &&
     !isImageInSticky(item) &&
-    !isItemWithinStudioCentre(item, items)
+    !isItemWithinActiveCanvas(item, items)
   ) {
     useCanvasItemsStore.getState().animateItemRectTo(
       ended.itemId,
@@ -226,7 +245,7 @@ function finishResizeSession() {
       { persist: true, clampStudyHub: true },
     )
     triggerBoundsSnapBack(ended.itemId)
-    showStudioCentreBoundsToast()
+    showActiveCanvasBoundsToast()
   }
 }
 
@@ -244,12 +263,17 @@ function commitResizeStart() {
   startItemResizeSound(resizeSession.startClientX, resizeSession.startClientY)
 }
 
-function computeCenterUniformRect(
+function isUniformResizeMode(mode: ResizeOptions['mode']): mode is 'center-uniform' | 'corner-uniform' {
+  return mode === 'center-uniform' || mode === 'corner-uniform'
+}
+
+function computeUniformRect(
   clientX: number,
   clientY: number,
   session: ResizeSession,
   options: ResizeOptions,
   elastic: boolean,
+  anchor: 'center' | 'top-left',
 ): { x: number; y: number; width: number; height: number; beyondBounds: boolean } | null {
   const ref = session.transformRef.current
   if (!ref) return null
@@ -269,8 +293,10 @@ function computeCenterUniformRect(
   const maxHeight = options.maxHeight ?? Number.POSITIVE_INFINITY
   const aspectRatio = options.aspectRatio ?? session.startWidth / session.startHeight
 
-  const scaleX = (session.startWidth + 2 * dx) / session.startWidth
-  const scaleY = (session.startHeight + 2 * dy) / session.startHeight
+  const widthDelta = anchor === 'center' ? 2 * dx : dx
+  const heightDelta = anchor === 'center' ? 2 * dy : dy
+  const scaleX = (session.startWidth + widthDelta) / session.startWidth
+  const scaleY = (session.startHeight + heightDelta) / session.startHeight
   const rawScale =
     scaleX >= 1 || scaleY >= 1 ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY)
 
@@ -308,8 +334,14 @@ function computeCenterUniformRect(
     }
   }
 
-  const nextX = session.startX + (session.startWidth - nextWidth) / 2
-  const nextY = session.startY + (session.startHeight - nextHeight) / 2
+  const nextX =
+    anchor === 'center'
+      ? session.startX + (session.startWidth - nextWidth) / 2
+      : session.startX
+  const nextY =
+    anchor === 'center'
+      ? session.startY + (session.startHeight - nextHeight) / 2
+      : session.startY
 
   return { x: nextX, y: nextY, width: nextWidth, height: nextHeight, beyondBounds }
 }
@@ -321,15 +353,17 @@ function applyResizeMove(clientX: number, clientY: number) {
   resizeSession.lastClientY = clientY
 
   const options = resizeSession.options
-  const elastic = options?.mode === 'center-uniform'
+  const uniformMode = options?.mode
+  const elastic = isUniformResizeMode(uniformMode)
 
-  if (options?.mode === 'center-uniform') {
-    const rect = computeCenterUniformRect(
+  if (isUniformResizeMode(uniformMode)) {
+    const rect = computeUniformRect(
       clientX,
       clientY,
       resizeSession,
       options,
       elastic,
+      uniformMode === 'center-uniform' ? 'center' : 'top-left',
     )
     if (!rect) return
     updateItemResizeSound(clientX, clientY, rect.width / resizeSession.startWidth)
@@ -359,14 +393,28 @@ function applyResizeMove(clientX: number, clientY: number) {
   const minWidth = options?.minWidth ?? MIN_ITEM_WIDTH
   const minHeight = options?.minHeight ?? MIN_ITEM_HEIGHT
 
-  const nextWidth = Math.max(minWidth, resizeSession.startWidth + dx)
+  const maxWidth = options?.maxWidth ?? Number.POSITIVE_INFINITY
+  const maxHeight = options?.maxHeight ?? Number.POSITIVE_INFINITY
+  const nextWidth = Math.min(
+    maxWidth,
+    Math.max(minWidth, resizeSession.startWidth + dx),
+  )
+  const nextHeight = Math.min(
+    maxHeight,
+    Math.max(minHeight, resizeSession.startHeight + dy),
+  )
   updateItemResizeSound(clientX, clientY, nextWidth / resizeSession.startWidth)
+
+  const item = useCanvasItemsStore
+    .getState()
+    .items.find((entry) => entry.id === resizeSession.itemId)
+  const clampStudyHub = item?.type !== 'study_hub'
 
   useCanvasItemsStore.getState().updateItemSize(
     resizeSession.itemId,
     nextWidth,
-    Math.max(minHeight, resizeSession.startHeight + dy),
-    { persist: false },
+    nextHeight,
+    { persist: false, clampStudyHub },
   )
 }
 
@@ -412,29 +460,6 @@ function attachResizePointerSession(
   const item = useCanvasItemsStore.getState().items.find((entry) => entry.id === itemId)
   const touchDeferredActive = touchDeferred
 
-  // For text items, measure the editor's natural content size and use it as
-  // the resize minimum so the box can never be dragged narrower than text+padding.
-  let resolvedOptions = options
-  if (item?.type === 'text') {
-    const editorEl = document.querySelector<HTMLElement>(
-      `[data-item-id="${itemId}"] .canvas-text-editor`,
-    )
-    if (editorEl) {
-      const s = editorEl.style
-      const [prevWS, prevW, prevMW, prevH] = [s.whiteSpace, s.width, s.maxWidth, s.height]
-      s.whiteSpace = 'nowrap'; s.width = 'max-content'; s.maxWidth = 'none'
-      const minW = Math.ceil(editorEl.offsetWidth)
-      s.width = `${minW}px`; s.height = 'auto'
-      const minH = Math.ceil(editorEl.offsetHeight)
-      s.whiteSpace = prevWS; s.width = prevW; s.maxWidth = prevMW; s.height = prevH
-      resolvedOptions = {
-        ...options,
-        minWidth: Math.max(options?.minWidth ?? 0, minW),
-        minHeight: Math.max(options?.minHeight ?? 0, minH),
-      }
-    }
-  }
-
   resizeSession = {
     itemId,
     pointerId,
@@ -448,7 +473,7 @@ function attachResizePointerSession(
     startWidth: width,
     startHeight: height,
     transformRef,
-    options: resolvedOptions,
+    options,
     resizeActivated: !touchDeferredActive,
     beyondBounds: false,
     hasMoved: false,

@@ -126,10 +126,19 @@ export function phoneFabSheetStyle(overrides?: CSSProperties): CSSProperties {
 }
 
 export const phoneFabMenuSlideMotion = {
-  initial: { opacity: 0, y: 8, scale: PHONE_FAB_MENU_SCALE * 0.98 },
-  animate: { opacity: 1, y: 0, scale: PHONE_FAB_MENU_SCALE },
-  exit: { opacity: 0, y: 8, scale: PHONE_FAB_MENU_SCALE * 0.98 },
-  transition: { duration: 0.18, ease: 'easeOut' },
+  initial: { opacity: 0, scale: 0.9, y: 14 },
+  animate: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { type: 'spring' as const, stiffness: 520, damping: 36, mass: 0.78 },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.94,
+    y: 10,
+    transition: { duration: 0.28, ease: [0.45, 0.05, 0.85, 0.45] as const },
+  },
 } as const
 
 export const phoneSubmenuSlideMotion = {

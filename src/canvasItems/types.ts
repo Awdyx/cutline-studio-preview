@@ -1,7 +1,6 @@
 import type { CanvasLayer } from '../canvasLock/layer'
 import type { Stroke } from '../drawing/types'
 import type { ItemTextAlignment } from './textAlignment'
-import type { SpacePreviewPan } from '../spaces/spacePreviewPan'
 import { DEFAULT_SPACE_NAME_ALIGNMENT, DEFAULT_TEXT_ALIGNMENT } from './textAlignment'
 
 export type { ItemTextAlignment, TextAlignH, TextAlignV } from './textAlignment'
@@ -30,7 +29,10 @@ export type CanvasItemBase = {
   }
 }
 
-export type StickyColorId = 'yellow' | 'pink' | 'blue'
+export type StickyColorId = 'yellow' | 'pink' | 'blue' | 'green'
+
+/** Pocket highlighter tint — maps to pen highlighter presets (light mode only). */
+export type SpaceTintId = 'yellow' | 'pink' | 'blue' | 'green'
 
 export type StickyCanvasItem = CanvasItemBase & {
   type: 'sticky'
@@ -80,8 +82,8 @@ export type SpaceCanvasItem = CanvasItemBase & {
   textAlign: ItemTextAlignment
   /** IndexedDB snapshot blob id — typically the space id. */
   snapshotId: string | null
-  /** Pan offset for the card preview viewport. */
-  previewPan?: SpacePreviewPan
+  /** Highlighter tint — omitted means no tint; only visible in light mode. */
+  tint?: SpaceTintId
 }
 
 export type StudyHubCanvasItem = CanvasItemBase & {
@@ -124,7 +126,7 @@ export type CanvasItem =
   | StudyHubCanvasItem
 
 /** Spawn footprint vs original design — tuned for the smaller studio canvas. */
-export const STUDIO_SPAWN_SIZE_SCALE = 0.65
+export const STUDIO_SPAWN_SIZE_SCALE = 1.3
 
 export const STICKY_WIDTH = Math.round(200 * STUDIO_SPAWN_SIZE_SCALE)
 export const STICKY_HEIGHT = Math.round(200 * STUDIO_SPAWN_SIZE_SCALE)

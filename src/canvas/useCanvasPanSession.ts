@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { clampToLibraryBounds } from './canvasCamera'
+import { isOverviewHyperPanActive } from './canvasVirtualPan'
 import { CANVAS_PAN_SESSION_GAP_MS } from './studyHubPanScroll'
 import { usePanMotionStore } from '../panMotionStore'
 
@@ -12,11 +13,18 @@ import { usePanMotionStore } from '../panMotionStore'
 export function useCanvasPanSession() {
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastRefRef = useRef<ReactZoomPanPinchContentRef | null>(null)
+  const prevPosRef = useRef({ x: 0, y: 0 })
+  const posInitRef = useRef(false)
 
   const finishPanSession = useCallback(
     (ref: ReactZoomPanPinchContentRef, clamp = true) => {
+      posInitRef.current = false
+      usePanMotionStore.getState().clearPanVelocity()
       usePanMotionStore.getState().setCanvasPanActive(false)
-      if (clamp) clampToLibraryBounds(ref)
+      // Hyper overview pan uses library coords on ref.state — bounds come from TransformWrapper props.
+      if (clamp && !isOverviewHyperPanActive()) {
+        clampToLibraryBounds(ref)
+      }
     },
     [],
   )
@@ -41,12 +49,29 @@ export function useCanvasPanSession() {
     [clearStopTimer, finishPanSession],
   )
 
+  const recordPanVelocity = useCallback((ref: ReactZoomPanPinchContentRef) => {
+    const { positionX, positionY } = ref.state
+
+    if (!posInitRef.current) {
+      prevPosRef.current = { x: positionX, y: positionY }
+      posInitRef.current = true
+      usePanMotionStore.getState().clearPanVelocity()
+      return
+    }
+
+    const vx = positionX - prevPosRef.current.x
+    const vy = positionY - prevPosRef.current.y
+    prevPosRef.current = { x: positionX, y: positionY }
+    usePanMotionStore.getState().setPanVelocity(vx, vy)
+  }, [])
+
   const onPanFrame = useCallback(
     (ref: ReactZoomPanPinchContentRef) => {
+      recordPanVelocity(ref)
       usePanMotionStore.getState().setCanvasPanActive(true)
       schedulePanSessionStop(ref)
     },
-    [schedulePanSessionStop],
+    [recordPanVelocity, schedulePanSessionStop],
   )
 
   const onPanStop = useCallback(

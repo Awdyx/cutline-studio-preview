@@ -1,8 +1,8 @@
 import {
-  UI_ANCHOR_IDS,
   UI_PIN_DEFAULT_SIZE,
   UI_PIN_MAX_SIZE,
   UI_PIN_MIN_SIZE,
+  isUiAnchorId,
   type UiAnchorId,
   type UiPin,
   type UiPinAsset,
@@ -26,10 +26,7 @@ function defaultSettings(): PersistedUiCustomization {
 }
 
 function isAnchorId(value: unknown): value is UiAnchorId {
-  return (
-    typeof value === 'string' &&
-    (UI_ANCHOR_IDS as readonly string[]).includes(value)
-  )
+  return typeof value === 'string' && isUiAnchorId(value)
 }
 
 function clampSize(value: unknown): number {

@@ -1,13 +1,27 @@
 import { useLayoutEffect, useRef, useState, type ComponentType } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Eraser, Highlighter, Pen } from 'lucide-react'
 import { LassoIcon } from '../drawing/LassoIcon'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
 import type { PenToolMenuState } from '../drawing/usePenToolMenu'
-import { PILL_PADDING, penToolSegmentWeights, pillScreenRect, SEGMENT_WIDTH } from '../drawing/penToolMenuLayout'
+import {
+  PILL_PADDING,
+  PILL_SETTINGS_GAP,
+  PILL_SETTINGS_HEIGHT,
+  penToolSegmentWeights,
+  pillScreenRect,
+  pillSettingsPanelWidth,
+  SEGMENT_WIDTH,
+} from '../drawing/penToolMenuLayout'
 import type { ToolMode } from '../drawing/toolStore'
+import ToolColorPopover from './ToolColorPopover'
+import {
+  CHROME_FROSTED_MENU_CLASS,
+  CHROME_MENU_TRANSITION,
+  chromeFrostedMenuStyle,
+} from '../styles/tokens'
 
 const ICON_SIZE = 20
 const ICON_STROKE = 2
@@ -115,11 +129,17 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
 
   const visible = state.phase === 'open' || state.phase === 'closing'
 
+  const pillRect = visible
+    ? pillScreenRect(state.anchorX, state.anchorY, state.toolOrder)
+    : layoutRef.current
+
   if (visible) {
-    layoutRef.current = pillScreenRect(state.anchorX, state.anchorY, state.toolOrder)
+    layoutRef.current = pillRect
   }
 
-  const { left, top, width, height } = layoutRef.current
+  const { left: pillLeft, top: pillTop, width, height: pillHeight } = pillRect
+  const showSettings = visible && state.settingsPanel != null
+  const settingsWidth = showSettings ? pillSettingsPanelWidth(width) : width
   const tools = state.toolOrder
     .map((mode) => TOOL_DEFS.find((tool) => tool.mode === mode))
     .filter((tool): tool is (typeof TOOL_DEFS)[number] => tool != null)
@@ -138,21 +158,24 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
       : tools.findIndex((tool) => tool.mode === state.committedTool)
 
   const morphing = state.phase === 'open'
+  const settingsLocked = morphing && state.settingsPanel != null
+  const highlightMode = state.settingsPanel ?? state.hoveredTool
   const pointerX = state.pointerX ?? state.anchorX
   const menuRail = { guardRail: true as const }
-  const segmentWeights = morphing
-    ? penToolSegmentWeights(
-        pointerX,
-        state.pointerY ?? state.anchorY,
-        state.anchorX,
-        state.anchorY,
-        state.toolOrder,
-        menuRail,
-      )
-    : tools.map((_, index) => (index === committedIndex ? 1.44 : 0.68))
+  const segmentWeights =
+    morphing && !settingsLocked
+      ? penToolSegmentWeights(
+          pointerX,
+          state.pointerY ?? state.anchorY,
+          state.anchorX,
+          state.anchorY,
+          state.toolOrder,
+          menuRail,
+        )
+      : tools.map((tool) => (tool.mode === highlightMode ? 1.44 : 0.68))
   const activeIndex =
-    morphing && state.hoveredTool != null
-      ? tools.findIndex((tool) => tool.mode === state.hoveredTool)
+    highlightMode != null
+      ? tools.findIndex((tool) => tool.mode === highlightMode)
       : committedIndex
 
   const commitOrigin =
@@ -179,12 +202,13 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
         aria-label="Drawing tools"
         style={{
           position: 'fixed',
-          left,
-          top,
+          left: pillLeft,
+          top: pillTop,
           width,
-          height,
+          height: pillHeight,
           zIndex: 25,
           pointerEvents: 'none',
+          overflow: 'visible',
           transformOrigin: motionPhase === 'commit' ? `${commitOrigin} 50%` : '100% 50%',
         }}
         initial={
@@ -233,6 +257,33 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
           onCloseAnimationComplete?.()
         }}
       >
+        <AnimatePresence initial={false}>
+          {showSettings && state.settingsPanel && (
+            <motion.div
+              key={`pen-tool-pill-settings-${state.settingsPanel}`}
+              className={`pen-tool-pill-settings theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+              style={{
+                ...chromeFrostedMenuStyle,
+                position: 'absolute',
+                right: 0,
+                left: 'auto',
+                bottom: '100%',
+                marginBottom: PILL_SETTINGS_GAP,
+                width: settingsWidth,
+                minWidth: settingsWidth,
+                height: PILL_SETTINGS_HEIGHT,
+                overflow: 'visible',
+                pointerEvents: 'auto',
+              }}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(4px)' }}
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)' }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(4px)' }}
+              transition={CHROME_MENU_TRANSITION}
+            >
+              <ToolColorPopover tool={state.settingsPanel} />
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div
           className={[
             'pen-tool-pill',
@@ -240,10 +291,11 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
           ]
             .filter(Boolean)
             .join(' ')}
+          style={{ position: 'relative', height: '100%' }}
         >
           {tools.map(({ mode, Icon, label }, index) => {
             const hovered = state.hoveredTool === mode
-            const active = morphing ? index === activeIndex : hovered
+            const active = morphing && index === activeIndex
             const committed = state.committedTool === mode
             const closing = state.phase === 'closing'
             const fadePeer = closing && state.committedTool != null && !committed
@@ -289,7 +341,10 @@ export default function PenToolPillMenu({ state, onCloseAnimationComplete }: Pro
                 }
                 transition={{
                   delay: motionPhase === 'open' && !reduceMotion ? index * 0.045 + 0.04 : 0,
-                  flex: morphing && !reduceMotion ? SEGMENT_MORPH_SPRING : undefined,
+                  flex:
+                    morphing && !settingsLocked && !reduceMotion
+                      ? SEGMENT_MORPH_SPRING
+                      : undefined,
                   duration:
                     motionPhase === 'open'
                       ? 0.28

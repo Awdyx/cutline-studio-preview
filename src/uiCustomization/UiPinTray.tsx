@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import { EmojiPicker, type Emoji } from 'frimousse'
+import { useCanvasCustomizeActive } from '../canvasItemCustomize/canvasCustomizeStore'
 import { generateItemId } from '../canvasItems/itemId'
 import { putMediaBlob } from '../media/mediaBlobStore'
 import { scheduleMediaBlobGc } from '../media/mediaBlobGc'
@@ -42,7 +43,6 @@ import {
   useUiCustomizationStore,
 } from './uiCustomizationStore'
 import { DrawingStrokesSvg } from './DrawingStrokesSvg'
-import { UI_PIN_DEFAULT_EMOJI_SIZE, UI_PIN_DEFAULT_SIZE } from './types'
 import { strokeToSvgPath, ensureMinimumStrokePoints } from '../drawing/strokePath'
 import type { StrokePoint } from '../drawing/types'
 import { useToolStore } from '../drawing/toolStore'
@@ -69,10 +69,23 @@ interface StagedImage {
 
 interface UiPinTrayProps {
   open: boolean
+  /** Parent chrome panel animates enter/exit; tray stays at full opacity inside. */
+  embedInCanvasCustomizeChrome?: boolean
 }
 
-export default function UiPinTray({ open }: UiPinTrayProps) {
-  const [tab, setTab] = useState<TrayTab>('emoji')
+export default function UiPinTray({
+  open,
+  embedInCanvasCustomizeChrome = false,
+}: UiPinTrayProps) {
+  const canvasItemCustomize =
+    embedInCanvasCustomizeChrome || useCanvasCustomizeActive()
+  const showEmojiTab = !canvasItemCustomize
+
+  const [tab, setTab] = useState<TrayTab>(() => (showEmojiTab ? 'emoji' : 'gif'))
+
+  useEffect(() => {
+    if (!showEmojiTab && tab === 'emoji') setTab('gif')
+  }, [showEmojiTab, tab])
   const drawTool = useUiCustomizationStore((s) => s.drawTool)
   const setDrawTool = useUiCustomizationStore((s) => s.setDrawTool)
   const focusedAnchorId = useUiCustomizationStore((s) => s.focusedAnchorId)
@@ -157,7 +170,7 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
   )
 
   // ─── KLIPY search (GIFs + stickers) ───────────────────────────────────
-  const [klipyKind, setKlipyKind] = useState<KlipyMediaKind>('gifs')
+  const [klipyKind, setKlipyKind] = useState<KlipyMediaKind>('stickers')
   const [klipyQuery, setKlipyQuery] = useState('')
   const [klipyResults, setKlipyResults] = useState<KlipyMediaResult[]>([])
   const [klipyHasNext, setKlipyHasNext] = useState(false)
@@ -265,7 +278,7 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
 
   const handleEmojiPick = useCallback((char: string) => {
     if (!focusedAnchorId) return
-    addPin({ anchorId: focusedAnchorId, offsetX: 0, offsetY: 0, asset: { kind: 'emoji', char }, size: UI_PIN_DEFAULT_EMOJI_SIZE })
+    addPin({ anchorId: focusedAnchorId, offsetX: 0, offsetY: 0, asset: { kind: 'emoji', char } })
     playSubmenuTap()
   }, [addPin, focusedAnchorId])
 
@@ -276,7 +289,7 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
   const handleGifPick = useCallback((item: KlipyMediaResult) => {
     if (!focusedAnchorId) return
     const aspect = item.width / Math.max(1, item.height)
-    addPin({ anchorId: focusedAnchorId, offsetX: 0, offsetY: 0, asset: { kind: 'gif', url: item.url, previewUrl: item.previewUrl, aspect }, size: UI_PIN_DEFAULT_SIZE })
+    addPin({ anchorId: focusedAnchorId, offsetX: 0, offsetY: 0, asset: { kind: 'gif', url: item.url, previewUrl: item.previewUrl, aspect } })
     playSubmenuTap()
   }, [addPin, focusedAnchorId])
 
@@ -287,7 +300,7 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
 
   const handleImagePick = useCallback((img: StagedImage) => {
     if (!focusedAnchorId) return
-    addPin({ anchorId: focusedAnchorId, offsetX: 0, offsetY: 0, asset: { kind: 'image', mediaId: img.mediaId, aspect: img.aspect }, size: UI_PIN_DEFAULT_SIZE })
+    addPin({ anchorId: focusedAnchorId, offsetX: 0, offsetY: 0, asset: { kind: 'image', mediaId: img.mediaId, aspect: img.aspect } })
     playSubmenuTap()
   }, [addPin, focusedAnchorId])
 
@@ -301,10 +314,28 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
         // Match the news / notifications / + FAB menus' deep frost so the
         // tray sits in the same surface family as the rest of the chrome.
         className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
-        initial={{ scale: 0.96, opacity: 0 }}
+        initial={
+          embedInCanvasCustomizeChrome
+            ? false
+            : canvasItemCustomize
+              ? false
+              : { scale: 0.96, opacity: 0 }
+        }
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.96, opacity: 0 }}
-        transition={{ duration: 0.22, ease: 'easeOut' }}
+        exit={
+          embedInCanvasCustomizeChrome
+            ? undefined
+            : canvasItemCustomize
+              ? { opacity: 0 }
+              : { scale: 0.96, opacity: 0 }
+        }
+        transition={
+          embedInCanvasCustomizeChrome
+            ? { duration: 0 }
+            : canvasItemCustomize
+              ? { duration: 0 }
+              : { duration: 0.22, ease: 'easeOut' }
+        }
         style={{
           width: 'min(540px, calc(100vw - 32px))',
           height: TRAY_HEIGHT,
@@ -340,18 +371,21 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
           role="tablist"
           style={{
             display: 'flex',
-            gap: 0,
+            justifyContent: 'center',
+            gap: 4,
             padding: 6,
             paddingTop: 10,
             height: TRAY_TAB_HEIGHT + 16,
           }}
         >
-          <TrayTabButton
-            active={tab === 'emoji'}
-            icon={Smile}
-            label="Emojis"
-            onSelect={() => setTab('emoji')}
-          />
+          {showEmojiTab && (
+            <TrayTabButton
+              active={tab === 'emoji'}
+              icon={Smile}
+              label="Emojis"
+              onSelect={() => setTab('emoji')}
+            />
+          )}
           <TrayTabButton
             active={tab === 'image'}
             icon={ImageIcon}
@@ -361,7 +395,7 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
           <TrayTabButton
             active={tab === 'gif'}
             icon={SquareGifIcon}
-            label="GIFs"
+            label="Stickers"
             onSelect={() => setTab('gif')}
           />
           <TrayTabButton
@@ -373,7 +407,12 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
         </div>
 
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          {tab === 'emoji' && <FullEmojiPicker onPick={handleEmojiPick} onDragStart={handleEmojiDragStart} />}
+          {showEmojiTab && tab === 'emoji' && (
+            <FullEmojiPicker
+              onPick={handleEmojiPick}
+              onDragStart={handleEmojiDragStart}
+            />
+          )}
           {tab === 'image' && (
             <ImageTab
               uploading={uploading}
@@ -406,7 +445,7 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
               focusedAnchorId={focusedAnchorId}
               onAddToUi={(asset) => {
                 if (!focusedAnchorId) return
-                addPin({ anchorId: focusedAnchorId, offsetX: 0, offsetY: 0, asset, size: Math.round(UI_PIN_DEFAULT_SIZE * 3) })
+                addPin({ anchorId: focusedAnchorId, offsetX: 0, offsetY: 0, asset })
                 playSubmenuTap()
               }}
               onDragStartDraw={(asset, x, y) => startPinDrag(asset, x, y)}
@@ -414,62 +453,6 @@ export default function UiPinTray({ open }: UiPinTrayProps) {
           )}
         </div>
       </motion.div>
-  )
-}
-
-// ─── Tab chrome ─────────────────────────────────────────────────────────────
-
-function TrayTabButton({
-  active,
-  icon: Icon,
-  label,
-  onSelect,
-}: {
-  active: boolean
-  icon: React.ElementType
-  label: string
-  onSelect: () => void
-}) {
-  const [hovered, setHovered] = useState(false)
-
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onPointerDown={(e) => {
-        e.stopPropagation()
-        playSubmenuTap()
-        onSelect()
-      }}
-      onMouseEnter={() => { setHovered(true); playSubmenuHover() }}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        flex: 1,
-        height: TRAY_TAB_HEIGHT,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        border: 'none',
-        borderRadius: 10,
-        background: active
-          ? 'rgba(20, 30, 50, 0.06)'
-          : hovered
-            ? 'rgba(20, 30, 50, 0.04)'
-            : 'transparent',
-        color: active || hovered ? font.colorPrimary : font.colorMuted,
-        fontSize: 13,
-        fontWeight: 500,
-        cursor: 'pointer',
-        fontFamily: font.family,
-        margin: '0 2px',
-        transition: 'background 160ms ease, color 160ms ease',
-      }}
-    >
-      <Icon size={15} strokeWidth={2} />
-      {label}
-    </button>
   )
 }
 
@@ -576,9 +559,6 @@ function FullEmojiPicker({ onPick, onDragStart }: {
                   {...rest}
                   style={{
                     boxSizing: 'border-box',
-                    // frimousse inserts a spacer div before each category equal to this
-                    // measured height — keep it 1px so rows sit tight under search.
-                    // Must stay truthy (>0) or virtualization bails out.
                     height: 1,
                     minHeight: 1,
                     maxHeight: 1,
@@ -637,7 +617,6 @@ function EmojiPickerCell({
       }}
       onClick={(e) => {
         e.stopPropagation()
-        if (useUiCustomizationStore.getState().pinDrag) return
         onPick(emoji.emoji)
       }}
       style={{
@@ -677,6 +656,63 @@ function EmojiPickerCell({
       >
         {emoji.emoji}
       </span>
+    </button>
+  )
+}
+
+// ─── Tab chrome ─────────────────────────────────────────────────────────────
+
+function TrayTabButton({
+  active,
+  icon: Icon,
+  label,
+  onSelect,
+}: {
+  active: boolean
+  icon: React.ElementType
+  label: string
+  onSelect: () => void
+}) {
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        playSubmenuTap()
+        onSelect()
+      }}
+      onMouseEnter={() => { setHovered(true); playSubmenuHover() }}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        flex: '0 0 auto',
+        minWidth: 96,
+        height: TRAY_TAB_HEIGHT,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        border: 'none',
+        borderRadius: 10,
+        background: active
+          ? 'rgba(20, 30, 50, 0.06)'
+          : hovered
+            ? 'rgba(20, 30, 50, 0.04)'
+            : 'transparent',
+        color: active || hovered ? font.colorPrimary : font.colorMuted,
+        fontSize: 13,
+        fontWeight: 500,
+        cursor: 'pointer',
+        fontFamily: font.family,
+        padding: '0 12px',
+        transition: 'background 160ms ease, color 160ms ease',
+      }}
+    >
+      <Icon size={15} strokeWidth={2} />
+      {label}
     </button>
   )
 }
@@ -971,8 +1007,8 @@ function KlipyKindToggle({
   onKindChange: (kind: KlipyMediaKind) => void
 }) {
   const options: { id: KlipyMediaKind; label: string }[] = [
-    { id: 'gifs', label: 'gifs' },
     { id: 'stickers', label: 'stickers' },
+    { id: 'gifs', label: 'gifs' },
   ]
 
   return (
@@ -1166,7 +1202,7 @@ function KlipyMediaGrid({
         {status === 'unconfigured' && (
           <KlipyTabState
             icon={<AlertCircle size={16} strokeWidth={2} color={font.colorMuted} />}
-            text="add VITE_KLIPY_APP_KEY to your .env file to enable GIFs and stickers."
+            text="add VITE_KLIPY_APP_KEY to your .env file to enable stickers and GIFs."
           />
         )}
         {status === 'error' && (

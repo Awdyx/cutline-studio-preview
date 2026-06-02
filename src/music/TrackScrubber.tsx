@@ -7,8 +7,9 @@ import {
   stopPreviewPlayback,
   bindPreviewEndCutoff,
   unbindPreviewEndCutoff,
+  completeTrackPreviewSession,
+  TRACK_PREVIEW_TRIGGER,
 } from './previewAudioEffects'
-import { usePreviewBackgroundMusicDuck } from './usePreviewBackgroundMusicDuck'
 
 const FALLBACK_DURATION = 30
 const MIN_CLIP = 1
@@ -49,7 +50,8 @@ export default function TrackScrubber({
 }: TrackScrubberProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const cutoffCleanupRef = useRef<(() => void) | null>(null)
-  const { onPreviewStarted, onPreviewStopped } = usePreviewBackgroundMusicDuck()
+  const previewSessionActiveRef = useRef(false)
+  const togglingRef = useRef(false)
   const trackRef = useRef<HTMLDivElement | null>(null)
   const [playing, setPlaying] = useState(false)
   const [playhead, setPlayhead] = useState(startTime)
@@ -62,6 +64,9 @@ export default function TrackScrubber({
       cutoffCleanupRef.current?.()
       cutoffCleanupRef.current = null
       if (audioRef.current) unbindPreviewEndCutoff(audioRef.current)
+      if (!previewSessionActiveRef.current) return
+      previewSessionActiveRef.current = false
+      void stopPreviewPlayback(audioRef.current!)
     }
   }, [])
 
@@ -81,11 +86,13 @@ export default function TrackScrubber({
       endTime,
       onFadeComplete: () => {
         clearCutoffMonitor()
-        onPreviewStopped()
-        setPlaying(false)
-        setSnapping(true)
-        setPlayhead(startTime)
-        setTimeout(() => setSnapping(false), 600)
+        previewSessionActiveRef.current = false
+        void completeTrackPreviewSession().then(() => {
+          setPlaying(false)
+          setSnapping(true)
+          setPlayhead(startTime)
+          setTimeout(() => setSnapping(false), 600)
+        })
       },
     })
   }
@@ -101,26 +108,31 @@ export default function TrackScrubber({
     const audio = audioRef.current
     clearCutoffMonitor()
     setPlaying(false)
-    onPreviewStopped()
+    previewSessionActiveRef.current = false
     if (audio) await stopPreviewPlayback(audio)
   }
 
   async function togglePlay() {
-    const audio = audioRef.current
-    if (!audio) return
-    if (playing) {
-      await stopScrubberPreview()
-      return
-    }
+    if (togglingRef.current) return
+    togglingRef.current = true
 
+    const audio = audioRef.current
     try {
+      if (!audio) return
+      if (playing) {
+        await stopScrubberPreview()
+        return
+      }
+
       await startPreviewPlayback(audio, previewUrl, startTime)
+      previewSessionActiveRef.current = true
       setPlayhead(startTime)
-      onPreviewStarted()
       setPlaying(true)
     } catch {
-      onPreviewStopped()
+      previewSessionActiveRef.current = false
       setPlaying(false)
+    } finally {
+      togglingRef.current = false
     }
   }
 
@@ -193,6 +205,7 @@ export default function TrackScrubber({
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <button
         type="button"
+        {...{ [TRACK_PREVIEW_TRIGGER]: '' }}
         aria-label={playing ? 'Pause preview' : 'Play from start point'}
         onClick={togglePlay}
         style={{

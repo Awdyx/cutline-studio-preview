@@ -14,11 +14,15 @@ import {
   readEditorHtml,
   storedContentToHtml,
 } from './textEditorContent'
-import { handleTextFormatShortcutEvent } from './textEditorFormat'
-import { prepareEditorForTyping, TEXT_ITEM_DEFAULT_FONT_SIZE } from './textEditorFontSize'
+import { formatKindFromShortcutKey } from './textEditorFormat'
+import {
+  isFontSizeShortcut,
+  prepareEditorForTyping,
+  TEXT_ITEM_DEFAULT_FONT_SIZE,
+} from './textEditorFontSize'
+import { recallEditorSelection, restoreEditorBookmark } from './textEditorSelectionBookmark'
 import { useTextEditorShortcuts } from './useTextEditorShortcuts'
-import { applyTextFormatToAll, formatKindFromShortcutKey } from './textEditorFormat'
-import { useTextFormatShortcuts } from './useTextFormatShortcuts'
+import { useTextEditorSelectionMemory } from './useTextEditorSelectionMemory'
 import {
   textAlignmentContainerStyle,
   textAlignmentEditorStyle,
@@ -35,7 +39,6 @@ import {
   measureTextItemContentBounds,
   measureTextItemShrinkBounds,
 } from './textItemAutoSize'
-import { useCanvasItemResizeStore } from './canvasItemResizeStore'
 import { TEXT_BOX_PADDING, type TextCanvasItem } from './types'
 
 const textSaveDelayMs = 400
@@ -56,12 +59,13 @@ export default function TextItem({
   const shouldFocusRef = useRef(false)
   const selectAllOnFocusRef = useRef(false)
   const pendingInitialCharRef = useRef<string | null>(null)
+  const pendingSelectionRestoreRef = useRef<{ start: number; end: number } | null>(
+    null,
+  )
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editorEmpty, setEditorEmpty] = useState(item.text.length === 0)
   const [isEditing, setIsEditing] = useState(false)
   const isSelected = useItemSelected(item.id)
-  const isResizing = useCanvasItemResizeStore((s) => s.activeItemId === item.id)
-  const wasResizingRef = useRef(false)
   const { onGrabPointerDown } = useCanvasItemDrag(item.id)
   const isPhone = useIsPhoneLayout()
   const canvasEditEnabled = useCanvasEditStore((s) => s.enabled)
@@ -182,11 +186,16 @@ export default function TextItem({
     scheduleSave(readEditorHtml(el))
     setEditorEmpty(isEditorEmpty(el))
     syncAutoSize()
-  }, [scheduleSave, syncAutoSize])
+    if (!isEditing) {
+      pendingSelectionRestoreRef.current = recallEditorSelection(el)
+      beginEditing(false)
+    }
+  }, [beginEditing, isEditing, scheduleSave, syncAutoSize])
 
-  useTextFormatShortcuts(editorRef, isEditing, notifyFormatApplied)
+  useTextEditorSelectionMemory(editorRef, isSelected || isEditing)
   useTextEditorShortcuts(
     editorRef,
+    isSelected || isEditing,
     isEditing,
     TEXT_ITEM_DEFAULT_FONT_SIZE,
     notifyFormatApplied,
@@ -201,36 +210,6 @@ export default function TextItem({
   useEffect(() => {
     syncFromStore()
   }, [item.id])
-
-  // Snap to fit only if text has escaped the box (box is too small for content)
-  useEffect(() => {
-    if (isResizing) {
-      wasResizingRef.current = true
-      return
-    }
-    if (!wasResizingRef.current) return
-    wasResizingRef.current = false
-
-    const el = editorRef.current
-    if (!el) return
-    const store = useCanvasItemsStore.getState()
-    const current = store.items.find((entry) => entry.id === item.id)
-    if (!current || current.type !== 'text') return
-
-    const { width, height } = measureTextItemShrinkBounds(el)
-    // Only snap if content overflows — box is already big enough, leave it alone
-    if (current.width >= width && current.height >= height) return
-
-    const next = fitTextItemRectAroundCenter(
-      current.x,
-      current.y,
-      current.width,
-      current.height,
-      Math.max(width, current.width),
-      Math.max(height, current.height),
-    )
-    store.updateItemRect(item.id, next.x, next.y, next.width, next.height)
-  }, [isResizing, item.id])
 
   useEffect(() => {
     if (isSelected) return
@@ -258,6 +237,15 @@ export default function TextItem({
   }, [isSelected, item.id])
 
   useLayoutEffect(() => {
+    if (!isEditing) return
+    const pending = pendingSelectionRestoreRef.current
+    if (!pending) return
+    pendingSelectionRestoreRef.current = null
+    const el = editorRef.current
+    if (el) restoreEditorBookmark(el, pending)
+  }, [isEditing])
+
+  useLayoutEffect(() => {
     if (!isEditing || !shouldFocusRef.current) return
     shouldFocusRef.current = false
     if (selectAllOnFocusRef.current) {
@@ -282,7 +270,7 @@ export default function TextItem({
     } else {
       focusEditor()
     }
-  }, [focusEditor, isEditing, notifyFormatApplied])
+  }, [focusEditor, isEditing])
 
   useLayoutEffect(() => {
     syncAutoSize()
@@ -292,9 +280,6 @@ export default function TextItem({
     if (!isSelected || isEditing || frozen) return
 
     function onKeyDown(e: KeyboardEvent) {
-      // Don't intercept when the pen/tool palette is open
-      if (useShortcutUiStore.getState().toolPaletteOpen) return
-
       const mod = e.metaKey || e.ctrlKey
       const key = e.key
 
@@ -310,6 +295,8 @@ export default function TextItem({
         if (k === 'd') return          // duplicate
         if (k === 'c' || k === 'x') return  // copy / cut
         if (k === 'l') return          // toggle lock
+        if (formatKindFromShortcutKey(k, e.shiftKey)) return // bold/italic/…
+        if (isFontSizeShortcut(e)) return // ⌘[ / ⌘]
 
         // ⌘A → enter edit mode + select all
         if (k === 'a') {
@@ -320,25 +307,13 @@ export default function TextItem({
           return
         }
 
-        // ⌘B / ⌘I / ⌘U / ⌘⇧X → apply format to all text silently (no edit mode)
-        const formatKind = formatKindFromShortcutKey(k, e.shiftKey)
-        if (formatKind) {
-          e.preventDefault()
-          e.stopPropagation()
-          const el = editorRef.current
-          if (el) {
-            const html = applyTextFormatToAll(el, formatKind)
-            if (html != null) {
-              useCanvasItemsStore.getState().updateTextItemText(item.id, html)
-            }
-          }
-          return
-        }
-
-        // All other ⌘ combos (⌘I, ⌘E, ⌘S, ⌘K, ⌘F …) → swallow
+        // All other ⌘ combos (⌘E, ⌘S, ⌘K, ⌘F …) → swallow
         e.stopPropagation()
         return
       }
+
+      // Don't intercept when the pen/tool palette is open
+      if (useShortcutUiStore.getState().toolPaletteOpen) return
 
       // Plain printable character → start typing immediately
       if (key.length === 1 && !e.altKey) {
@@ -458,10 +433,6 @@ export default function TextItem({
             flushSaveAndCommit()
           }}
           onKeyDown={(e) => {
-            const editor = editorRef.current
-            if (editor && handleTextFormatShortcutEvent(e, editor, notifyFormatApplied)) {
-              return
-            }
             if (e.key === 'Escape') {
               e.preventDefault()
               flushSaveAndCommit()

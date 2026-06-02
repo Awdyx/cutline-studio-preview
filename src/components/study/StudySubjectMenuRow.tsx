@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { playSubmenuHover, playSubmenuTap } from '../../sound/submenuSound'
+import { playSubmenuHover } from '../../sound/submenuSound'
 import { font } from '../../styles/tokens'
 import { useSubmenuSoundScope } from '../SubmenuSoundScope'
 import {
@@ -26,10 +26,7 @@ export default function StudySubjectMenuRow({
   return (
     <button
       type="button"
-      onClick={() => {
-        if (sounds) playSubmenuTap()
-        onClick()
-      }}
+      onClick={onClick}
       onMouseEnter={() => {
         if (sounds) playSubmenuHover()
       }}

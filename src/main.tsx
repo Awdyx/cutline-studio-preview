@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { syncLayoutProfileAttribute } from './platform/layoutProfile'
 import { syncTouchFirstAttribute } from './platform/compositor'
-import { syncTauriDesktopAttribute } from './platform/tauriDesktop'
+import { isTauriDesktop, syncTauriDesktopAttribute } from './platform/tauriDesktop'
 import App from './App.tsx'
 import AppAccessGate from './components/AppAccessGate.tsx'
 
@@ -12,7 +12,7 @@ syncTouchFirstAttribute()
 syncTauriDesktopAttribute()
 
 function Root() {
-  const [unlocked, setUnlocked] = useState(false)
+  const [unlocked, setUnlocked] = useState(() => isTauriDesktop())
 
   return (
     <>

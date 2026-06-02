@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Grip } from 'lucide-react'
+import DragGripIcon from './DragGripIcon'
 import {
   grabHandleHorizontalStyle,
   grabHandlePlacementKey,
   grabHandleVerticalStyle,
+  DRAG_GRIP_VISUAL_SIZE,
   resolveCanvasHandleHitSize,
   type GrabHandlePlacement,
 } from './grabZone'
@@ -98,7 +99,7 @@ export default function DragHandle({
         }}
         className="canvas-item-drag-handle"
       >
-        <Grip size={13} strokeWidth={2} />
+        <DragGripIcon size={DRAG_GRIP_VISUAL_SIZE} side={shownPlacement.side} />
       </button>
     </div>
   )

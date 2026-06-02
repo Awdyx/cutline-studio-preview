@@ -6,6 +6,9 @@ import { useSubmenuSoundScope } from './SubmenuSoundScope'
 import ProfileStatusDot from './ProfileStatusDot'
 import type { ProfileStatus } from '../profile/types'
 
+/** Hover pill is slightly smaller than active/tap pills. */
+const MENU_ROW_HOVER_SCALE = 0.97
+
 function MenuRowLabel({
   label,
   labelSuffix,
@@ -92,7 +95,6 @@ export function MenuRow({
   const sounds = submenuSounds ?? inSubmenuScope
   const canInteract = !disabled
   const visuallyMuted = disabled || dimmed
-  const showInsetFill = inset && hovered && canInteract
 
   return (
     <button
@@ -128,7 +130,7 @@ export function MenuRow({
             ? '10px 12px'
             : '10px 16px',
         borderRadius: inset ? 10 : undefined,
-        background: showInsetFill ? 'var(--menu-row-hover-bg)' : 'transparent',
+        background: 'transparent',
         border: 'none',
         outline: 'none',
         cursor: canInteract ? 'pointer' : 'default',
@@ -147,17 +149,18 @@ export function MenuRow({
           : 'theme-surface'
       }
     >
-      {/* Hover fill — same pill shape as active/tap indicators; skipped for inset rows (they use showInsetFill) */}
-      {!noHoverFill && !inset && (
+      {/* Hover fill — same pill shape as active/tap, scaled down slightly so hover reads lighter than selection. */}
+      {!noHoverFill && (
         <span
           aria-hidden
           style={{
             position: 'absolute',
             top: 1,
             bottom: 1,
-            left: 6,
-            right: 6,
+            left: inset ? 0 : 6,
+            right: inset ? 0 : 6,
             zIndex: -1,
+            transform: `scale(${MENU_ROW_HOVER_SCALE})`,
             background: destructive ? 'var(--menu-row-destructive-hover)' : 'var(--menu-row-hover-fill)',
             borderRadius: 10,
             pointerEvents: 'none',

@@ -11,8 +11,12 @@ import { useStrokesStore } from '../drawing/strokesStore'
 import { useLassoStore } from '../drawing/useLassoStore'
 import { dismissCanvasSelection } from '../canvas/canvasSelectionDismiss'
 import { canvasEditingAllowed } from '../canvasEdit/layer'
-import { runCanvasOverviewExit } from '../canvas/canvasOverviewCamera'
-import { dismissMinimapMode, toggleCanvasMinimap } from '../canvas/canvasMinimapOpen'
+import {
+  closeCanvasMinimap,
+  dismissMinimapMode,
+  toggleCanvasMinimap,
+} from '../canvas/canvasMinimapOpen'
+import { runCanvasOverviewExit, toggleCanvasOverview } from '../canvas/canvasOverviewCamera'
 import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
 import { useCanvasMinimapStore } from '../canvas/canvasMinimapStore'
 import { isPhoneLayout } from '../platform/layoutProfile'
@@ -171,11 +175,6 @@ function handleEscape(
     return true
   }
 
-  if (itemsStore.previewAdjustSpaceId) {
-    itemsStore.setPreviewAdjustSpace(null)
-    return true
-  }
-
   const lasso = useLassoStore.getState()
   if (
     lasso.selectedStrokeIds.length > 0 ||
@@ -307,6 +306,16 @@ export function useKeyboardShortcuts(
       if (matchesShortcut(e, 'find')) {
         e.preventDefault()
         useShortcutUiStore.getState().canvasSearch?.focus()
+        return
+      }
+
+      // ── Canvas overview ────────────────────────────────────────────────────
+      if (matchesShortcut(e, 'open-canvas-overview')) {
+        e.preventDefault()
+        if (useCanvasOverviewStore.getState().engaged) {
+          closeCanvasMinimap()
+        }
+        toggleCanvasOverview(transformRef.current, null)
         return
       }
 

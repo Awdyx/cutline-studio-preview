@@ -20,6 +20,7 @@ export default function ReloadSpaceIntro() {
   const nameLabel = useReloadIntroStore((s) => s.copy.name)
   const suffixLabel = useReloadIntroStore((s) => s.copy.suffix)
   const finish = useReloadIntroStore((s) => s.finish)
+  const dismiss = useReloadIntroStore((s) => s.dismiss)
   const reduceMotion = useReducedMotion()
 
   useReloadIntroDismiss()
@@ -43,7 +44,16 @@ export default function ReloadSpaceIntro() {
   const veilShiftY = panDirY * (reduceMotion ? 0 : 18)
 
   return createPortal(
-    <div className="reload-space-intro" aria-hidden>
+    <div
+      className="reload-space-intro"
+      aria-hidden
+      onPointerDown={(e) => {
+        if (phase !== 'armed' && phase !== 'revealing') return
+        if (phase === 'armed') dismiss()
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+    >
       <motion.div
         className="reload-space-intro__veil"
         initial={{ opacity: 1 }}

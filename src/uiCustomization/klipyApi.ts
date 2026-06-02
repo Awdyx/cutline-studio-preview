@@ -40,7 +40,7 @@ const DEFAULT_FEED_TOTAL = 42
 const DEFAULT_FEED_PER_TERM = 8
 
 const FEED_CACHE_KEY = (kind: KlipyMediaKind) =>
-  scopedStorageKey(`cutline-klipy-feed-${kind}`)
+  scopedStorageKey(`cutline-klipy-feed-v2-${kind}`)
 const FEED_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 1 week
 
 type PersistedFeed = { results: KlipyMediaResult[]; fetchedAt: number }
@@ -115,6 +115,12 @@ export function isKlipyConfigured(): boolean {
   return klipyAppKey() != null
 }
 
+/** KLIPY sticker pins saved before v2 feeds used a static PNG `url`; preview is animated. */
+export function resolveKlipyPinUrl(url: string, previewUrl?: string): string {
+  if (previewUrl && /\.png(?:[?#]|$)/i.test(url)) return previewUrl
+  return url
+}
+
 function klipyCustomerId(): string {
   if (typeof localStorage === 'undefined') return 'cutline-anon'
   const existing = localStorage.getItem(CUSTOMER_ID_KEY)
@@ -150,7 +156,8 @@ function parseKlipyItem(
   const file = item.file
   if (!file) return null
 
-  const fullPrefer = kind === 'stickers' ? 'png' : 'gif'
+  // Stickers animate via webp/gif — PNG is a static first frame and freezes on pins.
+  const fullPrefer = kind === 'stickers' ? 'webp' : 'gif'
   const full = pickFormat(file.md ?? file.hd ?? file.sm, fullPrefer)
   const preview = pickFormat(file.sm ?? file.xs ?? file.md, 'webp')
   if (!full?.url) return null

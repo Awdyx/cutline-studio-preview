@@ -15,15 +15,10 @@ export const desktopChromePanelAnchorRight = 'var(--chrome-panel-anchor-right, 1
 
 /** Right-anchored chrome panel offset from the viewport edge (matches trigger column). */
 export function chromePanelRight(offsetPx: number): string {
-  return `calc(${offsetPx}px + 2 * var(--chrome-outer-nudge, 0px))`
+  return `${offsetPx}px`
 }
 
-/** Read effective horizontal inset for flyout clamping (edge + column padding). */
+/** Read effective horizontal inset for flyout clamping. */
 export function readChromeEdgeInset(): number {
-  if (typeof document === 'undefined') return CHROME_EDGE_BASE_PX
-  const nudge = parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue('--chrome-outer-nudge'),
-  )
-  const outerNudge = Number.isFinite(nudge) ? nudge : 0
-  return CHROME_EDGE_BASE_PX + outerNudge * 2
+  return CHROME_EDGE_BASE_PX
 }

@@ -4,6 +4,11 @@ import {
   CANVAS_ORIGINAL_WIDTH,
   getCanvasMinScale,
 } from '../drawing/canvasDimensions'
+import {
+  isPocketStripActive,
+  readActiveCanvasLogicalHeight,
+  readActiveCanvasLogicalWidth,
+} from '../spaces/activeCanvasLayout'
 import { STUDY_HUB_SPAWN_SIZE_FACTOR } from './studyHubSpawnScale'
 import { STUDY_HUB_ASPECT, STUDY_HUB_WIDTH } from './types'
 
@@ -11,10 +16,10 @@ import { STUDY_HUB_ASPECT, STUDY_HUB_WIDTH } from './types'
 const REFERENCE_VIEWPORT = { width: 1440, height: 900 }
 
 /** Readable on-screen floor at max zoom-in (CANVAS_MAX_SCALE). */
-const MIN_ON_SCREEN_WIDTH = 252 * 1.2
+const MIN_ON_SCREEN_WIDTH = 252 * 2.65
 
-/** Scales all max-size caps (0.63 = base 0.7 × 1.2 spawn bump × 0.75 resize cap). */
-const MAX_SIZE_SCALE = 0.7 * 1.2 * 0.75
+/** Scales all max-size caps (1.49 ≈ base 0.7 × 1.85 spawn bump × 1.15 resize headroom). */
+const MAX_SIZE_SCALE = 0.7 * 1.85 * 1.15
 
 /** Do not exceed this share of the visible viewport when fully zoomed out. */
 const MAX_VIEWPORT_WIDTH_RATIO = 0.74 * MAX_SIZE_SCALE
@@ -37,12 +42,24 @@ export function studyHubMinCanvasHeight(): number {
   return studyHubMinCanvasWidth() / STUDY_HUB_ASPECT
 }
 
+function activeCanvasWidth(): number {
+  return isPocketStripActive()
+    ? readActiveCanvasLogicalWidth()
+    : CANVAS_ORIGINAL_WIDTH
+}
+
+function activeCanvasHeight(): number {
+  return isPocketStripActive()
+    ? readActiveCanvasLogicalHeight()
+    : CANVAS_ORIGINAL_HEIGHT
+}
+
 /** Largest canvas-space width allowed by viewport + canvas caps. */
 export function studyHubMaxCanvasWidth(): number {
   const minZoom = referenceMinZoomScale()
   const fromViewport =
     (REFERENCE_VIEWPORT.width * MAX_VIEWPORT_WIDTH_RATIO) / minZoom
-  const fromCanvas = CANVAS_ORIGINAL_WIDTH * MAX_CANVAS_WIDTH_RATIO
+  const fromCanvas = activeCanvasWidth() * MAX_CANVAS_WIDTH_RATIO
   const fromHeight = studyHubMaxCanvasHeight() * STUDY_HUB_ASPECT
   return Math.min(fromViewport, fromCanvas, fromHeight)
 }
@@ -51,7 +68,7 @@ export function studyHubMaxCanvasHeight(): number {
   const minZoom = referenceMinZoomScale()
   const fromViewport =
     (REFERENCE_VIEWPORT.height * MAX_VIEWPORT_HEIGHT_RATIO) / minZoom
-  const fromCanvas = CANVAS_ORIGINAL_HEIGHT * MAX_CANVAS_HEIGHT_RATIO
+  const fromCanvas = activeCanvasHeight() * MAX_CANVAS_HEIGHT_RATIO
   return Math.min(fromViewport, fromCanvas)
 }
 

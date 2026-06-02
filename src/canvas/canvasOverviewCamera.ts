@@ -15,9 +15,24 @@ import {
 } from './canvasOverviewThreshold'
 import {
   cancelLibraryAnimation,
+  readCameraFromRef,
   settleCanvasBounds,
+  writeCameraTransform,
 } from './canvasCamera'
 import { useCanvasOverviewStore } from './canvasOverviewStore'
+import {
+  disableOverviewHyperMode,
+} from './canvasOverviewHyperMode'
+import { libraryCameraFromVirtual } from './canvasVirtualPan'
+import { syncBackgroundMusicAcoustics } from '../sound/backgroundMusicAcoustics'
+import {
+  playOverviewEnterSound,
+  playOverviewExitSound,
+} from '../sound/overviewSound'
+import {
+  cancelPendingOverviewExitHandoff,
+  flushPendingOverviewEnterHandoff,
+} from './overviewLayoutHandoffFlush'
 
 /** Combined zoom/map transition duration (ms). */
 export const CANVAS_OVERVIEW_TRANSITION_MS = 560
@@ -26,7 +41,37 @@ const ENTER_MS = EXIT_MS
 
 let exitRaf = 0
 let enterRaf = 0
-let exitLockUntil = 0
+let overviewTransitionGen = 0
+
+function isOverviewTransitionStale(gen: number): boolean {
+  return gen !== overviewTransitionGen
+}
+
+function cancelOverviewRafLoops(): void {
+  if (exitRaf) {
+    cancelAnimationFrame(exitRaf)
+    exitRaf = 0
+  }
+  if (enterRaf) {
+    cancelAnimationFrame(enterRaf)
+    enterRaf = 0
+  }
+}
+
+/** Cancel in-flight zoom loops and post-exit settle before the opposite transition. */
+function beginOverviewTransition(
+  ref: ReactZoomPanPinchContentRef | null,
+): number {
+  cancelOverviewRafLoops()
+  if (ref) cancelLibraryAnimation(ref)
+  useCanvasOverviewStore.getState().cancelExitSettling()
+  overviewTransitionGen += 1
+  return overviewTransitionGen
+}
+
+function isCanvasOverviewExiting(): boolean {
+  return document.documentElement.hasAttribute('data-canvas-overview-exiting')
+}
 
 function wrapperSize(
   ref: ReactZoomPanPinchContentRef,
@@ -69,6 +114,19 @@ function lockOverviewZoomLimits(
   setTransformZoomLimits(ref, overviewScale, overviewScale)
 }
 
+function completeOverviewExitHandoff(
+  ref: ReactZoomPanPinchContentRef,
+  afterHandoff?: () => void,
+): void {
+  afterHandoff?.()
+  const store = useCanvasOverviewStore.getState()
+  store.setTransitioning(false)
+  if (!store.exitSettling) {
+    store.beginExitSettling()
+  }
+  settleCanvasBounds(ref)
+}
+
 /** Tap-to-exit overview: zoom in anchored at the tap. */
 export function runCanvasOverviewExit(
   ref: ReactZoomPanPinchContentRef | null,
@@ -79,13 +137,17 @@ export function runCanvasOverviewExit(
   const scale = ref.state?.scale
   if (!wrapper || !Number.isFinite(scale)) return
 
-  exitLockUntil = performance.now() + EXIT_MS + 140
-  useCanvasOverviewStore.getState().setTransitioning(true)
-  if (enterRaf) {
-    cancelAnimationFrame(enterRaf)
-    enterRaf = 0
+  const gen = beginOverviewTransition(ref)
+  const store = useCanvasOverviewStore.getState()
+  if (store.layoutHandoff?.mode === 'enter') {
+    flushPendingOverviewEnterHandoff(ref)
   }
-  cancelLibraryAnimation(ref)
+  cancelPendingOverviewExitHandoff()
+
+  document.documentElement.setAttribute('data-canvas-overview-exiting', '')
+  store.setTransitioning(true)
+  syncBackgroundMusicAcoustics()
+  playOverviewExitSound()
 
   const width = wrapper.offsetWidth
   const height = wrapper.offsetHeight
@@ -104,6 +166,7 @@ export function runCanvasOverviewExit(
   const start = performance.now()
 
   const loop = (now: number) => {
+    if (isOverviewTransitionStale(gen)) return
     const t = Math.min(1, (now - start) / EXIT_MS)
     const easeZoom = 1 - (1 - t) ** 3
     const s = startScale + (toScale - startScale) * easeZoom
@@ -112,14 +175,15 @@ export function runCanvasOverviewExit(
       exitRaf = requestAnimationFrame(loop)
     } else {
       exitRaf = 0
+      if (isOverviewTransitionStale(gen)) return
       restoreNormalZoomLimits(ref, width, height)
-      useCanvasOverviewStore.getState().setTransitioning(false)
-      useCanvasOverviewStore.getState().setEngaged(false)
-      settleCanvasBounds(ref)
+      disableOverviewHyperMode(ref, () => {
+        if (isOverviewTransitionStale(gen)) return
+        completeOverviewExitHandoff(ref)
+      })
     }
   }
 
-  if (exitRaf) cancelAnimationFrame(exitRaf)
   exitRaf = requestAnimationFrame(loop)
 }
 
@@ -133,58 +197,80 @@ export function runCanvasOverviewEnter(
   const scale = ref.state?.scale
   if (!wrapper || !Number.isFinite(scale)) return
 
+  const gen = beginOverviewTransition(ref)
+  cancelPendingOverviewExitHandoff()
+  document.documentElement.removeAttribute('data-canvas-overview-exiting')
+  playOverviewEnterSound()
+
   const width = wrapper.offsetWidth
   const height = wrapper.offsetHeight
   const toScale = overviewEnterScale(width, height)
 
-  exitLockUntil = performance.now() + ENTER_MS + 140
-  useCanvasOverviewStore.getState().setEngaged(true)
-  useCanvasOverviewStore.getState().setTransitioning(true)
-  setTransformZoomLimits(
-    ref,
-    toScale,
-    CANVAS_MAX_SCALE + CANVAS_ZOOM_EDGE_PADDING,
-  )
+  const startEnterAnimation = () => {
+    if (isOverviewTransitionStale(gen)) return
+    const liveScale = ref.state.scale
+    if (!Number.isFinite(liveScale)) return
 
-  if (isAtOverviewScale(scale, width, height)) {
-    lockOverviewZoomLimits(ref, width, height)
-    useCanvasOverviewStore.getState().setTransitioning(false)
-    settleCanvasBounds(ref)
-    return
-  }
-  if (exitRaf) {
-    cancelAnimationFrame(exitRaf)
-    exitRaf = 0
-  }
-  cancelLibraryAnimation(ref)
+    setTransformZoomLimits(
+      ref,
+      toScale,
+      CANVAS_MAX_SCALE + CANVAS_ZOOM_EDGE_PADDING,
+    )
 
-  const startScale = scale
-  const startX = ref.state.positionX
-  const startY = ref.state.positionY
-  const rect = wrapper.getBoundingClientRect()
-  const ax = anchor ? anchor.x - rect.left : width / 2
-  const ay = anchor ? anchor.y - rect.top : height / 2
-  const canvasAx = (ax - startX) / startScale
-  const canvasAy = (ay - startY) / startScale
-  const start = performance.now()
-
-  const loop = (now: number) => {
-    const t = Math.min(1, (now - start) / ENTER_MS)
-    const easeZoom = 1 - (1 - t) ** 3
-    const s = startScale + (toScale - startScale) * easeZoom
-    ref.setTransform(ax - canvasAx * s, ay - canvasAy * s, s, 0)
-    if (t < 1) {
-      enterRaf = requestAnimationFrame(loop)
-    } else {
-      enterRaf = 0
+    if (isAtOverviewScale(liveScale, width, height)) {
       lockOverviewZoomLimits(ref, width, height)
       useCanvasOverviewStore.getState().setTransitioning(false)
       settleCanvasBounds(ref)
+      return
     }
+    const startScale = liveScale
+    const startX = ref.state.positionX
+    const startY = ref.state.positionY
+    const rect = wrapper.getBoundingClientRect()
+    const ax = anchor ? anchor.x - rect.left : width / 2
+    const ay = anchor ? anchor.y - rect.top : height / 2
+    const canvasAx = (ax - startX) / startScale
+    const canvasAy = (ay - startY) / startScale
+    const start = performance.now()
+
+    const loop = (now: number) => {
+      if (isOverviewTransitionStale(gen)) return
+      const t = Math.min(1, (now - start) / ENTER_MS)
+      const easeZoom = 1 - (1 - t) ** 3
+      const s = startScale + (toScale - startScale) * easeZoom
+      ref.setTransform(ax - canvasAx * s, ay - canvasAy * s, s, 0)
+      if (t < 1) {
+        enterRaf = requestAnimationFrame(loop)
+      } else {
+        enterRaf = 0
+        if (isOverviewTransitionStale(gen)) return
+        lockOverviewZoomLimits(ref, width, height)
+        useCanvasOverviewStore.getState().setTransitioning(false)
+        settleCanvasBounds(ref)
+      }
+    }
+
+    enterRaf = requestAnimationFrame(loop)
   }
 
-  if (enterRaf) cancelAnimationFrame(enterRaf)
-  enterRaf = requestAnimationFrame(loop)
+  const virtual = readCameraFromRef(ref)
+  const store = useCanvasOverviewStore.getState()
+  if (virtual) {
+    store.beginOverviewEnter(
+      {
+        mode: 'enter',
+        virtual,
+        onComplete: () => {
+          if (isOverviewTransitionStale(gen)) return
+          startEnterAnimation()
+        },
+      },
+      true,
+    )
+  } else {
+    store.beginOverviewEnter(null, true)
+    startEnterAnimation()
+  }
 }
 
 /** Toggle canvas overview — zoom out/in and flip overview UI. */
@@ -192,7 +278,10 @@ export function toggleCanvasOverview(
   ref: ReactZoomPanPinchContentRef | null,
   anchor: { x: number; y: number } | null = null,
 ): void {
-  if (useCanvasOverviewStore.getState().engaged) {
+  const { engaged, exitSettling } = useCanvasOverviewStore.getState()
+  const leaving =
+    engaged && !exitSettling && !isCanvasOverviewExiting()
+  if (leaving) {
     runCanvasOverviewExit(ref, anchor)
   } else {
     runCanvasOverviewEnter(ref, anchor)
@@ -212,13 +301,17 @@ export function runCanvasOverviewExitToCamera(
   const scale = ref.state?.scale
   if (!wrapper || !Number.isFinite(scale)) return
 
-  exitLockUntil = performance.now() + EXIT_MS + 140
-  useCanvasOverviewStore.getState().setTransitioning(true)
-  if (enterRaf) {
-    cancelAnimationFrame(enterRaf)
-    enterRaf = 0
+  const gen = beginOverviewTransition(ref)
+  const store = useCanvasOverviewStore.getState()
+  if (store.layoutHandoff?.mode === 'enter') {
+    flushPendingOverviewEnterHandoff(ref)
   }
-  cancelLibraryAnimation(ref)
+  cancelPendingOverviewExitHandoff()
+
+  document.documentElement.setAttribute('data-canvas-overview-exiting', '')
+  store.setTransitioning(true)
+  syncBackgroundMusicAcoustics()
+  playOverviewExitSound()
 
   const width = wrapper.offsetWidth
   const height = wrapper.offsetHeight
@@ -233,11 +326,13 @@ export function runCanvasOverviewExitToCamera(
 
   const startX = ref.state.positionX
   const startY = ref.state.positionY
-  const toX = target.positionX
-  const toY = target.positionY
+  const libraryTarget = libraryCameraFromVirtual(target)
+  const toX = libraryTarget.positionX
+  const toY = libraryTarget.positionY
   const start = performance.now()
 
   const loop = (now: number) => {
+    if (isOverviewTransitionStale(gen)) return
     const t = Math.min(1, (now - start) / EXIT_MS)
     const easeZoom = 1 - (1 - t) ** 3
     const s = startScale + (toScale - startScale) * easeZoom
@@ -248,15 +343,17 @@ export function runCanvasOverviewExitToCamera(
       exitRaf = requestAnimationFrame(loop)
     } else {
       exitRaf = 0
-      ref.setTransform(toX, toY, toScale, 0)
+      if (isOverviewTransitionStale(gen)) return
       restoreNormalZoomLimits(ref, width, height)
-      useCanvasOverviewStore.getState().setTransitioning(false)
-      useCanvasOverviewStore.getState().setEngaged(false)
-      settleCanvasBounds(ref)
-      useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+      disableOverviewHyperMode(ref, () => {
+        if (isOverviewTransitionStale(gen)) return
+        completeOverviewExitHandoff(ref, () => {
+          writeCameraTransform(ref, target.positionX, target.positionY, toScale, 0)
+          useCanvasWorkspaceStore.getState().syncMainCamera(ref)
+        })
+      })
     }
   }
 
-  if (exitRaf) cancelAnimationFrame(exitRaf)
   exitRaf = requestAnimationFrame(loop)
 }

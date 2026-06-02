@@ -10,8 +10,8 @@ import {
 import {
   dismissCanvasSelection,
   isPointerOnCanvasItem,
-  isPointerOnSpacePreview,
   shouldDismissSelectionForPointer,
+  suppressItemActivationAfterSelectionDismiss,
 } from './canvasSelectionDismiss'
 import {
   keepActiveLassoSelectionForPointer,
@@ -73,11 +73,6 @@ export function useCanvasSelectionPointer(
       if (isStudyHubMenuFocusActive()) return
       if (!isPointerOnCanvasViewport(event.target)) return
 
-      const adjustId = useCanvasItemsStore.getState().previewAdjustSpaceId
-      if (adjustId && !isPointerOnSpacePreview(event.target, adjustId)) {
-        useCanvasItemsStore.getState().setPreviewAdjustSpace(null)
-      }
-
       const canvasEl = resolveLassoCanvasEl(event.target)
       if (
         keepActiveLassoSelectionForPointer(
@@ -93,6 +88,11 @@ export function useCanvasSelectionPointer(
       const lasso = useLassoStore.getState()
       if (lasso.selectedStrokeIds.length > 0 || lasso.selectedItemIds.length > 0) {
         dismissCanvasSelection()
+        if (isPointerOnCanvasItem(event.target)) {
+          suppressItemActivationAfterSelectionDismiss()
+          event.preventDefault()
+          event.stopPropagation()
+        }
         return
       }
 
@@ -103,6 +103,7 @@ export function useCanvasSelectionPointer(
 
       // Block enter-space / select / study-hub focus — dismiss only.
       if (isPointerOnCanvasItem(event.target)) {
+        suppressItemActivationAfterSelectionDismiss()
         event.preventDefault()
         event.stopPropagation()
       }

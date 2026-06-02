@@ -6,7 +6,7 @@ export default defineConfig({
   // GitHub Pages base matches repo name; local dev stays at /
   base:
     process.env.GITHUB_PAGES === 'true'
-      ? `/${process.env.GITHUB_PAGES_REPO ?? 'cutline-studio-demo'}/`
+      ? `/${process.env.GITHUB_PAGES_REPO ?? 'cutline-studio-preview'}/`
       : '/',
   plugins: [react()],
   server: {

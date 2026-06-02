@@ -5,6 +5,7 @@ import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useCanvasLockFlattenStore } from '../canvasLock/canvasLockFlattenStore'
 import { shouldFlattenCanvas } from '../canvasLock/flattenVisibility'
 import { useStrokesStore } from './strokesStore'
+import { readActiveCanvasLayout } from '../spaces/activeCanvasLayout'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { resolveStrokeFill } from './colorUtils'
 import { strokeToSvgPath } from './strokePath'
@@ -19,12 +20,8 @@ import {
   lassoLiftedStrokeZIndex,
 } from '../canvasItems/canvasZOrder'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
-import { strokeExtendsOutsideStudioCentre } from '../canvas/studioCentre'
-import {
-  CANVAS_ORIGINAL_HEIGHT,
-  CANVAS_ORIGINAL_WIDTH,
-  STUDIO_STROKE_BLEED_PAD,
-} from './canvasDimensions'
+import { strokeExtendsOutsideActiveCanvas } from '../spaces/activeCanvasLayout'
+import { ErasingStrokePaths } from './ErasingStrokePaths'
 
 const HIGHLIGHTER_GLOW_FILTER_ID = 'cutline-highlighter-glow'
 const ANNOTATION_GLOW_FILTER_ID = 'cutline-annotation-highlighter-glow'
@@ -35,18 +32,6 @@ const STROKE_LAYER_WRAP_STYLE = {
   inset: 0,
   pointerEvents: 'none' as const,
 }
-
-const CompletedStrokePath = memo(function CompletedStrokePath({
-  stroke,
-  fill,
-}: {
-  stroke: Stroke
-  fill: string
-}) {
-  const d = stroke.path ?? strokeToSvgPath(stroke, true)
-  if (!d) return null
-  return <path d={d} fill={fill} />
-})
 
 const ActiveStrokePath = memo(function ActiveStrokePath({
   stroke,
@@ -61,8 +46,8 @@ const ActiveStrokePath = memo(function ActiveStrokePath({
 })
 
 function strokeLayerNeedsBleed(strokes: Stroke[], activeStroke: Stroke | null): boolean {
-  if (activeStroke != null && strokeExtendsOutsideStudioCentre(activeStroke)) return true
-  return strokes.some(strokeExtendsOutsideStudioCentre)
+  if (activeStroke != null && strokeExtendsOutsideActiveCanvas(activeStroke)) return true
+  return strokes.some(strokeExtendsOutsideActiveCanvas)
 }
 
 function StrokeSvgLayer({
@@ -93,9 +78,11 @@ function StrokeSvgLayer({
   const hasDraggedStrokes =
     dragIds != null && strokes.some((stroke) => dragIds.has(stroke.id))
   const svgOverflowVisible = bleed || hasDraggedStrokes
-  const bleedPad = svgOverflowVisible ? STUDIO_STROKE_BLEED_PAD : 0
-  const svgWidth = CANVAS_ORIGINAL_WIDTH + bleedPad * 2
-  const svgHeight = CANVAS_ORIGINAL_HEIGHT + bleedPad * 2
+  const layout = readActiveCanvasLayout()
+  const bleedPad = svgOverflowVisible ? layout.strokeBleedPad : 0
+  const svgWidth = layout.width + bleedPad * 2
+  const svgHeight = layout.height + bleedPad * 2
+  const isPocketStrip = layout.isPocketStrip
 
   const highlighters = strokes.filter((s) => s.tool === 'highlighter')
   const pens = strokes.filter((s) => s.tool === 'pen')
@@ -104,36 +91,24 @@ function StrokeSvgLayer({
     ? 'plus-lighter'
     : 'multiply'
 
+  const strokeFill = (stroke: Stroke) =>
+    resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)
+  const strokePathD = (stroke: Stroke) => stroke.path ?? strokeToSvgPath(stroke, true)
+
   function renderStrokes(list: Stroke[]) {
     if (!dragIds) {
-      return list.map((stroke) => (
-        <CompletedStrokePath
-          key={stroke.id}
-          stroke={stroke}
-          fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
-        />
-      ))
+      return (
+        <ErasingStrokePaths strokes={list} pathD={strokePathD} fill={strokeFill} />
+      )
     }
     const staticStrokes = list.filter((s) => !dragIds.has(s.id))
     const draggedStrokes = list.filter((s) => dragIds.has(s.id))
     return (
       <>
-        {staticStrokes.map((stroke) => (
-          <CompletedStrokePath
-            key={stroke.id}
-            stroke={stroke}
-            fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
-          />
-        ))}
+        <ErasingStrokePaths strokes={staticStrokes} pathD={strokePathD} fill={strokeFill} />
         {draggedStrokes.length > 0 && (
           <g transform={`translate(${dx},${dy})`}>
-            {draggedStrokes.map((stroke) => (
-              <CompletedStrokePath
-                key={stroke.id}
-                stroke={stroke}
-                fill={resolveStrokeFill(stroke.color, stroke.tool, effectiveMode)}
-              />
-            ))}
+            <ErasingStrokePaths strokes={draggedStrokes} pathD={strokePathD} fill={strokeFill} />
           </g>
         )}
       </>
@@ -145,13 +120,13 @@ function StrokeSvgLayer({
       className="cutline-stroke-svg"
       width={svgWidth}
       height={svgHeight}
-      viewBox={`${-bleedPad} ${-bleedPad} ${svgWidth} ${svgHeight}`}
+      viewBox={`${-bleedPad} ${(isPocketStrip ? layout.minY : 0) - bleedPad} ${svgWidth} ${svgHeight}`}
       aria-hidden
       data-lock-stroke-layer={strokeLayer}
       data-lock-layer={strokeLayer === 'annotation' ? 'annotation' : undefined}
       style={{
         position: 'absolute',
-        top: -bleedPad,
+        top: isPocketStrip ? layout.minY - bleedPad : -bleedPad,
         left: -bleedPad,
         zIndex,
         pointerEvents: 'none',

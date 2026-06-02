@@ -2,9 +2,15 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { readLayoutViewport } from '../platform/viewportSize'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import { PHONE_Z_ORDER_MENU_SCALE } from '../styles/phoneChrome'
-import { Z_MENU_GAP } from './grabZone'
+import {
+  Z_MENU_GAP,
+  Z_MENU_MIN_WIDTH,
+  Z_MENU_MIN_WIDTH_PHONE,
+} from './grabZone'
 
 const VIEWPORT_PADDING = 8
+/** Conservative height before the menu mounts and measures. */
+const Z_MENU_HEIGHT_ESTIMATE = 220
 
 export function getSoleSelectedItemId(
   selectedIds: readonly string[],
@@ -40,6 +46,39 @@ function horizontalOverflow(
   return leftClip + rightClip
 }
 
+function fitsHorizontally(
+  leftEdge: number,
+  rightEdge: number,
+  viewportLeft: number,
+  viewportRight: number,
+): boolean {
+  return (
+    leftEdge >= viewportLeft + VIEWPORT_PADDING &&
+    rightEdge <= viewportRight - VIEWPORT_PADDING
+  )
+}
+
+function clampHorizontalAnchor(
+  anchorLeft: number,
+  side: ZMenuSide,
+  menuWidth: number,
+  viewportLeft: number,
+  viewportRight: number,
+): number {
+  const minLeft = viewportLeft + VIEWPORT_PADDING
+  const maxRight = viewportRight - VIEWPORT_PADDING
+
+  if (side === 'left') {
+    const minAnchor = minLeft + menuWidth
+    const maxAnchor = maxRight
+    return Math.min(Math.max(anchorLeft, minAnchor), maxAnchor)
+  }
+
+  const minAnchor = minLeft
+  const maxAnchor = maxRight - menuWidth
+  return Math.min(Math.max(anchorLeft, minAnchor), maxAnchor)
+}
+
 export function computeZMenuLayoutFromBounds(
   bounds: ElementBounds,
   menuWidth: number,
@@ -50,6 +89,8 @@ export function computeZMenuLayoutFromBounds(
   const viewportRight = viewport.left + viewport.width
   const viewportTop = viewport.top
   const viewportBottom = viewport.top + viewport.height
+  const paddedLeft = viewportLeft + VIEWPORT_PADDING
+  const paddedRight = viewportRight - VIEWPORT_PADDING
 
   const leftAnchor = bounds.left - Z_MENU_GAP
   const rightAnchor = bounds.right + Z_MENU_GAP
@@ -72,27 +113,46 @@ export function computeZMenuLayoutFromBounds(
     transformOrigin: 'center left',
   }
 
-  const leftOverflow = horizontalOverflow(
+  const leftFits = fitsHorizontally(
     leftPlacement.leftEdge,
     leftPlacement.rightEdge,
     viewportLeft,
     viewportRight,
   )
-  const rightOverflow = horizontalOverflow(
+  const rightFits = fitsHorizontally(
     rightPlacement.leftEdge,
     rightPlacement.rightEdge,
     viewportLeft,
     viewportRight,
   )
 
-  const placement =
-    leftOverflow === 0
-      ? leftPlacement
-      : rightOverflow === 0
-        ? rightPlacement
-        : leftOverflow <= rightOverflow
-          ? leftPlacement
-          : rightPlacement
+  const spaceLeft = bounds.left - paddedLeft
+  const spaceRight = paddedRight - bounds.right
+
+  let placement: typeof leftPlacement | typeof rightPlacement
+  if (leftFits && rightFits) {
+    // Prefer the side with more room — stay away from the nearest window edge.
+    placement = spaceRight >= spaceLeft ? rightPlacement : leftPlacement
+  } else if (rightFits) {
+    placement = rightPlacement
+  } else if (leftFits) {
+    placement = leftPlacement
+  } else {
+    const leftOverflow = horizontalOverflow(
+      leftPlacement.leftEdge,
+      leftPlacement.rightEdge,
+      viewportLeft,
+      viewportRight,
+    )
+    const rightOverflow = horizontalOverflow(
+      rightPlacement.leftEdge,
+      rightPlacement.rightEdge,
+      viewportLeft,
+      viewportRight,
+    )
+    placement =
+      leftOverflow <= rightOverflow ? leftPlacement : rightPlacement
+  }
 
   let top = bounds.top
   if (top < viewportTop + VIEWPORT_PADDING) {
@@ -105,7 +165,13 @@ export function computeZMenuLayoutFromBounds(
   }
 
   return {
-    left: placement.left,
+    left: clampHorizontalAnchor(
+      placement.left,
+      placement.side,
+      menuWidth,
+      viewportLeft,
+      viewportRight,
+    ),
     top,
     translateX: placement.translateX,
     side: placement.side,
@@ -113,25 +179,54 @@ export function computeZMenuLayoutFromBounds(
   }
 }
 
-function defaultLayoutFromBounds(bounds: ElementBounds): ZMenuLayout {
-  return {
-    left: bounds.left - Z_MENU_GAP,
-    top: bounds.top,
-    translateX: '-100%',
-    side: 'left',
-    transformOrigin: 'center right',
+function estimatedMenuWidth(): number {
+  return isPhoneLayout() ? Z_MENU_MIN_WIDTH_PHONE : Z_MENU_MIN_WIDTH
+}
+
+/** Union screen bounds for every shell/preview node sharing this item id. */
+export function readCanvasItemScreenBounds(itemId: string): ElementBounds | null {
+  const nodes = document.querySelectorAll(
+    `[data-item-id="${CSS.escape(itemId)}"]`,
+  )
+  if (nodes.length === 0) return null
+
+  let left = Infinity
+  let top = Infinity
+  let right = -Infinity
+  let bottom = -Infinity
+
+  for (const node of nodes) {
+    if (!(node instanceof HTMLElement)) continue
+    const rect = node.getBoundingClientRect()
+    if (rect.width <= 0 && rect.height <= 0) continue
+    left = Math.min(left, rect.left)
+    top = Math.min(top, rect.top)
+    right = Math.max(right, rect.right)
+    bottom = Math.max(bottom, rect.bottom)
   }
+
+  if (!Number.isFinite(left)) return null
+
+  return { left, top, right, bottom }
 }
 
 function readItemBounds(itemId: string): ElementBounds | null {
-  const el = document.querySelector(`[data-item-id="${itemId}"]`)
-  if (!(el instanceof HTMLElement)) return null
-  const rect = el.getBoundingClientRect()
+  return readCanvasItemScreenBounds(itemId)
+}
+
+function readMenuDimensions(menuEl: HTMLElement): { width: number; height: number } {
+  const rect = menuEl.getBoundingClientRect()
+  if (rect.width > 0 && rect.height > 0) {
+    return { width: rect.width, height: rect.height }
+  }
+
+  const layoutScale = isPhoneLayout() ? PHONE_Z_ORDER_MENU_SCALE : 1
+  const width = menuEl.offsetWidth * layoutScale
+  const height = menuEl.offsetHeight * layoutScale
+
   return {
-    left: rect.left,
-    top: rect.top,
-    right: rect.right,
-    bottom: rect.bottom,
+    width: width > 0 ? width : estimatedMenuWidth(),
+    height: height > 0 ? height : Z_MENU_HEIGHT_ESTIMATE,
   }
 }
 
@@ -175,14 +270,14 @@ export function useCanvasItemZMenuLayout(
         return
       }
 
-      const layoutScale = isPhoneLayout() ? PHONE_Z_ORDER_MENU_SCALE : 1
-      const next = menuEl
-        ? computeZMenuLayoutFromBounds(
-            bounds,
-            menuEl.offsetWidth * layoutScale,
-            menuEl.offsetHeight * layoutScale,
-          )
-        : defaultLayoutFromBounds(bounds)
+      const menuSize = menuEl
+        ? readMenuDimensions(menuEl)
+        : { width: estimatedMenuWidth(), height: Z_MENU_HEIGHT_ESTIMATE }
+      const next = computeZMenuLayoutFromBounds(
+        bounds,
+        menuSize.width,
+        menuSize.height,
+      )
 
       const prev = lastLayoutRef.current
       if (!prev || !layoutsEqual(prev, next)) {

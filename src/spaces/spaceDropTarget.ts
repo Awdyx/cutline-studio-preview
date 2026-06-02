@@ -1,10 +1,11 @@
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import type { CanvasItem } from '../canvasItems/types'
-import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
+import { clampItemPositionInPocketStrip } from './activeCanvasLayout'
 import { useCanvasWorkspaceStore } from './canvasWorkspaceStore'
 import {
   canvasPointUnderPreviewPointer,
-  resolveSpacePreviewPan,
+  previewLogicalWidth,
+  previewViewFromStripScroll,
 } from './spacePreviewPan'
 
 export type SpaceDropHit = {
@@ -17,7 +18,6 @@ export function canDropItemInSpace(item: CanvasItem | undefined): boolean {
   if (!item) return false
   if (item.type === 'space') return false
   if (!useCanvasWorkspaceStore.getState().isOnMainCanvas()) return false
-  if (useCanvasItemsStore.getState().previewAdjustSpaceId != null) return false
   return true
 }
 
@@ -25,16 +25,17 @@ export function dropPositionForItem(
   item: Pick<CanvasItem, 'width' | 'height'>,
   canvasX: number,
   canvasY: number,
+  spaceId: string,
 ): { x: number; y: number } {
-  const x = Math.max(
-    0,
-    Math.min(CANVAS_ORIGINAL_WIDTH - item.width, canvasX - item.width / 2),
+  const space = useCanvasWorkspaceStore.getState().spaces[spaceId]
+  const logicalWidth = previewLogicalWidth(space?.strip?.logicalWidth)
+  return clampItemPositionInPocketStrip(
+    canvasX - item.width / 2,
+    canvasY - item.height / 2,
+    item.width,
+    item.height,
+    logicalWidth,
   )
-  const y = Math.max(
-    0,
-    Math.min(CANVAS_ORIGINAL_HEIGHT - item.height, canvasY - item.height / 2),
-  )
-  return { x, y }
 }
 
 export function hitTestSpacePreviewAt(
@@ -63,24 +64,20 @@ export function hitTestSpacePreviewAt(
     const spaceId = card?.getAttribute('data-item-id')
     if (!spaceId || spaceId === draggedItemId) continue
 
-    const spaceWidget = useCanvasItemsStore
-      .getState()
-      .items.find(
-        (entry): entry is Extract<CanvasItem, { type: 'space' }> =>
-          entry.id === spaceId && entry.type === 'space',
-      )
-    if (!spaceWidget) continue
-    if (!useCanvasWorkspaceStore.getState().spaces[spaceId]) continue
+    const spaceData = useCanvasWorkspaceStore.getState().spaces[spaceId]
+    if (!spaceData) continue
 
     const localX = clientX - rect.left
     const localY = clientY - rect.top
-    const pan = resolveSpacePreviewPan(spaceWidget.previewPan)
+    const logicalWidth = previewLogicalWidth(spaceData.strip?.logicalWidth)
+    const pan = previewViewFromStripScroll(spaceData.strip.scrollY, logicalWidth)
     const point = canvasPointUnderPreviewPointer(
       pan,
       localX,
       localY,
       rect.width,
       rect.height,
+      logicalWidth,
     )
 
     return { spaceId, canvasX: point.x, canvasY: point.y }

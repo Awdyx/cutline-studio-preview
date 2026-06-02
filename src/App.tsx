@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, type RefObject } from 'react'
 import {
   TransformComponent,
   TransformWrapper,
@@ -42,6 +42,7 @@ import { useStrokesStore } from './drawing/strokesStore'
 import { useCanvasItemsStore } from './canvasItems/canvasItemsStore'
 import { useLassoStore } from './drawing/useLassoStore'
 import { useCanvasItemDragStore } from './canvasItems/canvasItemDragStore'
+import StudyHubEphemeralOverlay from './canvasItems/StudyHubEphemeralOverlay'
 import CanvasItemsLayer from './canvasItems/CanvasItemsLayer'
 import CanvasItemZOrderMenu from './canvasItems/CanvasItemZOrderMenu'
 import TextFontSizeFloatingMenu from './canvasItems/TextFontSizeFloatingMenu'
@@ -56,6 +57,7 @@ import { useQuickMenuStore } from './quickMenu/quickMenuStore'
 import CanvasLockFlattenLayer from './canvasLock/CanvasLockFlattenLayer'
 import { useCanvasLockFlatten } from './canvasLock/useCanvasLockFlatten'
 import { useCanvasWorkspaceStore } from './spaces/canvasWorkspaceStore'
+import PocketStripViewport from './spaces/PocketStripViewport'
 import SpaceBackPill, { SPACE_BACK_PILL_MOTION, SPACE_BACK_PILL_PHONE_CLASS } from './components/SpaceBackPill'
 import CutlineMenu from './components/CutlineMenu'
 import { NEWS_POSTS } from './content/news'
@@ -73,8 +75,8 @@ import {
   CANVAS_MAX_SCALE,
   CANVAS_ZOOM_EDGE_PADDING,
   CANVAS_ZOOM_MIN_EDGE_PADDING,
-  SPACE_CANVAS_HEIGHT,
-  SPACE_CANVAS_WIDTH,
+  canvasDomHeight,
+  canvasDomWidth,
   canvasLayoutHeight,
   canvasLayoutWidth,
   getCanvasHardMinScale,
@@ -83,6 +85,7 @@ import {
 import {
   CANVAS_WHEEL_ZOOM_STEP,
   clampToLibraryBounds,
+  releaseZoomBounds,
 } from './canvas/canvasCamera'
 import { closeCanvasMinimap } from './canvas/canvasMinimapOpen'
 import { useBlockPagePinchZoom } from './canvas/useBlockPagePinchZoom'
@@ -99,14 +102,23 @@ import { useReloadIntroStore } from './canvas/reloadIntroStore'
 import CanvasPlateBoundsOverlay from './canvas/CanvasPlateBoundsOverlay'
 import StudioCentreTitle from './canvas/StudioCentreTitle'
 import StudioCentreDragHandle from './canvas/StudioCentreDragHandle'
-import CanvasPlateRepositionButton from './canvas/CanvasPlateRepositionButton'
 import CanvasNavigationMinimap from './canvas/CanvasNavigationMinimap'
-import { useCanvasMinimapMenuPointerGuard } from './canvas/useCanvasMinimapMenuPointerGuard'
 import { useCanvasMinimapTrackpadPan } from './canvas/useCanvasMinimapTrackpadPan'
 import { useCanvasZMenuTrackpadPan } from './canvas/useCanvasZMenuTrackpadPan'
 import { useCanvasPanSession } from './canvas/useCanvasPanSession'
+import { useCanvasPanSound } from './canvas/useCanvasPanSound'
 import { useCanvasSelectionViewportPark } from './canvas/useCanvasSelectionViewportPark'
-import { useCanvasOverviewStore } from './canvas/canvasOverviewStore'
+import { shouldDeferLayoutCameraApply, useCanvasOverviewStore } from './canvas/canvasOverviewStore'
+import { useCanvasOverviewDocumentAttrs } from './canvas/useCanvasOverviewDocumentAttrs'
+import { useOverviewHyperLayoutHandoff } from './canvas/useOverviewHyperLayoutHandoff'
+import CanvasVoidBackdrop, {
+  useCanvasVoidBackdropSync,
+} from './canvas/CanvasVoidBackdrop'
+import {
+  registerStudioCentreTransformRef,
+  useStudioCentrePositionStore,
+} from './canvas/studioCentrePositionStore'
+import { hyperPanLibraryBoundProps } from './canvas/canvasVirtualPan'
 import { useCanvasOverviewExitGestures } from './canvas/useCanvasOverviewExitGestures'
 import { useCanvasOverviewMinimapOpen } from './canvas/useCanvasOverviewMinimapOpen'
 import { useStudioCentrePositionCssVars } from './canvas/useStudioCentrePositionCssVars'
@@ -122,7 +134,9 @@ import SettingsSubmenu from './components/SettingsSubmenu'
 import { clientToCanvas } from './drawing/canvasCoords'
 import type { StudySubjectId } from './canvasItems/types'
 import { useUiCustomizationStore } from './uiCustomization/uiCustomizationStore'
+import { CanvasItemCustomizeSession } from './canvasItemCustomize'
 import UiCustomizationLayer from './uiCustomization/UiCustomizationLayer'
+import { CHROME_OVERLAY_PORTAL_ID } from './platform/chromeOverlayPortal'
 import { usePanMotionStore } from './panMotionStore'
 
 const INITIAL_NOTIFICATIONS: Notification[] = [
@@ -271,6 +285,7 @@ type OpenPanel =
 
 function App() {
   useLayoutProfile()
+  useCanvasPanSound()
 
   const toolMode = useToolStore((s) => s.mode)
   useEffect(() => {
@@ -322,10 +337,38 @@ function App() {
   } = useCanvasFileHandlers(transformRef, viewportRef, canvasRef)
 
   const isInsideSpace = useCanvasWorkspaceStore((s) => s.activeCanvasId !== 'main')
-  const activeCanvasWidth = isInsideSpace ? SPACE_CANVAS_WIDTH : CANVAS_WIDTH
-  const activeCanvasHeight = isInsideSpace ? SPACE_CANVAS_HEIGHT : CANVAS_HEIGHT
-  const activeLayoutWidth = isInsideSpace ? activeCanvasWidth : canvasLayoutWidth()
-  const activeLayoutHeight = isInsideSpace ? activeCanvasHeight : canvasLayoutHeight()
+  const activeSpaceId = useCanvasWorkspaceStore((s) =>
+    s.activeCanvasId === 'main' ? null : s.activeCanvasId,
+  )
+  const overviewEngaged = useCanvasOverviewStore((s) => s.engaged)
+  const overviewHyperOptimized = useCanvasOverviewStore((s) => s.hyperOptimized)
+  const overviewExitHandoff = useCanvasOverviewStore(
+    (s) => s.layoutHandoff?.mode === 'exit',
+  )
+  const overviewHyperActive = overviewHyperOptimized && !isInsideSpace
+  /** Keep plate-sized compositor through exit handoff — avoid 7000+plate-local hybrid. */
+  const plateCompositorActive = overviewHyperActive || overviewExitHandoff
+  /** Plate-local draw-target until exit handoff applies the full-canvas camera. */
+  const drawTargetPlateLocal = plateCompositorActive
+  /** Viewport-fixed void grid through exit settle — inner grid mounts only after disengage. */
+  const showViewportVoidBackdrop =
+    !isInsideSpace && (plateCompositorActive || overviewEngaged)
+  const studioX = useStudioCentrePositionStore((s) => s.x)
+  const studioY = useStudioCentrePositionStore((s) => s.y)
+  const hyperPanBounds = useMemo(
+    () =>
+      overviewHyperActive
+        ? hyperPanLibraryBoundProps(
+            viewportSize.width,
+            viewportSize.height,
+            studioX,
+            studioY,
+          )
+        : null,
+    [overviewHyperActive, viewportSize.width, viewportSize.height, studioX, studioY],
+  )
+  const activeLayoutWidth = canvasLayoutWidth(plateCompositorActive)
+  const activeLayoutHeight = canvasLayoutHeight(plateCompositorActive)
   const canvasSwapMode = useCanvasWorkspaceStore((s) => s.canvasSwapMode)
   const canvasSwapPhase = useCanvasWorkspaceStore((s) => s.canvasSwapPhase)
   const canvasFadeOpacity = useCanvasWorkspaceStore((s) => s.canvasFadeOpacity)
@@ -343,19 +386,22 @@ function App() {
     const root = document.documentElement
     if (isInsideSpace) {
       root.setAttribute('data-inside-space', '')
-      root.style.setProperty('--canvas-width', `${SPACE_CANVAS_WIDTH}px`)
-      root.style.setProperty('--canvas-height', `${SPACE_CANVAS_HEIGHT}px`)
+      root.style.setProperty('--canvas-width', `${viewportSize.width}px`)
+      root.style.setProperty('--canvas-height', `${viewportSize.height}px`)
     } else {
       root.removeAttribute('data-inside-space')
-      root.style.setProperty('--canvas-width', `${canvasLayoutWidth()}px`)
-      root.style.setProperty('--canvas-height', `${canvasLayoutHeight()}px`)
+      root.style.setProperty('--canvas-width', `${activeLayoutWidth}px`)
+      root.style.setProperty('--canvas-height', `${activeLayoutHeight}px`)
     }
+  }, [isInsideSpace, activeLayoutWidth, activeLayoutHeight, viewportSize.width, viewportSize.height])
 
+  useLayoutEffect(() => {
     if (!appHydrated) return
+    if (shouldDeferLayoutCameraApply()) return
 
     let cancelled = false
     const id = requestAnimationFrame(() => {
-      if (cancelled) return
+      if (cancelled || shouldDeferLayoutCameraApply()) return
       const ref = transformRef.current
       if (!ref) return
       useCanvasWorkspaceStore.getState().applyCameraForActiveCanvas(ref)
@@ -364,11 +410,21 @@ function App() {
       cancelled = true
       cancelAnimationFrame(id)
     }
-  }, [isInsideSpace, activeCanvasWidth, activeCanvasHeight, activeLayoutWidth, activeLayoutHeight, appHydrated, transformRef])
+  }, [isInsideSpace, appHydrated, transformRef])
+
+  useEffect(() => {
+    registerStudioCentreTransformRef(transformRef)
+    return () => registerStudioCentreTransformRef(null)
+  }, [transformRef])
+
+  useCanvasVoidBackdropSync(transformRef, showViewportVoidBackdrop)
+  useCanvasOverviewDocumentAttrs()
+  useOverviewHyperLayoutHandoff(transformRef)
 
   useEffect(() => {
     if (!isInsideSpace) return
     useCanvasOverviewStore.getState().setEngaged(false)
+    useCanvasOverviewStore.getState().setHyperOptimized(false)
     closeCanvasMinimap()
   }, [isInsideSpace])
 
@@ -391,7 +447,6 @@ function App() {
       .exitSpace(transformRef.current, canvasRef.current)
   }
 
-  const overviewEngaged = useCanvasOverviewStore((s) => s.engaged)
   const overviewTransitioning = useCanvasOverviewStore((s) => s.transitioning)
   const overviewZoomLocked = overviewEngaged && !overviewTransitioning
   const transformMinScale = overviewZoomLocked
@@ -407,7 +462,6 @@ function App() {
   const studioCentreHoldDrag = useStudioCentreHoldDrag(transformRef)
   const studioCentrePanSuppressed = useStudioCentreDragStore((s) => s.panSuppressed)
   const expandedMinimapOpen = useCanvasMinimapStore((s) => s.expandedOpen)
-  useCanvasMinimapMenuPointerGuard()
   // Lock canvas-item interaction (panning still works) while overview is engaged.
   useEffect(() => {
     // Entering overview dismisses drawing-tool chrome and any current selection.
@@ -429,10 +483,15 @@ function App() {
   const isPenDown =
     penDown || penMenu.state.phase !== 'idle' || itemDragActive
   const studyHubMenuFocusActive = useCanvasItemsStore(
-    (s) => s.menuFocusReturnCamera != null,
+    (s) =>
+      s.menuFocusReturnCamera != null ||
+      s.menuFocusEphemeralSubjectId != null,
   )
   const studyHubMenuFocusEngaged = useCanvasItemsStore(
-    (s) => s.menuFocusReturnCamera != null || s.menuFocusDismissing,
+    (s) =>
+      s.menuFocusReturnCamera != null ||
+      s.menuFocusEphemeralSubjectId != null ||
+      s.menuFocusDismissing,
   )
   useEffect(() => {
     const el = document.documentElement
@@ -462,11 +521,14 @@ function App() {
     },
     onZoomStop: (ref) => {
       usePanMotionStore.getState().setZoomActive(false)
+      if (zoomReleaseActive) releaseZoomBounds(ref, hardMinScale)
     },
     disabled: isPenDown,
     step: CANVAS_WHEEL_ZOOM_STEP,
   })
   const canvasPanSession = useCanvasPanSession()
+  const zoomReleaseActive =
+    !isInsideSpace && !overviewEngaged && !studyHubMenuFocusEngaged
   useCanvasMinimapTrackpadPan({
     transformRef,
     disabled:
@@ -600,7 +662,6 @@ function App() {
     return () => window.removeEventListener('mousemove', onMouseMove)
   }, [])
 
-  // Register canvas spawn callbacks so the keyboard shortcut handler can call them.
   useEffect(() => {
     const getMouseCanvasPos = () => {
       const { x, y } = lastMousePosRef.current
@@ -721,13 +782,50 @@ function App() {
   ).length
   const newsCount = NEWS_POSTS.filter((p) => p.isNew && !seenNewsIds.has(p.id)).length
 
+  const pocketCanvasLayers = (
+    <>
+      <CanvasLockFlattenLayer />
+      <CanvasItemsLayer plane="below" transformRef={transformRef} />
+      <DrawingLayer band="committed-below" />
+      <CanvasItemsLayer plane="above" transformRef={transformRef} />
+      <DrawingLayer band="committed-above" />
+      <CanvasItemsLayer plane="annotation" transformRef={transformRef} />
+      <DrawingLayer band="annotation" />
+      <DrawingLayer band="active" />
+      <LassoSelectionBlur />
+      <DrawingLayer band="lasso-lifted" />
+      <LassoSelectionChrome canvasRef={canvasRef} />
+      <SelectionBlurOverlay />
+    </>
+  )
+
   return (
     <div
       className="cutline-app-shell"
       data-ready={appHydrated || undefined}
     >
       <div ref={viewportRef} className="cutline-canvas-viewport">
+        {!isInsideSpace && (
+          <CanvasVoidBackdrop visible={showViewportVoidBackdrop} />
+        )}
         <div className="canvas-pan-shell" style={{ width: '100%', height: '100%', position: 'relative' }}>
+          {isInsideSpace && activeSpaceId ? (
+            <PocketStripViewport
+              activeSpaceId={activeSpaceId}
+              viewportWidth={viewportSize.width}
+              viewportHeight={viewportSize.height}
+              canvasRef={canvasRef}
+              canvasFadeOpacity={canvasFadeOpacity}
+              canvasSwapBusy={canvasSwapBusy}
+              swapTransition={canvasSwapBusy ? swapTransition : undefined}
+              onCanvasMount={setCanvasMount}
+              selectionHandlers={canvasSelectionPointer}
+              onContextMenu={canvasContextMenuPointer.onContextMenu}
+              onDoubleClick={canvasContextMenuPointer.onDoubleClick}
+            >
+              {pocketCanvasLayers}
+            </PocketStripViewport>
+          ) : (
           <TransformWrapper
             ref={transformRef}
             disabled={isPenDown}
@@ -737,6 +835,10 @@ function App() {
             limitToBounds
             disablePadding
             centerZoomedOut={false}
+            {...(hyperPanBounds ?? {})}
+            autoAlignment={
+              overviewHyperActive ? { disabled: true } : undefined
+            }
             onInit={onTransformInit}
             onPanning={(ref) => {
               canvasPanSession.onPanFrame(ref)
@@ -758,11 +860,13 @@ function App() {
               }, 300)
             }}
             onZoomStop={(ref) => {
-              clampToLibraryBounds(ref)
+              if (zoomReleaseActive) releaseZoomBounds(ref, hardMinScale)
+              else clampToLibraryBounds(ref)
               usePanMotionStore.getState().setZoomActive(false)
             }}
             onPinchStop={(ref) => {
-              clampToLibraryBounds(ref)
+              if (zoomReleaseActive) releaseZoomBounds(ref, hardMinScale)
+              else clampToLibraryBounds(ref)
               if (pinchStopTimer.current) {
                 clearTimeout(pinchStopTimer.current)
                 pinchStopTimer.current = null
@@ -823,8 +927,8 @@ function App() {
             >
               <div
                 className={
-                  isInsideSpace
-                    ? 'cutline-canvas-bg cutline-canvas-pocket'
+                  overviewHyperActive
+                    ? 'cutline-canvas-bg cutline-canvas-plate-shell'
                     : 'cutline-canvas-bg cutline-canvas-expanded'
                 }
                 style={{
@@ -836,28 +940,35 @@ function App() {
                   pointerEvents: canvasSwapBusy ? 'none' : undefined,
                 }}
               >
-                <div
-                  className="cutline-canvas-logical"
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: activeCanvasWidth,
-                    height: activeCanvasHeight,
-                  }}
-                >
-                {!isInsideSpace && (
-                  <div className="cutline-canvas-void-grid" aria-hidden />
+                {!drawTargetPlateLocal && !overviewEngaged && (
+                  <div
+                    className="cutline-canvas-logical"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: CANVAS_WIDTH,
+                      height: CANVAS_HEIGHT,
+                    }}
+                  >
+                    <div className="cutline-canvas-void-grid" aria-hidden />
+                    <SelectionBlurCanvasBackdrop />
+                  </div>
                 )}
-                {!isInsideSpace && <SelectionBlurCanvasBackdrop />}
                 <div
                   ref={(node) => {
                     canvasRef.current = node
                     setCanvasMount(node)
                   }}
-                  className={
-                    isInsideSpace
-                      ? 'cutline-draw-target cutline-draw-target--pocket draw-target'
-                      : 'cutline-draw-target cutline-draw-target--positioned draw-target'
+                  className="cutline-draw-target cutline-draw-target--positioned draw-target"
+                  style={
+                    drawTargetPlateLocal
+                      ? {
+                          left: 0,
+                          top: 0,
+                          width: canvasDomWidth(),
+                          height: canvasDomHeight(),
+                        }
+                      : undefined
                   }
                   data-strokes-bleed={strokeBleed ? '' : undefined}
                   onPointerDown={canvasSelectionPointer.onPointerDown}
@@ -867,38 +978,24 @@ function App() {
                   onContextMenu={canvasContextMenuPointer.onContextMenu}
                   onDoubleClick={canvasContextMenuPointer.onDoubleClick}
                 >
-                  {!isInsideSpace && <StudioCentreDragHandle transformRef={transformRef} />}
-                  {!isInsideSpace && <StudioCentreTitle />}
+                  <StudioCentreDragHandle transformRef={transformRef} />
+                  <StudioCentreTitle />
                   <div
                     className="cutline-studio-centre-surface"
-                    onPointerDown={
-                      isInsideSpace ? undefined : studioCentreHoldDrag.onSurfacePointerDown
-                    }
+                    onPointerDown={studioCentreHoldDrag.onSurfacePointerDown}
                   >
                     <div className="studio-centre-content-inner">
-                      {!isInsideSpace && (
+                      {!drawTargetPlateLocal && (
                         <CanvasPlateBoundsOverlay destination="studio" />
                       )}
-                      <CanvasLockFlattenLayer />
-                      <CanvasItemsLayer plane="below" transformRef={transformRef} />
-                      <DrawingLayer band="committed-below" />
-                      <CanvasItemsLayer plane="above" transformRef={transformRef} />
-                      <DrawingLayer band="committed-above" />
-                      <CanvasItemsLayer plane="annotation" transformRef={transformRef} />
-                      <DrawingLayer band="annotation" />
-                      <DrawingLayer band="active" />
-                      <LassoSelectionBlur />
-                      <DrawingLayer band="lasso-lifted" />
-                      <LassoSelectionChrome canvasRef={canvasRef} />
-                      <SelectionBlurOverlay />
+                      {pocketCanvasLayers}
                     </div>
                   </div>
-                  {!isInsideSpace && <CanvasPlateRepositionButton />}
-                </div>
                 </div>
               </div>
             </TransformComponent>
           </TransformWrapper>
+          )}
         </div>
 
       <ReloadSpaceIntro />
@@ -935,6 +1032,12 @@ function App() {
         onNewsClick={() => openOnly('news')}
         onNotificationClick={() => openOnly('notifications')}
         onProfileClick={() => openOnly('profile')}
+      />
+
+      <div
+        id={CHROME_OVERLAY_PORTAL_ID}
+        className="cutline-chrome-overlays"
+        aria-hidden
       />
 
       <PenFab />
@@ -1063,7 +1166,10 @@ function App() {
         )}
       </AnimatePresence>
 
-      <UiCustomizationLayer />
+      <CanvasItemCustomizeSession />
+      <UiCustomizationLayer transformRef={transformRef} />
+
+      <StudyHubEphemeralOverlay transformRef={transformRef} />
 
       {/* Virtual anchor for keyboard-triggered floating settings menu */}
       <div

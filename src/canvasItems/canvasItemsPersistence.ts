@@ -2,16 +2,17 @@ import type { CanvasLayer } from '../canvasLock/layer'
 import { generateStrokeId } from '../drawing/strokeId'
 import { strokeToSvgPath } from '../drawing/strokePath'
 import type { DrawTool, Stroke } from '../drawing/types'
-import {
-  DEFAULT_SPACE_PREVIEW_PAN,
-  resolveSpacePreviewPan,
-} from '../spaces/spacePreviewPan'
 import { DEFAULT_SPACE_NAME } from '../spaces/types'
 import { DEFAULT_SPACE_NAME_ALIGNMENT, normalizeTextAlignment } from './textAlignment'
-import type { CanvasItem, StickyColorId } from './types'
+import type { CanvasItem, StickyColorId, SpaceTintId } from './types'
 
 function normalizeStickyColor(value: unknown): StickyColorId | undefined {
-  if (value === 'yellow' || value === 'pink' || value === 'blue') return value
+  if (value === 'yellow' || value === 'pink' || value === 'blue' || value === 'green') return value
+  return undefined
+}
+
+function normalizeSpaceTint(value: unknown): SpaceTintId | undefined {
+  if (value === 'yellow' || value === 'pink' || value === 'blue' || value === 'green') return value
   return undefined
 }
 import { studyHubDimensionsForWidth } from './studyHubBounds'
@@ -178,21 +179,7 @@ function normalizeItem(raw: unknown): CanvasItem | null {
       typeof snapshotIdRaw === 'string' && snapshotIdRaw.length > 0
         ? snapshotIdRaw
         : null
-    const previewPanRaw = (o as {
-      previewPan?: { x?: unknown; y?: unknown; scale?: unknown }
-    }).previewPan
-    const previewPan = previewPanRaw
-      ? resolveSpacePreviewPan({
-          x:
-            typeof previewPanRaw.x === 'number' ? previewPanRaw.x : undefined,
-          y:
-            typeof previewPanRaw.y === 'number' ? previewPanRaw.y : undefined,
-          scale:
-            typeof previewPanRaw.scale === 'number'
-              ? previewPanRaw.scale
-              : undefined,
-        })
-      : DEFAULT_SPACE_PREVIEW_PAN
+    const tint = normalizeSpaceTint((o as { tint?: unknown }).tint)
     return {
       id: o.id,
       type: 'space',
@@ -203,15 +190,12 @@ function normalizeItem(raw: unknown): CanvasItem | null {
       height: o.height,
       name,
       snapshotId,
-      previewPan,
       textAlign:
         (o as { textAlign?: unknown }).textAlign != null
           ? normalizeTextAlignment((o as { textAlign?: unknown }).textAlign)
           : DEFAULT_SPACE_NAME_ALIGNMENT,
+      ...(tint !== undefined ? { tint } : {}),
       ...(layer ? { layer } : {}),
-      ...(typeof snapshotRaw === 'string' && snapshotRaw.length > 0
-        ? { snapshot: snapshotRaw }
-        : {}),
     } as CanvasItem
   }
 

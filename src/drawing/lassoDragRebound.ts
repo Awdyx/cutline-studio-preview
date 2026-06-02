@@ -1,4 +1,4 @@
-import { showStudioCentreBoundsToast } from '../canvas/studioCentre'
+import { showActiveCanvasBoundsToast } from '../spaces/activeCanvasLayout'
 import { useLassoStore } from './useLassoStore'
 
 const LASSO_REBOUND_MS = 420
@@ -22,7 +22,7 @@ export function animateLassoDragRebound(strokeIds: readonly string[]): void {
   const fromDy = cur?.canvasDy ?? 0
   if (fromDx === 0 && fromDy === 0) {
     useLassoStore.getState().setDragOffset(null)
-    showStudioCentreBoundsToast()
+    showActiveCanvasBoundsToast()
     return
   }
 
@@ -45,7 +45,7 @@ export function animateLassoDragRebound(strokeIds: readonly string[]): void {
 
     reboundRaf = null
     useLassoStore.getState().setDragOffset(null)
-    showStudioCentreBoundsToast()
+    showActiveCanvasBoundsToast()
   }
 
   reboundRaf = requestAnimationFrame(tick)

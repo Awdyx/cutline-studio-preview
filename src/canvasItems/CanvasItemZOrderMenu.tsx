@@ -4,8 +4,9 @@ import {
   ArrowDownToLine,
   ArrowUpToLine,
   CornerUpLeft,
-  Frame,
+  ImageUp,
   Proportions,
+  Sparkles,
   Trash2,
 } from 'lucide-react'
 import { MenuRow } from '../components/MenuRow'
@@ -26,7 +27,14 @@ import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { useStickyBringOutStore } from './stickyBringOutStore'
 import TextAlignmentMenuSection from './TextAlignmentMenuSection'
 import StickyColorMenuSection from './StickyColorMenuSection'
+import SpaceTintMenuSection from './SpaceTintMenuSection'
 import { resolveItemTextAlignment } from './textAlignment'
+import {
+  enterCanvasItemCustomization,
+  isCanvasItemUiCustomizableType,
+} from '../canvasItemCustomize'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
+import { openCanvasImagePicker } from './useCanvasFileHandlers'
 
 export default function CanvasItemZOrderMenu() {
   const isPhone = useIsPhoneLayout()
@@ -42,8 +50,6 @@ export default function CanvasItemZOrderMenu() {
   const deleteItem = useCanvasItemsStore((s) => s.deleteItem)
   const sendItemToMainCanvas = useCanvasItemsStore((s) => s.sendItemToMainCanvas)
   const bringImageOutOfSticky = useCanvasItemsStore((s) => s.bringImageOutOfSticky)
-  const previewAdjustSpaceId = useCanvasItemsStore((s) => s.previewAdjustSpaceId)
-  const setPreviewAdjustSpace = useCanvasItemsStore((s) => s.setPreviewAdjustSpace)
 
   const itemId = getSoleSelectedItemId(selectedIds)
   const bringOutInProgress = useStickyBringOutStore(
@@ -51,11 +57,13 @@ export default function CanvasItemZOrderMenu() {
   )
   const zMenuSuppressedItemId = useCanvasItemsStore((s) => s.zMenuSuppressedItemId)
   const hasLassoItemSelection = useLassoStore((s) => s.selectedItemIds.length > 0)
+  const uiEditing = useUiCustomizationStore((s) => s.editing)
   const editingAllowed = useCanvasEditingAllowed()
   const showMenu =
     itemId != null &&
     activeDragItemId !== itemId &&
     editingAllowed &&
+    !uiEditing &&
     itemId !== zMenuSuppressedItemId &&
     !hasLassoItemSelection
 
@@ -67,6 +75,8 @@ export default function CanvasItemZOrderMenu() {
     isMediaItem &&
     menuItem != null &&
     mediaItemHasImportDimensions(menuItem)
+  const showReplaceImage =
+    menuItem?.type === 'image' && menuItem.stickyId == null
   const restoreImportSizingDisabled =
     !showRestoreImportSizing ||
     restoreSizingAnimatingId === itemId ||
@@ -78,15 +88,6 @@ export default function CanvasItemZOrderMenu() {
     menuItem?.type === 'text' ||
     menuItem?.type === 'space'
 
-  const spaceMeta = useCanvasWorkspaceStore((s) =>
-    menuItem?.type === 'space' && itemId ? s.spaces[itemId] : undefined,
-  )
-  const spaceHasPreviewContent =
-    !!spaceMeta &&
-    (spaceMeta.items.length > 0 ||
-      spaceMeta.strokes.length > 0 ||
-      spaceMeta.annotationStrokes.length > 0)
-  const isPreviewAdjusting = previewAdjustSpaceId === itemId
   const isInsideSpace = useCanvasWorkspaceStore((s) => s.activeCanvasId !== 'main')
   const canSendBackToMain =
     isInsideSpace &&
@@ -95,6 +96,10 @@ export default function CanvasItemZOrderMenu() {
     menuItem.mainCanvasOrigin != null
   const canBringOutOfSticky =
     menuItem?.type === 'image' && menuItem.stickyId != null
+  const showCustomize =
+    menuItem != null &&
+    isCanvasItemUiCustomizableType(menuItem.type) &&
+    !(menuItem.type === 'image' && menuItem.stickyId != null)
 
   const menuLayout = useCanvasItemZMenuLayout(menuRef, itemId, showMenu)
   const menuScale = isPhone ? PHONE_Z_ORDER_MENU_SCALE : 1
@@ -129,6 +134,12 @@ export default function CanvasItemZOrderMenu() {
           }}
         >
           <SubmenuSoundScope>
+            {menuItem?.type === 'space' && (
+              <SpaceTintMenuSection
+                itemId={menuItem.id}
+                currentTint={menuItem.tint}
+              />
+            )}
             {menuItem?.type === 'sticky' && (
               <StickyColorMenuSection
                 itemId={menuItem.id}
@@ -140,17 +151,6 @@ export default function CanvasItemZOrderMenu() {
                 itemId={menuItem.id}
                 alignment={resolveItemTextAlignment(menuItem)}
                 showVertical={menuItem.type !== 'space'}
-              />
-            )}
-            {menuItem?.type === 'space' && (
-              <MenuRow
-                icon={Frame}
-                label="Adjust preview"
-                active={isPreviewAdjusting}
-                disabled={!spaceHasPreviewContent}
-                onClick={() =>
-                  setPreviewAdjustSpace(isPreviewAdjusting ? null : itemId)
-                }
               />
             )}
             {canSendBackToMain && (
@@ -171,9 +171,16 @@ export default function CanvasItemZOrderMenu() {
             {showRestoreImportSizing && (
               <MenuRow
                 icon={Proportions}
-                label="Restore original sizing"
+                label="Restore sizing"
                 disabled={restoreImportSizingDisabled}
                 onClick={() => restoreImportSizing(itemId)}
+              />
+            )}
+            {showReplaceImage && (
+              <MenuRow
+                icon={ImageUp}
+                label="Replace image"
+                onClick={() => openCanvasImagePicker()}
               />
             )}
             <MenuRow
@@ -188,6 +195,17 @@ export default function CanvasItemZOrderMenu() {
               submenuClickSound={false}
               onClick={() => sendToBack(itemId)}
             />
+            {showCustomize && (
+              <MenuRow
+                icon={Sparkles}
+                label="Customize"
+                submenuClickSound={false}
+                onClick={() => {
+                  if (!itemId) return
+                  enterCanvasItemCustomization(itemId)
+                }}
+              />
+            )}
             <div style={menuDividerStyle} />
             <MenuRow
               icon={Trash2}

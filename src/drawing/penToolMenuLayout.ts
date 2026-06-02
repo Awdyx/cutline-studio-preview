@@ -13,6 +13,40 @@ export const UI_DRAW_PEN_TOOL_ORDER: ToolMode[] = ['pen', 'highlighter', 'erase'
 
 export const PILL_WIDTH = pillWidthForToolOrder(PEN_TOOL_ORDER)
 
+/** Gap between the pill row and the settings panel stacked above it (px). */
+export const PILL_SETTINGS_GAP = 8
+
+/** Matches PenFab tool-settings shell height so ToolColorPopover fits unchanged. */
+export const PILL_SETTINGS_HEIGHT = 100
+
+/** Upward travel (px) to open a tool's settings submenu — kept low for stylus flicks. */
+export const PILL_SUBMENU_DRAG_UP_PX = 12
+
+/** Extra horizontal slack while dragging up (pill is narrow). */
+export const PILL_SUBMENU_HORIZONTAL_SLOP_PX = 10
+
+/** How far above the settings panel the pointer may still count as “in the submenu”. */
+export const PILL_SUBMENU_TOP_SLOP_PX = 20
+
+/** Upper fraction of the pill that counts as part of the upward-drag corridor. */
+export const PILL_SUBMENU_PILL_APPROACH_RATIO = 0.7
+
+/** Pencil-hold pill — pen & highlighter only (lasso/eraser pick on release, no submenu). */
+export type PenToolPillSettingsPanel = 'pen' | 'highlighter'
+
+export function pillToolSupportsSettingsPanel(
+  mode: ToolMode,
+): mode is PenToolPillSettingsPanel {
+  return mode === 'pen' || mode === 'highlighter'
+}
+
+/** Pen FAB tool-settings panels (includes lasso/eraser targets). */
+export type PenToolSettingsPanel = PenToolPillSettingsPanel | 'lasso' | 'erase'
+
+export function toolSupportsSettingsPanel(mode: ToolMode): mode is PenToolSettingsPanel {
+  return pillToolSupportsSettingsPanel(mode) || mode === 'lasso' || mode === 'erase'
+}
+
 export function pillWidthForToolOrder(order: readonly ToolMode[]): number {
   return PILL_PADDING * 2 + SEGMENT_WIDTH * order.length
 }
@@ -33,6 +67,108 @@ export function pillScreenRect(
   return { left, top, right, bottom: top + PILL_HEIGHT, width, height: PILL_HEIGHT }
 }
 
+export function pillSettingsPanelWidth(pillWidth: number): number {
+  return pillWidth
+}
+
+export function pillSettingsScreenRect(
+  anchorX: number,
+  anchorY: number,
+  toolOrder: readonly ToolMode[] = PEN_TOOL_ORDER,
+  settingsPanel?: PenToolSettingsPanel | null,
+) {
+  const pill = pillScreenRect(anchorX, anchorY, toolOrder)
+  const width = pillSettingsPanelWidth(pill.width)
+  const right = pill.right
+  const left = right - width
+  const bottom = pill.top - PILL_SETTINGS_GAP
+  const top = bottom - PILL_SETTINGS_HEIGHT
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width,
+    height: PILL_SETTINGS_HEIGHT,
+  }
+}
+
+export function isPointerInPenToolSettingsPanel(
+  clientX: number,
+  clientY: number,
+  anchorX: number,
+  anchorY: number,
+  toolOrder: readonly ToolMode[] = PEN_TOOL_ORDER,
+  settingsPanel?: PenToolSettingsPanel | null,
+): boolean {
+  const { left, right, top, bottom } = pillSettingsScreenRect(
+    anchorX,
+    anchorY,
+    toolOrder,
+    settingsPanel,
+  )
+  return clientX >= left && clientX <= right && clientY >= top && clientY <= bottom
+}
+
+/** Settings panel + gap + upper pill — forgiving corridor for open/hold gestures. */
+export function isPointerInPenToolSubmenuZone(
+  clientX: number,
+  clientY: number,
+  anchorX: number,
+  anchorY: number,
+  toolOrder: readonly ToolMode[] = PEN_TOOL_ORDER,
+  settingsPanel?: PenToolSettingsPanel | null,
+): boolean {
+  const settings = pillSettingsScreenRect(anchorX, anchorY, toolOrder, settingsPanel)
+  const pill = pillScreenRect(anchorX, anchorY, toolOrder)
+  const left = settings.left - PILL_SUBMENU_HORIZONTAL_SLOP_PX
+  const right = settings.right + PILL_SUBMENU_HORIZONTAL_SLOP_PX
+  if (clientX < left || clientX > right) return false
+  if (clientY < settings.top - PILL_SUBMENU_TOP_SLOP_PX) return false
+  if (clientY <= settings.bottom) return true
+  const approachBottom = pill.top + pill.height * PILL_SUBMENU_PILL_APPROACH_RATIO
+  return clientY <= approachBottom
+}
+
+export function penToolSubmenuShouldOpen(
+  peekY: number,
+  clientY: number,
+  inSubmenuZone: boolean,
+): boolean {
+  if (inSubmenuZone) return true
+  return peekY - clientY >= PILL_SUBMENU_DRAG_UP_PX
+}
+
+export function isPointerInPenToolChrome(
+  clientX: number,
+  clientY: number,
+  anchorX: number,
+  anchorY: number,
+  toolOrder: readonly ToolMode[] = PEN_TOOL_ORDER,
+  settingsPanel?: PenToolSettingsPanel | null,
+): boolean {
+  const pill = pillScreenRect(anchorX, anchorY, toolOrder)
+  if (
+    clientX >= pill.left &&
+    clientX <= pill.right &&
+    clientY >= pill.top &&
+    clientY <= pill.bottom
+  ) {
+    return true
+  }
+  if (settingsPanel) {
+    return isPointerInPenToolSettingsPanel(
+      clientX,
+      clientY,
+      anchorX,
+      anchorY,
+      toolOrder,
+      settingsPanel,
+    )
+  }
+  return false
+}
+
 export type PenToolMenuRail = {
   railX: number
   lastRawX: number
@@ -48,6 +184,16 @@ export function initPenToolMenuRail(
   const { left, right } = pillScreenRect(anchorX, anchorY, toolOrder)
   const railX = Math.min(Math.max(clientX, left), right)
   return { railX, lastRawX: clientX, x: railX, y: anchorY }
+}
+
+/** Re-sync the guard rail to the live pointer (e.g. after a settings submenu). */
+export function snapPenToolMenuRailToPointer(
+  clientX: number,
+  anchorX: number,
+  anchorY: number,
+  toolOrder: readonly ToolMode[] = PEN_TOOL_ORDER,
+): PenToolMenuRail & { x: number; y: number } {
+  return initPenToolMenuRail(clientX, anchorX, anchorY, toolOrder)
 }
 
 /**
@@ -140,6 +286,18 @@ export function isPointerInPenToolPill(
 
   const { left, right, top, bottom } = pillScreenRect(anchorX, anchorY, toolOrder)
   return clientX >= left && clientX <= right && _clientY >= top && _clientY <= bottom
+}
+
+/** Pointer left the pill upward (still within pill width) — opens the settings submenu. */
+export function isPointerExitingPenToolPillTop(
+  clientX: number,
+  clientY: number,
+  anchorX: number,
+  anchorY: number,
+  toolOrder: readonly ToolMode[] = PEN_TOOL_ORDER,
+): boolean {
+  const { left, right, top } = pillScreenRect(anchorX, anchorY, toolOrder)
+  return clientY < top && clientX >= left && clientX <= right
 }
 
 export function penToolSegmentWeights(

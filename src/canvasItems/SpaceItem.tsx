@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
 import { SPACE_NAME_DEFAULT_FONT_SIZE } from './textEditorFontSize'
@@ -23,7 +23,7 @@ import {
 import { useCanvasEditingAllowed } from '../canvasEdit/layer'
 import DragHandle from './DragHandle'
 import ResizeHandle from './ResizeHandle'
-import { displayZIndexForCanvasItem } from './canvasZOrder'
+import { displayZIndexForCanvasItem, Z_SELECTION_ABOVE_DIM, committedItemZRank } from './canvasZOrder'
 import {
   getGrabHandlePlacement,
   resolveCanvasHandleHitSize,
@@ -32,7 +32,6 @@ import {
 import { useCanvasItemDrag } from './useCanvasItemDrag'
 import { useCanvasItemDragStore } from './canvasItemDragStore'
 import { useCanvasItemResize } from './useCanvasItemResize'
-import { useSpacePreviewPanDrag } from './useSpacePreviewPanDrag'
 import {
   useCanvasItemsStore,
   useItemIsSoleSelected,
@@ -41,6 +40,9 @@ import {
 import SpaceCardPreview from '../spaces/SpaceCardPreview'
 import { useSpaceDropStore } from '../spaces/spaceDropStore'
 import { card, font, glass, SPACE_GLASS_CLASS } from '../styles/tokens'
+import { useThemeStore } from '../theme/themeStore'
+import { useEffectiveMode } from '../theme/useEffectiveMode'
+import { resolveSpaceTintGlassOverlay } from './spaceTint'
 import type { SpaceCanvasItem } from './types'
 import {
   canvasItemDeleteExit,
@@ -50,13 +52,21 @@ import {
   resolveItemTextAlignment,
   textAlignmentEditorStyle,
 } from './textAlignment'
+import {
+  CanvasItemCustomizePortalStage,
+  useCanvasCustomizeActive,
+  useCanvasCustomizeExiting,
+  useCanvasCustomizeHidesItemChrome,
+  useCanvasCustomizeStore,
+  useCanvasItemCustomizePortal,
+} from '../canvasItemCustomize'
+import { useCanvasCustomizeExitLand } from '../canvasItemCustomize/canvasCustomizeExitLand'
+import { useCanvasCustomizeEnterCanvasHide } from '../canvasItemCustomize/useCanvasCustomizeEnterCanvasHide'
+import CanvasItemUiPinAnchor from '../uiCustomization/CanvasItemUiPinAnchor'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
+import { canvasItemUiAnchorId } from '../uiCustomization/types'
 
-const DRAG_THRESHOLD_PX = 10
 const liftSpring = { type: 'spring' as const, stiffness: 380, damping: 28, mass: 0.7 }
-
-function dist(x1: number, y1: number, x2: number, y2: number): number {
-  return Math.hypot(x2 - x1, y2 - y1)
-}
 
 export default function SpaceItem({
   item,
@@ -69,22 +79,23 @@ export default function SpaceItem({
 }) {
   const isLocked = useCanvasLockStore((s) => s.isLocked)
   const frozen = isItemFrozen(item, isLocked)
+  const themeMode = useThemeStore((s) => s.mode)
+  const effectiveMode = useEffectiveMode(themeMode)
+  const tintOverlay = resolveSpaceTintGlassOverlay(item.tint, effectiveMode)
   const spaceMeta = useCanvasWorkspaceStore((s) => s.spaces[item.id])
   const displayName = spaceMeta?.name ?? item.name
   const isDefaultName = isDefaultSpaceName(displayName)
   const titleLabel = isDefaultName ? DEFAULT_SPACE_NAME_PLACEHOLDER : displayName
-  const hasPreviewContent =
-    !!spaceMeta &&
-    (spaceMeta.items.length > 0 ||
-      spaceMeta.strokes.length > 0 ||
-      spaceMeta.annotationStrokes.length > 0)
   const cardRef = useRef<HTMLDivElement>(null)
+  const exitLandRef = useRef<HTMLDivElement>(null)
+  const customizePortal = useCanvasItemCustomizePortal(item.id, true)
+  const customizeExiting = useCanvasCustomizeExiting(item.id)
+  const customizeEnterPhase = useCanvasCustomizeStore((s) =>
+    s.itemId === item.id ? s.enterPhase : 'idle',
+  )
+  const finishCustomizeDismiss = useCanvasCustomizeStore((s) => s.finishDismiss)
   const previewRef = useRef<HTMLDivElement>(null)
-  const previewPhaseRef = useRef<'idle' | 'pending'>('idle')
-  const previewPointerRef = useRef({ startX: 0, startY: 0 })
-
-  const previewAdjustSpaceId = useCanvasItemsStore((s) => s.previewAdjustSpaceId)
-  const isPreviewAdjusting = previewAdjustSpaceId === item.id
+  const previewTapMovedRef = useRef(false)
 
   const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id)
   const boundsSnapPulse = useCanvasItemDragStore((s) =>
@@ -103,13 +114,6 @@ export default function SpaceItem({
     undefined,
     selectSelf,
   )
-  const {
-    isPanDragging,
-    onPreviewAdjustPointerDown,
-    onPreviewAdjustPointerMove,
-    onPreviewAdjustPointerUp,
-    onPreviewAdjustPointerCancel,
-  } = useSpacePreviewPanDrag(item, previewRef, isPreviewAdjusting)
 
   const isSelected = useItemSelected(item.id)
   const isSoleSelected = useItemIsSoleSelected(item.id)
@@ -168,13 +172,27 @@ export default function SpaceItem({
 
   const hideDragHandle =
     isSoleSelected && editingAllowed && zMenuSuppressedItemId !== item.id
+  const canvasCustomizeActive = useCanvasCustomizeActive()
+  const customizeHidesHandles = useCanvasCustomizeHidesItemChrome(item.id)
+  const focusedCustomizeAnchor = useUiCustomizationStore((s) => s.focusedAnchorId)
+  const isCustomizingItem =
+    canvasCustomizeActive &&
+    !customizeExiting &&
+    focusedCustomizeAnchor === canvasItemUiAnchorId(item.id)
   const displayZIndex = useMemo(
-    () =>
-      displayZIndexForCanvasItem(allItems, item, selectedIds, {
+    () => {
+      if (isCustomizingItem) {
+        return Z_SELECTION_ABOVE_DIM + committedItemZRank(allItems, item.id) * 2
+      }
+      if (customizeExiting) {
+        return item.zIndex
+      }
+      return displayZIndexForCanvasItem(allItems, item, selectedIds, {
         forceLift: isDropHoverTarget || dragLift,
         isActiveDrag: isDragging && isSelected,
-      }),
-    [allItems, item, selectedIds, isDropHoverTarget, dragLift, isDragging, isSelected],
+      })
+    },
+    [allItems, item, selectedIds, isDropHoverTarget, dragLift, isDragging, isSelected, isCustomizingItem, customizeExiting],
   )
 
   const enterSpace = useCallback(() => {
@@ -184,6 +202,15 @@ export default function SpaceItem({
       .getState()
       .enterSpace(item.id, transformRef.current)
   }, [item.id, transformRef])
+
+  const tryOpenPreview = useCallback(() => {
+    if (useCanvasNavigationStore.getState().shouldSuppressItemTap()) return
+    if (shouldSkipItemSelectForOutsideDismiss(item.id)) {
+      dismissSelectionForOutsideItemTap(item.id)
+      return
+    }
+    enterSpace()
+  }, [enterSpace, item.id])
 
   const updateSpaceName = useCanvasWorkspaceStore((s) => s.updateSpaceName)
   const [titleEditing, setTitleEditing] = useState(false)
@@ -233,9 +260,10 @@ export default function SpaceItem({
   })
 
   const handlePreviewPointerDown = useCallback(
-    (e: React.PointerEvent) => {
+    (e: ReactPointerEvent) => {
       if (e.pointerType === 'pen') return
       e.stopPropagation()
+      previewTapMovedRef.current = false
       if (shouldSkipItemSelectForOutsideDismiss(item.id)) {
         if (e.pointerType === 'mouse') {
           dismissSelectionForOutsideItemTap(item.id)
@@ -246,72 +274,37 @@ export default function SpaceItem({
         areaPointer.onPointerDown(e as ReactPointerEvent<HTMLElement>)
         return
       }
-      if (isPreviewAdjusting) {
-        onPreviewAdjustPointerDown(e)
-        return
-      }
-      previewPhaseRef.current = 'pending'
-      previewPointerRef.current = { startX: e.clientX, startY: e.clientY }
-      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     },
-    [areaPointer, isPreviewAdjusting, onPreviewAdjustPointerDown],
+    [areaPointer, item.id],
   )
 
   const handlePreviewPointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (isPreviewAdjusting) {
-        onPreviewAdjustPointerMove(e)
-        return
-      }
-      if (previewPhaseRef.current !== 'pending') return
-      const { startX, startY } = previewPointerRef.current
-      if (dist(e.clientX, e.clientY, startX, startY) > DRAG_THRESHOLD_PX) {
-        previewPhaseRef.current = 'idle'
-        try {
-          ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
-        } catch {
-          // ignore
-        }
-      }
+    (e: ReactPointerEvent) => {
+      if (e.buttons === 0) return
+      previewTapMovedRef.current = true
     },
-    [isPreviewAdjusting, onPreviewAdjustPointerMove],
+    [],
   )
 
-  const handlePreviewPointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (isPreviewAdjusting) {
-        onPreviewAdjustPointerUp(e)
-        return
-      }
-      if (
-        previewPhaseRef.current === 'pending' &&
-        !useCanvasNavigationStore.getState().shouldSuppressItemTap()
-      ) {
-        if (shouldSkipItemSelectForOutsideDismiss(item.id)) {
-          dismissSelectionForOutsideItemTap(item.id)
-        } else {
-          enterSpace()
-        }
-      }
-      previewPhaseRef.current = 'idle'
-      try {
-        ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
-      } catch {
-        // ignore
-      }
-    },
-    [enterSpace, isPreviewAdjusting, onPreviewAdjustPointerUp],
-  )
+  const handlePreviewPointerUp = useCallback((_e: ReactPointerEvent) => {}, [])
 
   const handlePreviewPointerCancel = useCallback(
-    (e: React.PointerEvent) => {
-      if (isPreviewAdjusting) {
-        onPreviewAdjustPointerCancel(e)
+    (_e: ReactPointerEvent) => {
+      previewTapMovedRef.current = false
+    },
+    [],
+  )
+
+  const handlePreviewClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (previewTapMovedRef.current) {
+        previewTapMovedRef.current = false
         return
       }
-      handlePreviewPointerUp(e)
+      e.stopPropagation()
+      tryOpenPreview()
     },
-    [handlePreviewPointerUp, isPreviewAdjusting, onPreviewAdjustPointerCancel],
+    [tryOpenPreview],
   )
 
   const [hovered, setHovered] = useState(false)
@@ -331,40 +324,8 @@ export default function SpaceItem({
       ),
     [item.x, item.y, item.width, item.height, handleHitSize],
   )
-  return (
-    <motion.div
-      ref={cardRef}
-      data-canvas-item="space"
-      data-item-id={item.id}
-      className={boundsSnapPulse ? 'canvas-item-bounds-snap-pulse' : undefined}
-      data-active={lifted || undefined}
-      data-selected={isSelected || undefined}
-      exit={{
-        ...canvasItemDeleteExit,
-        transition: canvasItemDeleteExitTransition,
-      }}
-      animate={{
-        scale: lifted ? 1.03 : canHover && hovered ? 1.01 : 1,
-        boxShadow: lifted ? card.shadow : glass.shadow,
-      }}
-      transition={liftSpring}
-      onMouseEnter={() => canHover && setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        position: 'absolute',
-        left: item.x,
-        top: item.y,
-        width: item.width,
-        height: item.height,
-        zIndex: displayZIndex,
-        transformOrigin: 'top left',
-        overflow: 'visible',
-        pointerEvents: 'none',
-        filter: ownBlurActive ? 'blur(7px)' : dragLift ? 'blur(0px)' : 'none',
-        transition: easeBlur ? 'filter 220ms ease-out' : 'none',
-        willChange: dragLift ? 'filter' : undefined,
-      }}
-    >
+  const spaceCardInner = (
+    <>
       {/* Stacked card shadow */}
       <div
         aria-hidden
@@ -382,6 +343,10 @@ export default function SpaceItem({
         }}
       />
 
+      <CanvasItemUiPinAnchor
+        itemId={item.id}
+        focused={customizePortal.portalActive}
+      >
       <div
         onPointerDown={areaPointer.onPointerDown}
         onPointerMove={areaPointer.onPointerMove}
@@ -398,12 +363,24 @@ export default function SpaceItem({
           border: glass.border,
           boxShadow: glass.shadow,
           overflow: 'hidden',
-          pointerEvents: 'auto',
+          pointerEvents: isCustomizingItem ? 'none' : 'auto',
           cursor: 'var(--cursor-default)',
           display: 'flex',
           flexDirection: 'column',
         }}
       >
+        {tintOverlay && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: 6,
+              background: tintOverlay,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         <div
           style={{
             padding: '7px 8px 9px',
@@ -514,27 +491,22 @@ export default function SpaceItem({
           tabIndex={0}
           data-space-preview=""
           className={[
-            isPreviewAdjusting ? 'space-preview-adjust' : null,
             isDropHoverTarget ? 'space-preview-drop-hover' : null,
             dropConfirmClass,
           ]
             .filter(Boolean)
             .join(' ') || undefined}
-          aria-label={
-            isPreviewAdjusting
-              ? `Adjust preview for pocket: ${displayName}`
-              : `Open pocket: ${displayName}`
-          }
+          aria-label={`Open pocket: ${displayName}`}
           onPointerDown={handlePreviewPointerDown}
           onPointerMove={handlePreviewPointerMove}
           onPointerUp={handlePreviewPointerUp}
           onPointerCancel={handlePreviewPointerCancel}
+          onClick={handlePreviewClick}
           onContextMenu={areaPointer.onContextMenu}
           onKeyDown={(e) => {
-            if (isPreviewAdjusting) return
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
-              enterSpace()
+              tryOpenPreview()
             }
           }}
           style={{
@@ -546,36 +518,17 @@ export default function SpaceItem({
             minHeight: 0,
             background: card.bg,
             boxShadow: 'inset 0 0 0 1px var(--glass-border)',
-            cursor: isPreviewAdjusting
-              ? isPanDragging
-                ? 'grabbing'
-                : 'grab'
-              : canHover
-                ? 'pointer'
-                : 'default',
-            touchAction: isPreviewAdjusting ? 'none' : undefined,
+            cursor: canHover ? 'pointer' : 'default',
           }}
         >
-          {hasPreviewContent || isDropHoverTarget ? (
-            <SpaceCardPreview
-              spaceId={item.id}
-              previewPan={item.previewPan}
-              showDropGhost={isDropHoverTarget}
-            />
-          ) : (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                borderRadius: 4,
-                border: '1.5px dashed var(--glass-border)',
-                background: 'var(--canvas-bg)',
-              }}
-            />
-          )}
+          <SpaceCardPreview
+            spaceId={item.id}
+            showDropGhost={isDropHoverTarget}
+          />
         </div>
       </div>
-      {!frozen && (
+      </CanvasItemUiPinAnchor>
+      {!frozen && !customizeHidesHandles && (
         <div data-lock-flatten-skip style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6 }}>
           {!hideDragHandle && (
             <DragHandle
@@ -591,6 +544,100 @@ export default function SpaceItem({
           />
         </div>
       )}
-    </motion.div>
+    </>
+  )
+
+  const showCustomizePortal =
+    customizePortal.portalActive && customizePortal.lift != null
+
+  const showCustomizePortalStage = showCustomizePortal && !customizeExiting
+
+  const hideCanvasCustomizeContent = useCanvasCustomizeEnterCanvasHide(
+    item.id,
+    showCustomizePortal,
+    customizeExiting,
+  )
+
+  const customizeMotionLocked = showCustomizePortalStage || customizeExiting
+
+  const reduceMotion = useReducedMotion()
+  useCanvasCustomizeExitLand(exitLandRef, {
+    enabled: Boolean(customizeExiting && customizePortal.lift),
+    lift: customizePortal.lift,
+    reduceMotion,
+    onComplete: finishCustomizeDismiss,
+  })
+
+  return (
+    <>
+      <motion.div
+        ref={cardRef}
+        data-canvas-item="space"
+        data-item-id={item.id}
+        className={boundsSnapPulse ? 'canvas-item-bounds-snap-pulse' : undefined}
+        data-active={lifted || undefined}
+        data-selected={isSelected || undefined}
+        exit={{
+          ...canvasItemDeleteExit,
+          transition: canvasItemDeleteExitTransition,
+        }}
+        animate={{
+          x: 0,
+          y: 0,
+          scale: lifted ? 1.03 : canHover && hovered ? 1.01 : 1,
+          opacity: 1,
+          boxShadow: showCustomizePortal ? 'none' : lifted
+            ? card.shadow
+            : glass.shadow,
+        }}
+        transition={customizeMotionLocked ? { duration: 0 } : liftSpring}
+        onMouseEnter={() => canHover && setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          position: 'absolute',
+          left: item.x,
+          top: item.y,
+          width: item.width,
+          height: item.height,
+          zIndex: displayZIndex,
+          transformOrigin: 'top left',
+          overflow: 'visible',
+          pointerEvents: 'none',
+          visibility: hideCanvasCustomizeContent ? 'hidden' : 'visible',
+          filter: ownBlurActive
+            ? 'blur(7px)'
+            : dragLift
+              ? 'blur(0px)'
+              : 'none',
+          transition: easeBlur ? 'filter 220ms ease-out' : 'none',
+          willChange: dragLift ? 'filter' : undefined,
+        }}
+        aria-hidden={hideCanvasCustomizeContent || undefined}
+      >
+        <div
+          ref={exitLandRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            transformOrigin: 'top left',
+          }}
+        >
+          {!hideCanvasCustomizeContent ? spaceCardInner : null}
+        </div>
+      </motion.div>
+      {showCustomizePortalStage ? (
+        <CanvasItemCustomizePortalStage
+          lift={customizePortal.lift!}
+          itemId={item.id}
+          layoutWidth={item.width}
+          layoutHeight={item.height}
+          clipOverflow={customizePortal.clipOverflow}
+          enterPhase={customizeEnterPhase}
+          exiting={false}
+        >
+          {customizeEnterPhase !== 'staging' ? spaceCardInner : null}
+        </CanvasItemCustomizePortalStage>
+      ) : null}
+    </>
   )
 }

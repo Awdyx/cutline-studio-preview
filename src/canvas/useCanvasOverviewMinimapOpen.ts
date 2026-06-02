@@ -18,7 +18,6 @@ const OVERVIEW_MINIMAP_CHROME_EXCLUDED = [
   '.action-toast',
   '.canvas-nav-minimap',
   '.studio-centre-drag-handle-wrapper',
-  '.canvas-plate-reposition-btn',
 ] as const
 
 /** Extra exclusions while opening, not while closing. */

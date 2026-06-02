@@ -539,16 +539,22 @@ function airyDeleteDissolve(
   track(wind)
 }
 
-/** Single element delete — short airy exhale (~185 ms), same timbre as wipe. */
+/** Single element delete — soft release knock + short airy exhale (~185 ms). */
 function deleteElementTick(context: AudioContext, t0: number): void {
-  airyDeleteDissolve(context, t0, 0.185, 0.036, {
-    attack: 0.016,
-    filterStart: 940,
-    filterEnd: 175,
-    subHz: 74,
-    subEndMul: 0.62,
-    noiseGain: 0.44,
-    subGain: 0.22,
+  canvasObjectTap(context, t0, 328, 0.011, 0.074, {
+    startMul: 1.04,
+    endMul: 0.86,
+    filterStart: 920,
+    filterEnd: 420,
+  })
+  airyDeleteDissolve(context, t0 + 0.014, 0.172, 0.041, {
+    attack: 0.014,
+    filterStart: 860,
+    filterEnd: 165,
+    subHz: 68,
+    subEndMul: 0.58,
+    noiseGain: 0.42,
+    subGain: 0.21,
   })
 }
 
@@ -619,6 +625,18 @@ function minimapCloseTick(context: AudioContext, t0: number): void {
   tone(context, 207, 0.013, 0.018, 0.068, t0, 'sine')
   bubblyPluck(context, 466, 0.011, t0 + 0.024, 0.058, { startMul: 1.01, endMul: 1 })
   bubblyPluck(context, 370, 0.009, t0 + 0.052, 0.064, { startMul: 1.02, endMul: 0.98 })
+}
+
+/** Overview engage — soft downward lens pull (no cartographic plucks). */
+function overviewEnterTick(context: AudioContext, t0: number): void {
+  tone(context, 196, 0.012, 0.022, 0.052, t0, 'sine')
+  sweep(context, 340, 168, 0.22, 0.038, t0 + 0.012)
+}
+
+/** Overview dismiss — soft upward lens release. */
+function overviewExitTick(context: AudioContext, t0: number): void {
+  tone(context, 196, 0.012, 0.02, 0.048, t0, 'sine')
+  sweep(context, 168, 320, 0.2, 0.036, t0 + 0.01)
 }
 
 /**
@@ -1000,6 +1018,14 @@ const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
 
   minimapClose(context, t0) {
     minimapCloseTick(context, t0)
+  },
+
+  overviewEnter(context, t0) {
+    overviewEnterTick(context, t0)
+  },
+
+  overviewExit(context, t0) {
+    overviewExitTick(context, t0)
   },
 
   textCommit(context, t0) {

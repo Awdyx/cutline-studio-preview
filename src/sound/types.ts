@@ -28,6 +28,8 @@ export type SoundId =
   | 'aspectSnap'
   | 'minimapOpen'
   | 'minimapClose'
+  | 'overviewEnter'
+  | 'overviewExit'
   | 'textCommit'
   | 'plateFocus'
   | 'reloadIntroArrive'

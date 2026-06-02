@@ -24,10 +24,10 @@ export function isRectWithinStudioCentre(
   if (!Number.isFinite(width) || !Number.isFinite(height)) return false
   if (width <= 0 || height <= 0) return false
   return (
-    x >= 0 &&
-    y >= 0 &&
-    x + width <= CANVAS_ORIGINAL_WIDTH &&
-    y + height <= CANVAS_ORIGINAL_HEIGHT
+    x <= CANVAS_ORIGINAL_WIDTH &&
+    x + width >= 0 &&
+    y <= CANVAS_ORIGINAL_HEIGHT &&
+    y + height >= 0
   )
 }
 

@@ -9,6 +9,7 @@ import {
   Lasso,
   Lock,
   Map as MapIcon,
+  Scan,
   Pen,
   Plus,
   Redo2,
@@ -178,6 +179,14 @@ export const SHORTCUTS: ShortcutDef[] = [
     category: 'Navigation',
     keys: modKeys('F'),
     icon: Search,
+    skipToast: true,
+  },
+  {
+    id: 'open-canvas-overview',
+    label: 'Overview',
+    category: 'Navigation',
+    keys: modKeys('O'),
+    icon: Scan,
     skipToast: true,
   },
   {

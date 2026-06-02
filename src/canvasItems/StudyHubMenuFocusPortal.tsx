@@ -1,18 +1,18 @@
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import type { RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import type { StudyPracticeSelection } from '../components/study/StudyHubPracticePicker'
-import { card } from '../styles/tokens'
 import StudyHubWidget from './StudyHubWidget'
+import StudyHubMenuFocusFrame from './StudyHubMenuFocusFrame'
+import { useCanvasItemsStore } from './canvasItemsStore'
 import type { StudyHubCanvasItem } from './types'
-import { STUDY_HUB_HEIGHT, STUDY_HUB_WIDTH } from './types'
-import { studyHubBorderRadiusCss } from './studyHubSpawnScale'
+import { STUDY_HUB_OVERLAY_TRANSITION_MS } from './studyHubMenuFocus'
+import { chromeOverlayPortalRoot } from '../platform/chromeOverlayPortal'
 import { useCanvasItemScrollCapture } from './useCanvasItemScrollCapture'
 import { useCanvasItemScreenRect } from './useCanvasItemScreenRect'
 
-const MENU_FOCUS_PORTAL_Z = 24
-const MENU_FOCUS_TRANSITION_MS = 200
+const MENU_FOCUS_PORTAL_Z = 1
 
 export default function StudyHubMenuFocusPortal({
   item,
@@ -27,9 +27,7 @@ export default function StudyHubMenuFocusPortal({
 }: {
   item: StudyHubCanvasItem
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
-  /** Keep mounted + track screen rect (focused or finishing zoom-out). */
   active: boolean
-  /** Menu-focus chrome is in its visible state (not exiting). */
   focused: boolean
   dismissing?: boolean
   practice: StudyPracticeSelection
@@ -38,21 +36,39 @@ export default function StudyHubMenuFocusPortal({
   onDismiss: (e: React.MouseEvent | React.PointerEvent) => void
 }) {
   const reduceMotion = useReducedMotion()
-  const screenRect = useCanvasItemScreenRect(item, transformRef, active)
+  const dismissScratchClosing = useCanvasItemsStore(
+    (s) => s.menuFocusDismissScratchClosing,
+  )
+  const liveRect = useCanvasItemScreenRect(item, transformRef, active)
+  const [frozenRect, setFrozenRect] = useState<DOMRect | null>(null)
   useCanvasItemScrollCapture(scrollRef)
 
-  const focusChrome = reduceMotion
-    ? { opacity: 0, filter: 'blur(0px)' }
-    : { opacity: 0, filter: 'blur(4px)' }
+  const scratchClosingPhase = dismissing && dismissScratchClosing
+  const zoomDismissPhase = dismissing && !dismissScratchClosing
 
+  useEffect(() => {
+    if (!dismissing) {
+      setFrozenRect(null)
+      return
+    }
+    if (scratchClosingPhase) return
+    if (liveRect) {
+      setFrozenRect((prev) => prev ?? liveRect)
+    }
+  }, [dismissing, scratchClosingPhase, liveRect])
+
+  const hubRect =
+    zoomDismissPhase ? frozenRect ?? liveRect : liveRect
+
+  const hidden = reduceMotion ? { opacity: 0 } : { opacity: 0 }
   const focusTransition = {
-    duration: reduceMotion ? 0.01 : MENU_FOCUS_TRANSITION_MS / 1000,
+    duration: reduceMotion ? 0.01 : STUDY_HUB_OVERLAY_TRANSITION_MS / 1000,
     ease: 'easeOut' as const,
   }
+  const portalVisible = focused || scratchClosingPhase
+  const chromeVisible = focused && !dismissing
 
-  const shown = focused && !dismissing
-
-  if (!active || !screenRect || screenRect.width <= 0 || screenRect.height <= 0) {
+  if (!active || !hubRect || hubRect.width <= 0 || hubRect.height <= 0) {
     return null
   }
 
@@ -60,40 +76,31 @@ export default function StudyHubMenuFocusPortal({
     <motion.div
       className="study-hub-menu-focus-portal"
       data-study-hub-menu-focus=""
-      initial={focusChrome}
-      animate={shown ? { opacity: 1, filter: 'blur(0px)' } : focusChrome}
+      initial={hidden}
+      animate={portalVisible ? { opacity: 1 } : hidden}
       transition={focusTransition}
       style={{
         position: 'fixed',
-        left: screenRect.left,
-        top: screenRect.top,
-        width: screenRect.width,
-        height: screenRect.height,
+        inset: 0,
         zIndex: MENU_FOCUS_PORTAL_Z,
-        pointerEvents: shown ? 'auto' : 'none',
-        borderRadius: studyHubBorderRadiusCss(screenRect.width),
-        overflow: 'hidden',
-        boxShadow: card.shadow,
+        pointerEvents: portalVisible ? 'auto' : 'none',
+        overflow: 'visible',
       }}
     >
-      <div
-        style={{
-          width: STUDY_HUB_WIDTH,
-          height: STUDY_HUB_HEIGHT,
-          transform: `scale(${screenRect.width / STUDY_HUB_WIDTH})`,
-          transformOrigin: 'top left',
-        }}
+      <StudyHubMenuFocusFrame
+        hubRect={hubRect}
+        transformRef={transformRef}
+        chromeVisible={chromeVisible}
+        onDismiss={onDismiss}
       >
         <StudyHubWidget
           subjectId={item.subjectId}
           practice={practice}
           onPracticeChange={onPracticeChange}
           scrollRef={scrollRef}
-          showDismiss
-          onDismiss={onDismiss}
         />
-      </div>
+      </StudyHubMenuFocusFrame>
     </motion.div>,
-    document.body,
+    chromeOverlayPortalRoot(),
   )
 }

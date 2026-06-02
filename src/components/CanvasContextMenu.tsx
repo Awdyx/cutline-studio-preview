@@ -11,6 +11,7 @@ import {
   hasStudyHubForSubject,
   useCanvasItemsStore,
 } from '../canvasItems/canvasItemsStore'
+import { openStudyHubEphemeralOverlay } from '../canvasItems/studyHubMenuFocus'
 import { MAX_SPACE_WIDGETS } from '../canvasItems/types'
 import { useQuickMenuStore } from '../quickMenu/quickMenuStore'
 import {
@@ -36,36 +37,6 @@ const MENU_GAP = 18
 /** Extra offset when the menu flips to the right of the cursor (near the left screen edge). */
 const MENU_GAP_RIGHT = 32
 const VIEWPORT_PAD = 8
-const STUDY_HINT_TEXT = 'add to canvas first lol'
-const HINT_GAP = 12
-const HINT_FONT_SIZE = 11
-
-let cachedStudyHintTextWidth: number | null = null
-
-function measureStudyHintTextWidth(): number {
-  if (cachedStudyHintTextWidth != null) return cachedStudyHintTextWidth
-  if (typeof document === 'undefined') return 140
-
-  const probe = document.createElement('span')
-  probe.textContent = STUDY_HINT_TEXT
-  probe.style.cssText = [
-    'position:absolute',
-    'visibility:hidden',
-    'white-space:nowrap',
-    `font:500 ${HINT_FONT_SIZE}px ${font.family}`,
-    'letter-spacing:-0.01em',
-  ].join(';')
-  document.body.appendChild(probe)
-  cachedStudyHintTextWidth = probe.getBoundingClientRect().width
-  probe.remove()
-  return cachedStudyHintTextWidth
-}
-
-/** Flip hint to the menu's right when the text would clip — uses text width, not menu width. */
-function resolveStudyHintSide(menuLeft: number, textWidth: number): 'left' | 'right' {
-  if (menuLeft - HINT_GAP - textWidth >= VIEWPORT_PAD) return 'left'
-  return 'right'
-}
 
 function clampMenuPosition(
   clientX: number,
@@ -121,7 +92,12 @@ export default function CanvasContextMenu({
   onStudySubjectSelect,
 }: CanvasContextMenuProps) {
   const quickMenuMode = useQuickMenuStore((s) => s.mode)
-  const studyMenu = quickMenuMode === 'study'
+  const studyHubMenuFocusActive = useCanvasItemsStore(
+    (s) =>
+      s.menuFocusReturnCamera != null ||
+      s.menuFocusEphemeralSubjectId != null,
+  )
+  const studyMenu = quickMenuMode === 'study' || studyHubMenuFocusActive
   const open = useCanvasContextMenuStore((s) => s.open)
   const clientX = useCanvasContextMenuStore((s) => s.clientX)
   const clientY = useCanvasContextMenuStore((s) => s.clientY)
@@ -133,19 +109,10 @@ export default function CanvasContextMenu({
   const editingAllowed = useCanvasEditingAllowed()
   const spaceWidgetCount = useCanvasItemsStore((s) => countSpaceWidgets(s.items))
   const canvasItems = useCanvasItemsStore((s) => s.items)
-  const studyMenuFocusActive = useCanvasItemsStore(
-    (s) => s.menuFocusReturnCamera != null,
-  )
   const panelRef = useRef<HTMLDivElement>(null)
   const menuPanelRef = useRef<HTMLDivElement>(null)
   const [menuHeight, setMenuHeight] = useState(220)
   const [position, setPosition] = useState({ left: 0, top: 0 })
-  const lastRowPointerYRef = useRef(0)
-  const hintTimerRef = useRef<number | null>(null)
-  const [hintNonce, setHintNonce] = useState(0)
-  const [hintY, setHintY] = useState(0)
-  const [hintSide, setHintSide] = useState<'left' | 'right'>('left')
-  const [showHint, setShowHint] = useState(false)
 
   const addItems = showSpaceOption
     ? ADD_TO_CANVAS_ITEMS
@@ -165,17 +132,11 @@ export default function CanvasContextMenu({
 
   function handleStudySubject(subjectId: StudySubjectId) {
     if (
-      studyMenuFocusActive &&
+      studyHubMenuFocusActive &&
       !hasStudyHubForSubject(canvasItems, subjectId)
     ) {
-      if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
-      setHintY(lastRowPointerYRef.current)
-      setHintSide(
-        resolveStudyHintSide(position.left, measureStudyHintTextWidth()),
-      )
-      setHintNonce((n) => n + 1)
-      setShowHint(true)
-      hintTimerRef.current = window.setTimeout(() => setShowHint(false), 2200)
+      openStudyHubEphemeralOverlay(subjectId)
+      handleClose({ silent: true })
       return
     }
     onStudySubjectSelect(subjectId, canvasX, canvasY)
@@ -184,7 +145,7 @@ export default function CanvasContextMenu({
 
   function studySubjectMissingOnCanvas(subjectId: StudySubjectId): boolean {
     return (
-      studyMenuFocusActive && !hasStudyHubForSubject(canvasItems, subjectId)
+      studyHubMenuFocusActive && !hasStudyHubForSubject(canvasItems, subjectId)
     )
   }
 
@@ -231,13 +192,6 @@ export default function CanvasContextMenu({
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [open])
 
-  useEffect(() => {
-    if (!open) {
-      setShowHint(false)
-      if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
-    }
-  }, [open])
-
   if (!editingAllowed) return null
 
   return createPortal(
@@ -279,7 +233,7 @@ export default function CanvasContextMenu({
               >
                 {studyMenu
                   ? (
-                    <div onPointerDown={(e) => { lastRowPointerYRef.current = e.clientY }}>
+                    <>
                       {STUDY_SUBJECTS.map(({ id, label, icon }) => (
                         <MenuRow
                           key={id}
@@ -292,7 +246,7 @@ export default function CanvasContextMenu({
                           onClick={() => handleStudySubject(id)}
                         />
                       ))}
-                    </div>
+                    </>
                   )
                   : (
                     <>
@@ -337,45 +291,6 @@ export default function CanvasContextMenu({
               </div>
             </SubmenuSoundScope>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showHint && open && (
-          <motion.span
-            key={hintNonce}
-            initial={{
-              opacity: 0,
-              x: hintSide === 'left' ? 6 : -6,
-              scale: 0.92,
-            }}
-            animate={{ opacity: 0.5, x: 0, scale: 1 }}
-            exit={{
-              opacity: 0,
-              x: hintSide === 'left' ? 6 : -6,
-              scale: 0.94,
-            }}
-            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-            style={{
-              position: 'fixed',
-              ...(hintSide === 'left'
-                ? { right: window.innerWidth - position.left + HINT_GAP }
-                : { left: position.left + menuWidth + HINT_GAP }),
-              top: hintY - 8,
-              zIndex: 10051,
-              fontFamily: font.family,
-              fontSize: HINT_FONT_SIZE,
-              fontWeight: 500,
-              color: 'var(--ui-text)',
-              letterSpacing: '-0.01em',
-              pointerEvents: 'none',
-              userSelect: 'none',
-              whiteSpace: 'nowrap',
-              transformOrigin: hintSide === 'left' ? 'right center' : 'left center',
-            }}
-          >
-            {STUDY_HINT_TEXT}
-          </motion.span>
         )}
       </AnimatePresence>
 

@@ -12,7 +12,7 @@ export const SOUND_LEVELS: Record<SoundId, number> = {
   itemSelect: 1.16,
   itemDeselect: 1.47,
   /** Hand-tuned — excluded from global normalization (duration-weighted trim broke wipe > single hierarchy). */
-  deleteElement: 0.92,
+  deleteElement: 1.02,
   wipeCanvas: 0.96,
   profileOpen: 0.8,
   profileClose: 1.3,
@@ -36,6 +36,9 @@ export const SOUND_LEVELS: Record<SoundId, number> = {
   aspectSnap: 0.88,
   minimapOpen: 1.02,
   minimapClose: 0.98,
+  /** Overview zoom — quiet lens pull / release. */
+  overviewEnter: 0.42,
+  overviewExit: 0.44,
   textCommit: 0.9,
   /** Brand pill area lock-in — whisper loader (very quiet). */
   plateFocus: 0.48,
@@ -55,3 +58,4 @@ export const RESIZE_SFX_LEVEL = 0.216
 export const STUDIO_CENTRE_DRAG_SFX_LEVEL = 0.92
 
 /** Canvas pan whoosh — airy/bright bed, kept subtle since panning is frequent. */
+export const PAN_SFX_LEVEL = 2.08

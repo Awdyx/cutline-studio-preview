@@ -1,20 +1,31 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { playSound } from '../sound/playSound'
+import { playSubmenuHover } from '../sound/submenuSound'
 import { clientToCanvas } from './canvasCoords'
 import { isPenInput, isPenMenuPointer, isPhoneFingerDrawMode, noteStylusInput } from './penInput'
 import {
   advancePenToolMenuRail,
   hitTestPenToolPill,
   initPenToolMenuRail,
+  snapPenToolMenuRailToPointer,
+  isPointerExitingPenToolPillTop,
+  isPointerInPenToolPill,
+  isPointerInPenToolSettingsPanel,
+  isPointerInPenToolSubmenuZone,
   isUiDrawCanvasTarget,
   PEN_TOOL_ORDER,
+  pillSegmentCenters,
+  type PenToolPillSettingsPanel,
+  pillToolSupportsSettingsPanel,
   UI_DRAW_PEN_TOOL_ORDER,
 } from './penToolMenuLayout'
+import { applyToolSettingsPickAtPoint } from './penToolSettingsCommit'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { useStrokesStore } from './strokesStore'
 import { useToolStore, type ToolMode } from './toolStore'
 import { useLassoStore } from './useLassoStore'
+import { isStudyHubScratchPadTarget } from '../canvasItems/studyHubMenuFocus'
 
 /** Hold this long with no UI — pill swoops in once threshold is met. */
 export const HOLD_MS = 400
@@ -33,6 +44,11 @@ const POINTER_MOVE_GRACE_MS = 80
 
 type CancelFn = () => void
 const cancelDrawRegistry: Set<CancelFn> = new Set()
+
+/** Shared bridge for hooks outside the canvas draw surface (e.g. study hub scratch pad). */
+export const penToolMenuBridgeRef: { current: PenToolMenuBridge | null } = {
+  current: null,
+}
 export function registerPenMenuCancelDraw(fn: CancelFn): () => void {
   cancelDrawRegistry.add(fn)
   return () => cancelDrawRegistry.delete(fn)
@@ -50,6 +66,8 @@ export type PenToolMenuState = {
   hoveredTool: ToolMode | null
   /** Tool picked on release — drives the commit close animation. */
   committedTool: ToolMode | null
+  /** Colour/size or lasso-target panel above the pill. */
+  settingsPanel: PenToolPillSettingsPanel | null
   toolOrder: ToolMode[]
 }
 
@@ -61,6 +79,7 @@ const idleUi: PenToolMenuState = {
   pointerY: null,
   hoveredTool: null,
   committedTool: null,
+  settingsPanel: null,
   toolOrder: PEN_TOOL_ORDER,
 }
 
@@ -97,6 +116,10 @@ function isCanvasViewportTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('.cutline-canvas-viewport') != null
 }
 
+function isPenMenuAnchorTarget(target: EventTarget | null): boolean {
+  return isCanvasViewportTarget(target) || isStudyHubScratchPadTarget(target)
+}
+
 function isStrictStylusHold(event: PointerEvent): boolean {
   return (
     event.pointerType === 'pen' ||
@@ -120,6 +143,12 @@ type HoldController = {
   generation: number
   toolOrder: ToolMode[]
   timer: ReturnType<typeof setTimeout> | null
+  settingsPanel: PenToolPillSettingsPanel | null
+  /** Settings-capable tool under the pointer while on the pill (before exiting upward). */
+  pillAimTool: PenToolPillSettingsPanel | null
+  settingsOpened: boolean
+  /** True while the pointer is in the settings panel — pill rail X stays frozen. */
+  interactingWithSettings: boolean
 }
 
 function freshHoldController(): HoldController {
@@ -137,6 +166,10 @@ function freshHoldController(): HoldController {
     generation: 0,
     toolOrder: PEN_TOOL_ORDER,
     timer: null,
+    settingsPanel: null,
+    pillAimTool: null,
+    settingsOpened: false,
+    interactingWithSettings: false,
   }
 }
 
@@ -147,6 +180,8 @@ export function usePenToolMenu(
   bridgeRef: RefObject<PenToolMenuBridge>
 } {
   const [state, setState] = useState<PenToolMenuState>(idleUi)
+  const stateRef = useRef(state)
+  stateRef.current = state
   const holdRef = useRef<HoldController>(freshHoldController())
   const bridgeRef = useRef<PenToolMenuBridge>(null!)
 
@@ -162,6 +197,7 @@ export function usePenToolMenu(
 
   const resetHoldInternal = (playCloseSound: boolean, opts?: { instant?: boolean }) => {
     const hold = holdRef.current
+
     if (hold.phase === 'open') {
       if (opts?.instant) {
         clearHoldTimer(hold)
@@ -183,7 +219,8 @@ export function usePenToolMenu(
 
   const beginCloseUi = (committedTool: ToolMode | null, playCloseSound: boolean) => {
     const hold = holdRef.current
-    if (hold.phase !== 'open') return
+    const ui = stateRef.current
+    if (ui.phase !== 'open') return
 
     const snapshot = {
       anchorX: hold.anchorX,
@@ -193,6 +230,7 @@ export function usePenToolMenu(
       toolOrder: hold.toolOrder,
       hoveredTool: committedTool,
       committedTool,
+      settingsPanel: null,
     }
 
     clearHoldTimer(hold)
@@ -232,6 +270,10 @@ export function usePenToolMenu(
       hold.toolOrder,
       { guardRail: true },
     )
+    hold.settingsPanel = null
+    hold.pillAimTool = null
+    hold.settingsOpened = false
+    hold.interactingWithSettings = false
     setState({
       phase: 'open',
       anchorX: hold.anchorX,
@@ -240,6 +282,7 @@ export function usePenToolMenu(
       pointerY: rail.y,
       hoveredTool: hovered,
       committedTool: null,
+      settingsPanel: null,
       toolOrder: hold.toolOrder,
     })
   }
@@ -289,40 +332,266 @@ export function usePenToolMenu(
     return next
   }
 
-  const updateOpenHover = (clientX: number, clientY: number) => {
-    const hold = holdRef.current
-    const rail = sampleOpenRail(hold, clientX)
-    const hovered = hitTestPenToolPill(
-      rail.x,
-      rail.y,
+  const collapseSettingsSubmenu = (hold: HoldController) => {
+    hold.settingsOpened = false
+    hold.settingsPanel = null
+  }
+
+  const updateSettingsDrag = (
+    hold: HoldController,
+    clientX: number,
+    clientY: number,
+    hovered: ToolMode | null,
+  ): PenToolPillSettingsPanel | null => {
+    const zonePanel = hold.settingsPanel
+    const inSubmenuZone = isPointerInPenToolSubmenuZone(
+      clientX,
+      clientY,
       hold.anchorX,
       hold.anchorY,
       hold.toolOrder,
-      { guardRail: true },
+      zonePanel,
     )
+    const onPill = isPointerInPenToolPill(
+      clientX,
+      clientY,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+    )
+
+    if (onPill) {
+      if (hold.settingsOpened) collapseSettingsSubmenu(hold)
+      hold.pillAimTool =
+        hovered && pillToolSupportsSettingsPanel(hovered) ? hovered : null
+      return null
+    }
+
+    if (hold.settingsOpened && hold.settingsPanel && inSubmenuZone) {
+      return hold.settingsPanel
+    }
+
+    const exitingTop = isPointerExitingPenToolPillTop(
+      clientX,
+      clientY,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+    )
+    if (exitingTop && hold.pillAimTool) {
+      if (!hold.settingsOpened) {
+        hold.settingsOpened = true
+        hold.settingsPanel = hold.pillAimTool
+        playSubmenuHover()
+      }
+      return hold.settingsPanel
+    }
+
+    if (hold.settingsOpened) collapseSettingsSubmenu(hold)
+    return null
+  }
+
+  const settingsToolCenterX = (hold: HoldController, tool: PenToolPillSettingsPanel) => {
+    const centers = pillSegmentCenters(
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+    )
+    const index = hold.toolOrder.indexOf(tool)
+    return index >= 0 ? (centers[index] ?? hold.railX) : hold.railX
+  }
+
+  const updateOpenHover = (clientX: number, clientY: number) => {
+    const hold = holdRef.current
+    const zonePanel = hold.settingsPanel
+    const inSubmenuZone = isPointerInPenToolSubmenuZone(
+      clientX,
+      clientY,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+      zonePanel,
+    )
+    const inSettingsPanel = isPointerInPenToolSettingsPanel(
+      clientX,
+      clientY,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+      zonePanel,
+    )
+    const onPill = isPointerInPenToolPill(
+      clientX,
+      clientY,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+    )
+    const inSettings =
+      hold.settingsOpened &&
+      hold.settingsPanel != null &&
+      inSubmenuZone &&
+      !onPill
+
+    const freezeRail = inSubmenuZone && hold.settingsOpened && hold.settingsPanel != null
+    const wasInSettings = hold.interactingWithSettings
+    if (freezeRail) {
+      if (!wasInSettings) hold.lastRawX = clientX
+      hold.interactingWithSettings = true
+    } else {
+      if (wasInSettings) hold.lastRawX = clientX
+      hold.interactingWithSettings = false
+    }
+
+    let pointerX = hold.railX
+    let pointerY = hold.anchorY
+    let hovered: ToolMode | null
+
+    if (onPill) {
+      const snapped = snapPenToolMenuRailToPointer(
+        clientX,
+        hold.anchorX,
+        hold.anchorY,
+        hold.toolOrder,
+      )
+      hold.railX = snapped.railX
+      hold.lastRawX = snapped.lastRawX
+      pointerX = snapped.x
+      pointerY = snapped.y
+      hovered = hitTestPenToolPill(
+        clientX,
+        clientY,
+        hold.anchorX,
+        hold.anchorY,
+        hold.toolOrder,
+      )
+    } else if (inSettings) {
+      hovered = hold.settingsPanel
+      pointerX = settingsToolCenterX(hold, hold.settingsPanel!)
+      pointerY = hold.anchorY
+    } else {
+      const rail = sampleOpenRail(hold, clientX)
+      pointerX = rail.x
+      pointerY = rail.y
+      hovered = hitTestPenToolPill(
+        rail.x,
+        rail.y,
+        hold.anchorX,
+        hold.anchorY,
+        hold.toolOrder,
+        { guardRail: true },
+      )
+    }
+
+    const aimForSettings = onPill
+      ? hitTestPenToolPill(
+          clientX,
+          clientY,
+          hold.anchorX,
+          hold.anchorY,
+          hold.toolOrder,
+        )
+      : inSettings
+        ? hold.settingsPanel
+        : hovered
+    const settingsPanel = updateSettingsDrag(
+      hold,
+      clientX,
+      clientY,
+      aimForSettings,
+    )
+    if (inSettingsPanel && hold.settingsPanel) {
+      applyToolSettingsPickAtPoint(clientX, clientY, hold.settingsPanel)
+    }
     setState((prev) => {
       if (
         prev.hoveredTool === hovered &&
-        prev.pointerX === rail.x &&
-        prev.pointerY === rail.y
+        prev.pointerX === pointerX &&
+        prev.pointerY === pointerY &&
+        prev.settingsPanel === settingsPanel
       ) {
         return prev
       }
-      return { ...prev, hoveredTool: hovered, pointerX: rail.x, pointerY: rail.y }
+      return {
+        ...prev,
+        hoveredTool: hovered,
+        pointerX,
+        pointerY,
+        settingsPanel,
+      }
     })
   }
 
   const finishOpenHold = (clientX: number, clientY: number) => {
     const hold = holdRef.current
-    const rail = sampleOpenRail(hold, clientX)
-    const hovered = hitTestPenToolPill(
-      rail.x,
-      rail.y,
+    const zonePanel = hold.settingsPanel
+    const inSubmenuZone = isPointerInPenToolSubmenuZone(
+      clientX,
+      clientY,
       hold.anchorX,
       hold.anchorY,
       hold.toolOrder,
-      { guardRail: true },
+      zonePanel,
     )
+
+    const onPill = isPointerInPenToolPill(
+      clientX,
+      clientY,
+      hold.anchorX,
+      hold.anchorY,
+      hold.toolOrder,
+    )
+
+    let hovered: ToolMode | null
+    if (onPill) {
+      const snapped = snapPenToolMenuRailToPointer(
+        clientX,
+        hold.anchorX,
+        hold.anchorY,
+        hold.toolOrder,
+      )
+      hold.railX = snapped.railX
+      hold.lastRawX = snapped.lastRawX
+      hovered = hitTestPenToolPill(
+        clientX,
+        clientY,
+        hold.anchorX,
+        hold.anchorY,
+        hold.toolOrder,
+      )
+    } else if (inSubmenuZone && hold.settingsPanel) {
+      hovered = hold.settingsPanel
+    } else {
+      const rail = sampleOpenRail(hold, clientX)
+      hovered = hitTestPenToolPill(
+        rail.x,
+        rail.y,
+        hold.anchorX,
+        hold.anchorY,
+        hold.toolOrder,
+        { guardRail: true },
+      )
+    }
+    updateSettingsDrag(
+      hold,
+      clientX,
+      clientY,
+      onPill
+        ? hovered
+        : inSubmenuZone && hold.settingsPanel
+          ? hold.settingsPanel
+          : hovered,
+    )
+
+    if (hold.settingsOpened && hold.settingsPanel && inSubmenuZone) {
+      const tool = hold.settingsPanel
+      useToolStore.getState().setMode(tool)
+      const picked = applyToolSettingsPickAtPoint(clientX, clientY, tool)
+      beginCloseUi(tool, !picked)
+      if (picked) playSound('submenuTap')
+      return true
+    }
+
     if (hovered) useToolStore.getState().setMode(hovered)
     beginCloseUi(hovered, true)
     return true
@@ -412,8 +681,8 @@ export function usePenToolMenu(
 
   bridgeRef.current = {
     isActive: () => {
-      const phase = holdRef.current.phase
-      return phase === 'pending' || phase === 'open'
+      const holdPhase = holdRef.current.phase
+      return holdPhase === 'pending' || holdPhase === 'open'
     },
 
     isMenuOpen: () => holdRef.current.phase === 'open',
@@ -437,9 +706,11 @@ export function usePenToolMenu(
       }
 
       if (!uiDraw) {
-        if (!isCanvasViewportTarget(e.target)) return false
-        const canvas = clientToCanvas(e.clientX, e.clientY, transformRef)
-        if (!canvas && !(isPenInput(e) || isPenMenuPointer(e))) return false
+        if (!isPenMenuAnchorTarget(e.target)) return false
+        if (!isStudyHubScratchPadTarget(e.target)) {
+          const canvas = clientToCanvas(e.clientX, e.clientY, transformRef)
+          if (!canvas && !(isPenInput(e) || isPenMenuPointer(e))) return false
+        }
       }
 
       beginHold(
@@ -488,7 +759,7 @@ export function usePenToolMenu(
 
       const el = document.elementFromPoint(clientX, clientY)
       const uiDraw = isUiDrawCanvasTarget(el)
-      if (!uiDraw && !isCanvasViewportTarget(el)) return
+      if (!uiDraw && !isPenMenuAnchorTarget(el)) return
 
       beginHold(
         clientX,
@@ -534,6 +805,8 @@ export function usePenToolMenu(
       setState(idleUi)
     },
   }
+
+  penToolMenuBridgeRef.current = bridgeRef.current
 
   useEffect(() => {
     return useShortcutUiStore.subscribe((state, prev) => {

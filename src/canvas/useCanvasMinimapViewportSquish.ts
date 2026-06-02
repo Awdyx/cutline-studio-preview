@@ -7,6 +7,7 @@ import {
   vignetteIsVisible,
   type EdgeStrengths,
 } from '../canvasPanVignette'
+import { usePanMotionStore } from '../panMotionStore'
 import {
   IDLE_MINIMAP_VIEWPORT_SQUISH,
   squishFromEdgePressures,
@@ -21,6 +22,13 @@ function squishTargetFromEdges(
   return panning || vignetteIsVisible(edges)
     ? squishFromEdgePressures(edges)
     : IDLE_MINIMAP_VIEWPORT_SQUISH
+}
+
+function isOverviewVoidPan(): boolean {
+  return (
+    usePanMotionStore.getState().canvasPanActive &&
+    !document.documentElement.hasAttribute('data-studio-centre-dragging')
+  )
 }
 
 /**
@@ -42,18 +50,27 @@ export function useCanvasMinimapViewportSquish(
     top: 0,
     bottom: 0,
   })
+  const loopRunningRef = useRef(false)
+  const rafRef = useRef(0)
 
   useEffect(() => {
     if (!active || reduceMotion) {
+      loopRunningRef.current = false
+      cancelAnimationFrame(rafRef.current)
       smoothRef.current = IDLE_MINIMAP_VIEWPORT_SQUISH
       setSquish(IDLE_MINIMAP_VIEWPORT_SQUISH)
       posInitRef.current = false
       return
     }
 
-    let raf = 0
-
     const tick = () => {
+      if (!loopRunningRef.current) return
+
+      if (isOverviewVoidPan()) {
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+
       let edges: EdgeStrengths
       let panning = false
 
@@ -93,12 +110,36 @@ export function useCanvasMinimapViewportSquish(
         setSquish(next)
       }
 
-      raf = requestAnimationFrame(tick)
+      rafRef.current = requestAnimationFrame(tick)
     }
 
-    raf = requestAnimationFrame(tick)
+    const startLoop = () => {
+      if (loopRunningRef.current) return
+      loopRunningRef.current = true
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    const stopLoop = () => {
+      loopRunningRef.current = false
+      cancelAnimationFrame(rafRef.current)
+    }
+
+    startLoop()
+
+    let wasVoidPan = isOverviewVoidPan()
+    const unsub = usePanMotionStore.subscribe(() => {
+      const voidPan = isOverviewVoidPan()
+      if (voidPan && !wasVoidPan) {
+        stopLoop()
+      } else if (!voidPan && wasVoidPan) {
+        startLoop()
+      }
+      wasVoidPan = voidPan
+    })
+
     return () => {
-      cancelAnimationFrame(raf)
+      unsub()
+      stopLoop()
       posInitRef.current = false
     }
   }, [active, reduceMotion, transformRef])

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
 import { font } from '../styles/tokens'
 import {
   HIGHLIGHTER_PRESETS,
@@ -16,19 +15,6 @@ import { useEffectiveMode } from '../theme/useEffectiveMode'
 
 type ToolColorPopoverProps = {
   tool: 'pen' | 'highlighter'
-}
-
-/** Apple-style dissolve — single panel, no crossfade overlap. */
-const TOOL_SWITCH_EASE = [0.25, 0.1, 0.25, 1] as const
-
-const TOOL_SWITCH_MOTION = {
-  initial: { opacity: 0.68, filter: 'blur(1.5px)', scale: 0.992 },
-  animate: { opacity: 1, filter: 'blur(0px)', scale: 1 },
-  transition: {
-    opacity: { duration: 0.22, ease: TOOL_SWITCH_EASE },
-    filter: { duration: 0.28, ease: TOOL_SWITCH_EASE },
-    scale: { duration: 0.22, ease: TOOL_SWITCH_EASE },
-  },
 }
 
 function ColorSwatches({
@@ -68,6 +54,7 @@ function ColorSwatches({
           <button
             key={preset}
             type="button"
+            data-tool-color-swatch={preset}
             aria-label="Preset color"
             aria-pressed={selected}
             onMouseEnter={() => playSubmenuHover()}
@@ -275,41 +262,41 @@ export default function ToolColorPopover({ tool }: ToolColorPopoverProps) {
         padding: '12px 12px 12px',
         fontFamily: font.family,
         width: '100%',
+        height: '100%',
         boxSizing: 'border-box',
+        display: 'flex',
+        alignItems: 'center',
       }}
     >
       <SubmenuSoundScope>
         <div className="tool-settings-switch-host">
-          <motion.div
-            key={tool}
+          <div
             className="tool-settings-switch"
-            {...TOOL_SWITCH_MOTION}
             style={{
               display: 'flex',
               flexDirection: 'column',
               gap: 10,
               alignItems: 'center',
-              transformOrigin: 'center center',
             }}
           >
             <ColorSwatches
-              presets={isPen ? PEN_PRESETS : HIGHLIGHTER_PRESETS}
-              currentColor={isPen ? penColor : highlighterColor}
-              onSelect={isPen ? setPenColor : setHighlighterColor}
-              swatchColor={(preset) =>
-                isPen
-                  ? resolvePenColor(preset, effectiveMode)
-                  : resolveHighlighterColor(preset, effectiveMode)
-              }
-              matchesPreset={isPen ? penInkMatches : undefined}
-            />
-            <SizeControl
-              min={isPen ? 2 : 12}
-              max={isPen ? 12 : 32}
-              value={isPen ? penSize : highlighterSize}
-              onChange={isPen ? setPenSize : setHighlighterSize}
-            />
-          </motion.div>
+                presets={isPen ? PEN_PRESETS : HIGHLIGHTER_PRESETS}
+                currentColor={isPen ? penColor : highlighterColor}
+                onSelect={isPen ? setPenColor : setHighlighterColor}
+                swatchColor={(preset) =>
+                  isPen
+                    ? resolvePenColor(preset, effectiveMode)
+                    : resolveHighlighterColor(preset, effectiveMode)
+                }
+                matchesPreset={isPen ? penInkMatches : undefined}
+              />
+              <SizeControl
+                min={isPen ? 2 : 12}
+                max={isPen ? 12 : 32}
+                value={isPen ? penSize : highlighterSize}
+                onChange={isPen ? setPenSize : setHighlighterSize}
+              />
+          </div>
         </div>
       </SubmenuSoundScope>
     </div>

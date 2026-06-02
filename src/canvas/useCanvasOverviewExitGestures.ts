@@ -21,7 +21,6 @@ const OVERVIEW_EXIT_CHROME_SELECTORS = [
   '.canvas-minimap-expanded-scrim',
   '.studio-centre-drag-handle-wrapper',
   '.cutline-studio-centre-surface',
-  '.canvas-plate-reposition-btn',
 ] as const
 
 function isOverviewExitChromeTarget(target: EventTarget | null): boolean {

@@ -25,6 +25,14 @@ export function storedContentToHtml(stored: string): string {
   return escapeHtml(stored).replace(/\n/g, '<br />')
 }
 
+/** Strip markup and invisible placeholder chars (e.g. caret ZWS) for emptiness checks. */
+export function plainTextFromStored(stored: string): string {
+  return stored
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/[\s\u00a0\u200b\u200c\u200d\ufeff]/g, '')
+}
+
 export function readEditorHtml(el: HTMLElement): string {
   if (isEditorEmpty(el)) return ''
   return el.innerHTML
@@ -36,18 +44,34 @@ export function ensureEditorCaretAnchor(el: HTMLElement): void {
 }
 
 export function isEditorEmpty(el: HTMLElement): boolean {
-  const text = el.textContent?.replace(/\u00a0/g, ' ').trim() ?? ''
-  return text.length === 0
+  const text = el.textContent ?? ''
+  return plainTextFromStored(text).length === 0
 }
 
 export function isStoredTextEmpty(stored: string): boolean {
   if (!stored.trim()) return true
-  const text = stored
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/\u00a0/g, ' ')
-    .trim()
-  return text.length === 0
+  return plainTextFromStored(stored).length === 0
+}
+
+/** True when focus or the current selection lives inside this rich-text editor. */
+export function isRichTextEditorEngaged(
+  editor: HTMLElement,
+  eventTarget: EventTarget | null = null,
+): boolean {
+  const active = document.activeElement
+  if (active === editor) return true
+  if (active instanceof Node && editor.contains(active)) return true
+
+  if (eventTarget instanceof Node && editor.contains(eventTarget)) return true
+
+  const sel = window.getSelection()
+  if (!sel) return false
+  const anchor = sel.anchorNode
+  const focus = sel.focusNode
+  return (
+    (anchor != null && editor.contains(anchor)) ||
+    (focus != null && editor.contains(focus))
+  )
 }
 
 function rectContainsPoint(rect: DOMRect, x: number, y: number): boolean {

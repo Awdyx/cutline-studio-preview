@@ -48,6 +48,9 @@ export const SPACE_GLASS_CLASS = 'ui-space-glass'
 /** Backdrop blur behind selected items (blur only — no saturate). */
 export const SELECTION_DEPTH_CLASS = 'ui-selection-depth'
 
+/** Shared with canvas customize backdrop — keep in sync with `--canvas-focus-backdrop-blur` in index.css. */
+export const CANVAS_FOCUS_BACKDROP_BLUR_PX = 12
+
 export const glass = {
   bg: 'var(--glass-bg)',
   border: '1px solid var(--glass-border)',
@@ -89,6 +92,52 @@ export const CHROME_MENU_TRANSITION = {
   ease: 'easeOut',
 } as const
 
+/** FAB menu open — spring pop from the bottom-right corner. */
+export const CHROME_FAB_MENU_SPRING = {
+  type: 'spring' as const,
+  stiffness: 520,
+  damping: 36,
+  mass: 0.78,
+}
+
+/** FAB menu close — quick ease-in collapse back toward the trigger. */
+export const CHROME_FAB_MENU_DISMISS = {
+  duration: 0.28,
+  ease: [0.45, 0.05, 0.85, 0.45] as const,
+}
+
+/** + FAB menu panel inner shell (motion lives on the wrapper). */
+export const PLUS_FAB_MENU_PANEL_CLASS = 'plus-fab-menu-panel'
+
+/**
+ * FAB menu spring — apply on the frosted panel itself (same pattern as + FAB).
+ * No CSS filter (filter on an ancestor breaks backdrop-filter).
+ */
+export function chromeFabMenuWrapperMotion(reduceMotion: boolean | null) {
+  if (reduceMotion) {
+    return {
+      initial: { opacity: 0 },
+      animate: { opacity: 1, transition: { duration: 0.12 } },
+      exit: { opacity: 0, transition: { duration: 0.12 } },
+    }
+  }
+  return {
+    initial: { opacity: 0, scale: 0.86, y: 16 },
+    animate: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: CHROME_FAB_MENU_SPRING,
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.9,
+      y: 10,
+      transition: CHROME_FAB_MENU_DISMISS,
+    },
+  }
+}
+
 export function chromeMenuMotionY(offset: number) {
   return {
     initial: { opacity: 0, scale: 0.96, y: offset },
@@ -120,10 +169,9 @@ export const font = {
   colorFaint: 'var(--ui-text-faint)',
 }
 
-/** Fixed bottom-right chrome — safe-area aware, sits flush in the visual viewport corner. */
+/** Fixed bottom-right chrome — above study-hub menu-focus portal (24), below panels (30+). */
 export const chromeBottomRightFixed: CSSProperties = {
   position: 'fixed',
-  bottom:
-    'calc(max(16px, env(safe-area-inset-bottom, 0px)) + var(--chrome-outer-nudge, 0px))',
-  zIndex: 20,
+  bottom: 'max(16px, env(safe-area-inset-bottom, 0px))',
+  zIndex: 26,
 }

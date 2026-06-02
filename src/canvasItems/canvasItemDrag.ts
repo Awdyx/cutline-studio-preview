@@ -15,9 +15,9 @@ import {
   hitTestSpacePreviewAt,
 } from '../spaces/spaceDropTarget'
 import {
-  isItemWithinStudioCentre,
-  showStudioCentreBoundsToast,
-} from '../canvas/studioCentre'
+  isItemWithinActiveCanvas,
+  showActiveCanvasBoundsToast,
+} from '../spaces/activeCanvasLayout'
 import { useSpaceDropStore } from '../spaces/spaceDropStore'
 import { useStickyDropStore } from './stickyDropStore'
 import {
@@ -32,8 +32,22 @@ import { isImageInSticky, isStickyItem } from './types'
 const DRAG_THRESHOLD_PX = 8
 const DRAG_ACTIVE_CLASS = 'canvas-item-drag-active'
 const HOLD_DRAG_PAN_EXCLUDE_CLASS = 'canvas-item-hold-drag-pending'
-const SPACE_DROP_ABSORB_MS = 340
 const STICKY_DROP_ABSORB_MS = 340
+
+/** Item ids removed by an instant space drop (skip AnimatePresence exit). */
+let spaceDropInstantRemoveId: string | null = null
+
+export function isSpaceDropInstantRemove(itemId: string): boolean {
+  return spaceDropInstantRemoveId === itemId
+}
+
+function markSpaceDropInstantRemove(itemId: string) {
+  spaceDropInstantRemoveId = itemId
+}
+
+function clearSpaceDropInstantRemove() {
+  spaceDropInstantRemoveId = null
+}
 
 type DragSessionOptions = {
   onReleaseWithoutDrag?: () => void
@@ -47,15 +61,7 @@ export function clearHoldDragPanExclude(root: ParentNode = document) {
   })
 }
 
-let spaceDropTimer: ReturnType<typeof setTimeout> | null = null
 let stickyDropTimer: ReturnType<typeof setTimeout> | null = null
-
-function clearSpaceDropTimer() {
-  if (spaceDropTimer != null) {
-    clearTimeout(spaceDropTimer)
-    spaceDropTimer = null
-  }
-}
 
 function clearStickyDropTimer() {
   if (stickyDropTimer != null) {
@@ -65,7 +71,6 @@ function clearStickyDropTimer() {
 }
 
 function clearSpaceDropState() {
-  clearSpaceDropTimer()
   useSpaceDropStore.getState().clearAll()
 }
 
@@ -178,7 +183,7 @@ function updateSpaceDropHover(clientX: number, clientY: number, itemId: string) 
     useSpaceDropStore.getState().setHover(null)
     return
   }
-  const pos = dropPositionForItem(item, hit.canvasX, hit.canvasY)
+  const pos = dropPositionForItem(item, hit.canvasX, hit.canvasY, hit.spaceId)
   useSpaceDropStore.getState().setHover({
     spaceId: hit.spaceId,
     ghostItem: { ...item, x: pos.x, y: pos.y },
@@ -195,32 +200,19 @@ function executeSpaceDrop(
     return
   }
 
-  const pos = dropPositionForItem(item, hit.canvasX, hit.canvasY)
+  const pos = dropPositionForItem(item, hit.canvasX, hit.canvasY, hit.spaceId)
   const dropStore = useSpaceDropStore.getState()
   dropStore.pulseConfirm(hit.spaceId)
-  dropStore.startAbsorb(itemId, hit.spaceId)
   dropStore.setHover({
     spaceId: hit.spaceId,
     ghostItem: { ...item, x: pos.x, y: pos.y },
   })
 
-  clearSpaceDropTimer()
-  spaceDropTimer = setTimeout(() => {
-    spaceDropTimer = null
-    const moved = useCanvasItemsStore
-      .getState()
-      .moveItemToSpace(itemId, hit.spaceId, hit.canvasX, hit.canvasY)
-    if (moved) {
-      useSpaceDropStore.getState().markEnteringItem(itemId)
-      window.setTimeout(() => {
-        useSpaceDropStore.getState().clearEnteringItem()
-      }, 420)
-    }
-    useSpaceDropStore.getState().clearHover()
-    requestAnimationFrame(() => {
-      useSpaceDropStore.getState().clearAbsorb()
-    })
-  }, SPACE_DROP_ABSORB_MS)
+  markSpaceDropInstantRemove(itemId)
+  useCanvasItemsStore
+    .getState()
+    .moveItemToSpace(itemId, hit.spaceId, hit.canvasX, hit.canvasY)
+  dropStore.clearHover()
 }
 
 type DragPhase = 'pending' | 'dragging'
@@ -402,14 +394,14 @@ function finishSession() {
     : droppedItem
 
   const allItems = useCanvasItemsStore.getState().items
-  if (!isItemWithinStudioCentre(itemAtRelease, allItems)) {
+  if (!isItemWithinActiveCanvas(itemAtRelease, allItems)) {
     useCanvasItemsStore.getState().animateItemRectTo(
       ended.itemId,
       { x: ended.dragStartX, y: ended.dragStartY },
       { persist: true },
     )
     triggerBoundsSnapBack(ended.itemId)
-    showStudioCentreBoundsToast()
+    showActiveCanvasBoundsToast()
     return
   }
 
@@ -490,6 +482,7 @@ function startDragSession(
   if (!pointerCanvas) return
 
   finishSession()
+  clearSpaceDropInstantRemove()
 
   const origin = itemCanvasOrigin(item)
 

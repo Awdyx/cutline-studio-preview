@@ -3,10 +3,18 @@ import type { Stroke } from '../drawing/types'
 
 export type ActiveCanvasId = 'main' | string
 
+/** Main-canvas pan/zoom camera (TransformWrapper). Not used inside pockets. */
 export type SpaceCamera = {
   positionX: number
   positionY: number
   scale: number
+}
+
+export type PocketStripState = {
+  /** Logical offset from center spawn — positive = scrolled down. */
+  scrollY: number
+  /** Coordinate space width — set on first open from viewport. */
+  logicalWidth: number
 }
 
 export type SpaceCanvasData = {
@@ -15,7 +23,7 @@ export type SpaceCanvasData = {
   annotationStrokes: Stroke[]
   name: string
   snapshotId: string | null
-  camera: SpaceCamera
+  strip: PocketStripState
 }
 
 export const DEFAULT_SPACE_NAME = 'Untitled pocket'
@@ -36,10 +44,4 @@ export function isDefaultSpaceName(name: string): boolean {
 
 export function clampSpaceName(name: string): string {
   return name.slice(0, SPACE_NAME_MAX_LENGTH)
-}
-
-export const DEFAULT_SPACE_CAMERA: SpaceCamera = {
-  positionX: 0,
-  positionY: 0,
-  scale: 1,
 }

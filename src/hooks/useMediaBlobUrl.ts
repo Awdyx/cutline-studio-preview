@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import {
+  peekMediaObjectUrl,
   releaseMediaObjectUrl,
   releaseSnapshotObjectUrl,
   resolveMediaObjectUrl,
@@ -33,10 +34,15 @@ export function useMediaBlobUrl(
   url: string | undefined
   status: MediaBlobStatus
 } {
-  const [url, setUrl] = useState<string | undefined>(undefined)
-  const [status, setStatus] = useState<MediaBlobStatus>('idle')
+  const [url, setUrl] = useState<string | undefined>(() =>
+    mediaId ? peekMediaObjectUrl(mediaId) ?? undefined : undefined,
+  )
+  const [status, setStatus] = useState<MediaBlobStatus>(() => {
+    if (!mediaId) return 'idle'
+    return peekMediaObjectUrl(mediaId) ? 'ready' : 'loading'
+  })
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!mediaId) {
       setUrl(undefined)
       setStatus('idle')
@@ -44,8 +50,18 @@ export function useMediaBlobUrl(
     }
 
     let cancelled = false
+    const cachedUrl = peekMediaObjectUrl(mediaId)
+    if (cachedUrl) {
+      // Sync ref before customize portal flushSync unmounts the canvas copy.
+      void resolveMediaObjectUrl(mediaId)
+      setUrl(cachedUrl)
+      setStatus('ready')
+      return () => {
+        releaseMediaObjectUrl(mediaId)
+      }
+    }
+
     setStatus('loading')
-    setUrl(undefined)
 
     void resolveMediaObjectUrlWithRetry(mediaId)
       .then((objectUrl) => {

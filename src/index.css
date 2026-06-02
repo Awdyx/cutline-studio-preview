@@ -40,13 +40,72 @@ button {
   overflow: visible;
 }
 
-/* Pocket interior — full 3000×2250 surface, no studio-centre offset. */
+html[data-canvas-overview-hyper] .cutline-draw-target--positioned {
+  left: 0;
+  top: 0;
+  width: var(--canvas-studio-w, 2026px);
+  height: var(--canvas-studio-h, 1520px);
+}
+
+/* Pocket interior — edge-to-edge vertical strip. */
 .cutline-draw-target--pocket {
+  position: relative;
+  z-index: 1;
+  touch-action: none;
+}
+
+.pocket-strip-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.pocket-strip-viewport {
   position: absolute;
   inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+.pocket-strip-scroll-spacer {
+  position: relative;
   width: 100%;
-  height: 100%;
-  z-index: 1;
+}
+
+.pocket-strip-scaled-host {
+  position: relative;
+  overflow: hidden;
+}
+
+.pocket-strip-logical {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+}
+
+.pocket-strip-origin-root {
+  position: absolute;
+  left: 0;
+  top: calc(var(--pocket-strip-center-y, 100000) * 1px);
+  width: 100%;
+  overflow: visible;
+}
+
+.pocket-strip-surface {
+  position: relative;
+  width: var(--pocket-strip-logical-width, 100%);
+  overflow: visible;
+  isolation: isolate;
+  background-color: var(--canvas-bg);
+  border-radius: 0;
+}
+
+.pocket-strip-content-inner {
+  position: relative;
+  overflow: visible;
 }
 
 .cutline-canvas-pocket {
@@ -59,29 +118,16 @@ html[data-tauri-macos='1'] {
   --tauri-chrome-top-delta: 16px;
 }
 
-/* Shared desktop chrome insets — widened on Tauri macOS to match top-bar dead space. */
+/* Shared desktop chrome insets — top only widens on Tauri macOS for the overlay title bar. */
 html {
   --chrome-edge-base: 16px;
-  --chrome-outer-nudge: 0px;
   --tauri-chrome-top-delta: 0px;
-  --chrome-edge-left: calc(var(--chrome-edge-base) + var(--chrome-outer-nudge));
-  --chrome-edge-right: calc(var(--chrome-edge-base) + var(--chrome-outer-nudge));
+  --chrome-edge-left: var(--chrome-edge-base);
+  --chrome-edge-right: var(--chrome-edge-base);
   --chrome-edge-top: calc(var(--chrome-edge-base) + var(--tauri-chrome-top-delta));
   --chrome-panel-top: calc(64px + var(--tauri-chrome-top-delta));
-  --chrome-panel-anchor-left: calc(var(--chrome-edge-left) + var(--chrome-outer-nudge));
-  --chrome-panel-anchor-right: calc(var(--chrome-edge-right) + var(--chrome-outer-nudge));
-}
-
-html[data-tauri-macos='1']:not([data-layout='phone']) {
-  --chrome-outer-nudge: var(--tauri-chrome-top-delta);
-}
-
-.cutline-top-bar:not(.cutline-top-bar--phone) > .cutline-top-bar__leading {
-  padding-inline-start: var(--chrome-outer-nudge);
-}
-
-.cutline-top-bar:not(.cutline-top-bar--phone) > .cutline-top-bar__trailing {
-  padding-inline-end: var(--chrome-outer-nudge);
+  --chrome-panel-anchor-left: var(--chrome-edge-left);
+  --chrome-panel-anchor-right: var(--chrome-edge-right);
 }
 
 html[data-tauri-macos='1'] .cutline-top-bar:not(.cutline-top-bar--phone) {
@@ -94,8 +140,10 @@ html[data-studio-centre-dragging] .cutline-draw-target--positioned {
 
 /* Lift clip while strokes bleed past the studio-centre bounds (session-only ink). */
 html[data-studio-strokes-bleed] .cutline-studio-centre-surface,
+html[data-studio-strokes-bleed] .pocket-strip-surface,
 html[data-studio-strokes-bleed] .studio-centre-content-scale,
 .cutline-draw-target[data-strokes-bleed] .cutline-studio-centre-surface,
+.cutline-draw-target[data-strokes-bleed] .pocket-strip-surface,
 .cutline-draw-target[data-strokes-bleed] .studio-centre-content-scale {
   overflow: visible;
 }
@@ -427,7 +475,11 @@ html[data-fisheye-engaged]
   user-select: none;
   white-space: nowrap;
   overflow: visible;
+  opacity: 0;
+  transform: translate3d(0, 18px, 0) scale(0.98);
   transition:
+    opacity var(--overview-chrome-duration, 560ms) var(--overview-chrome-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
+    transform var(--overview-chrome-duration, 560ms) var(--overview-chrome-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
     color var(--studio-centre-active-duration, 220ms)
       var(--studio-centre-active-ease, cubic-bezier(0.22, 0.94, 0.28, 1)),
     filter var(--studio-centre-dim-duration, 560ms) var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
@@ -510,7 +562,8 @@ html[data-studio-centre-dragging] .cutline-draw-target--positioned > .studio-cen
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  pointer-events: auto;
+  touch-action: none;
   overflow: hidden;
 }
 
@@ -599,8 +652,40 @@ html[data-reload-intro] [data-pen-fab],
 html[data-reload-intro] [data-plus-fab],
 html[data-reload-intro] .cutline-space-back-pill-host,
 html[data-reload-intro] .canvas-nav-minimap {
-  opacity: 0;
   pointer-events: none;
+  transition: opacity 0.88s cubic-bezier(0.22, 0.94, 0.28, 1);
+}
+
+html[data-reload-intro='armed'] .cutline-top-bar,
+html[data-reload-intro='armed'] [data-pen-fab],
+html[data-reload-intro='armed'] [data-plus-fab],
+html[data-reload-intro='armed'] .cutline-space-back-pill-host,
+html[data-reload-intro='armed'] .canvas-nav-minimap {
+  opacity: 0;
+}
+
+html[data-reload-intro='revealing'] .cutline-top-bar,
+html[data-reload-intro='revealing'] [data-pen-fab],
+html[data-reload-intro='revealing'] [data-plus-fab],
+html[data-reload-intro='revealing'] .cutline-space-back-pill-host,
+html[data-reload-intro='revealing'] .canvas-nav-minimap {
+  opacity: 1;
+}
+
+html[data-reload-intro] [data-canvas-item],
+html[data-reload-intro] .cutline-draw-target,
+html[data-reload-intro] .react-transform-wrapper {
+  pointer-events: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-reload-intro] .cutline-top-bar,
+  html[data-reload-intro] [data-pen-fab],
+  html[data-reload-intro] [data-plus-fab],
+  html[data-reload-intro] .cutline-space-back-pill-host,
+  html[data-reload-intro] .canvas-nav-minimap {
+    transition: opacity 0.18s ease-out;
+  }
 }
 
 html[data-theme='light'] .reload-space-intro__veil {
@@ -645,12 +730,6 @@ html[data-theme='light'] .reload-space-intro__heart {
   .reload-space-intro__heart {
     will-change: auto;
   }
-}
-
-/* Screen-space barrel post-process — only applied while zoomed out (toggled in JS). */
-[data-canvas-barrel-host][data-canvas-barrel-active] {
-  -webkit-filter: url(#cutline-canvas-barrel);
-  filter: url(#cutline-canvas-barrel);
 }
 
 /* Fisheye overview engaged: lock item interaction (panning still works). */
@@ -741,30 +820,18 @@ html[data-fisheye-engaged] .studio-centre-bounds--active .studio-centre-bounds__
   right: 0;
 }
 
-/* Pre-warp soften — thin lines otherwise stairstep under feDisplacementMap. */
-[data-canvas-barrel-host][data-canvas-barrel-active] .studio-centre-bounds__edge--top,
-[data-canvas-barrel-host][data-canvas-barrel-active] .studio-centre-bounds__edge--bottom {
-  filter: blur(0.65px)
-    drop-shadow(0 0 5px color-mix(in srgb, var(--studio-centre-bound) 72%, transparent))
-    drop-shadow(0 0 14px color-mix(in srgb, var(--studio-centre-bound) 38%, transparent));
-}
-
-[data-canvas-barrel-host][data-canvas-barrel-active] .studio-centre-bounds__edge--left,
-[data-canvas-barrel-host][data-canvas-barrel-active] .studio-centre-bounds__edge--right {
-  filter: blur(0.65px)
-    drop-shadow(0 0 5px color-mix(in srgb, var(--studio-centre-bound) 72%, transparent))
-    drop-shadow(0 0 14px color-mix(in srgb, var(--studio-centre-bound) 38%, transparent));
-}
-
 /* Canvas overview navigation: preview + toggle (bottom-left). */
 .canvas-nav-minimap {
+  /* Keep in sync with MINIMAP_WIDTH_PX in CanvasNavigationMinimap.tsx */
+  --canvas-nav-minimap-width: 124px;
   position: fixed;
-  left: calc(max(16px, env(safe-area-inset-left, 0px)) + var(--chrome-outer-nudge, 0px));
-  bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + var(--chrome-outer-nudge, 0px));
+  left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
   z-index: 12;
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: var(--canvas-nav-minimap-width);
   gap: 9px;
   pointer-events: none;
 }
@@ -774,13 +841,75 @@ html[data-fisheye-engaged] .studio-centre-bounds--active .studio-centre-bounds__
   display: flex;
   flex-direction: column;
   align-items: center;
-  pointer-events: auto;
   padding: 0;
   border: none;
   background: transparent;
   cursor: pointer;
   touch-action: manipulation;
   will-change: transform, opacity, filter;
+  opacity: 0;
+  transform: translate3d(0, 10px, 0) scale(0.9);
+  filter: blur(6px);
+  pointer-events: none;
+  transition:
+    opacity var(--canvas-nav-minimap-motion-duration, 560ms)
+      var(--canvas-nav-minimap-motion-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
+    transform var(--canvas-nav-minimap-motion-duration, 560ms)
+      var(--canvas-nav-minimap-motion-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
+    filter var(--canvas-nav-minimap-motion-duration, 560ms)
+      var(--canvas-nav-minimap-motion-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
+}
+
+html[data-fisheye-engaged]:not([data-canvas-overview-exiting]):not([data-canvas-minimap-expanded])
+  .canvas-nav-minimap__preview {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  filter: blur(0);
+  pointer-events: auto;
+  transition-timing-function: var(
+      --canvas-nav-minimap-motion-enter-ease,
+      cubic-bezier(0.18, 1.22, 0.32, 1)
+    ),
+    var(--canvas-nav-minimap-motion-enter-ease, cubic-bezier(0.18, 1.22, 0.32, 1)),
+    var(--canvas-nav-minimap-motion-enter-ease, cubic-bezier(0.18, 1.22, 0.32, 1));
+  transition-delay: 72ms, 72ms, 72ms;
+}
+
+html[data-canvas-overview-exiting] .canvas-nav-minimap__preview {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0) scale(0.88);
+  filter: blur(8px);
+  pointer-events: none;
+  transition-delay: 0ms, 0ms, 0ms;
+}
+
+html[data-canvas-minimap-expanded] .canvas-nav-minimap__preview {
+  opacity: 0;
+  transform: translate3d(0, 8px, 0) scale(0.92);
+  filter: blur(4px);
+  pointer-events: none;
+  transition-duration: 220ms;
+  transition-delay: 0ms, 0ms, 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-nav-minimap__preview {
+    filter: none !important;
+    transition: none !important;
+  }
+
+  html[data-fisheye-engaged]:not([data-canvas-overview-exiting]):not([data-canvas-minimap-expanded])
+    .canvas-nav-minimap__preview {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+html[data-fisheye-engaged]:not([data-canvas-overview-exiting]):not([data-canvas-minimap-expanded])
+  .canvas-nav-minimap__preview:hover,
+html[data-fisheye-engaged]:not([data-canvas-overview-exiting]):not([data-canvas-minimap-expanded])
+  .canvas-nav-minimap__preview:focus-visible {
+  transform: translate3d(0, 0, 0) scale(1.045);
 }
 
 .canvas-nav-minimap__toggle {
@@ -1115,6 +1244,33 @@ html[data-fisheye-engaged] .studio-centre-bounds--active .studio-centre-bounds__
   color: color-mix(in srgb, var(--ui-text) 58%, transparent);
   pointer-events: none;
   user-select: none;
+}
+
+.canvas-minimap-expanded-menu__map-anchor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.canvas-minimap-expanded-menu__draw-taunt-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 10px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+}
+
+.canvas-minimap-expanded-menu__draw-taunt {
+  margin: 0;
+  white-space: nowrap;
+  text-align: center;
+  transform-origin: center bottom;
 }
 
 .canvas-minimap-expanded-menu__reposition-hint-em {
@@ -1470,9 +1626,9 @@ html[data-studio-centre-dragging] .canvas-minimap-expanded-menu__plate-title-hea
   border: none;
   border-radius: 5px;
   background: transparent;
-  cursor: grab;
+  cursor: pointer;
   touch-action: none;
-  overflow: hidden;
+  overflow: visible;
   z-index: 0;
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--studio-centre-bound) 14%, transparent),
@@ -1559,17 +1715,104 @@ html[data-studio-centre-dragging] .canvas-minimap-expanded-menu__plate-title-hea
   touch-action: none;
 }
 
+.studio-centre-title,
+.studio-centre-drag-handle-wrapper {
+  --overview-chrome-duration: 560ms;
+  --overview-chrome-enter-ease: cubic-bezier(0.22, 0.94, 0.28, 1);
+  --overview-chrome-exit-ease: cubic-bezier(0.42, 0.03, 0.18, 1);
+}
+
+.studio-centre-drag-handle-wrapper {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(-12px, -10px, 0) scale(0.9);
+  transition:
+    opacity var(--overview-chrome-duration) var(--overview-chrome-exit-ease),
+    transform var(--overview-chrome-duration) var(--overview-chrome-exit-ease);
+}
+
+.cutline-draw-target--positioned > .studio-centre-drag-handle-wrapper {
+  z-index: 7000;
+}
+
+.cutline-draw-target--positioned > .studio-centre-drag-handle-wrapper .studio-centre-drag-handle {
+  opacity: var(--studio-centre-handle-opacity, var(--canvas-handle-opacity));
+}
+
+.cutline-draw-target--positioned
+  > .studio-centre-drag-handle-wrapper
+  .studio-centre-drag-handle:hover,
+.cutline-draw-target--positioned
+  > .studio-centre-drag-handle-wrapper
+  .studio-centre-drag-handle:focus-visible {
+  opacity: var(--studio-centre-handle-opacity-hover, var(--canvas-handle-opacity-hover));
+}
+
+.studio-centre-drag-handle-wrapper.overview-chrome--concealed {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+html[data-fisheye-engaged]:not([data-canvas-overview-exiting]) .studio-centre-title {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition-timing-function: var(--overview-chrome-enter-ease), var(--overview-chrome-enter-ease),
+    var(--studio-centre-active-ease, cubic-bezier(0.22, 0.94, 0.28, 1)),
+    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
+  transition-delay: 40ms, 40ms, 0ms, 0ms;
+}
+
+html[data-fisheye-engaged]:not([data-canvas-overview-exiting])
+  .studio-centre-drag-handle-wrapper:not(.overview-chrome--concealed) {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  pointer-events: auto;
+  transition-timing-function: var(--overview-chrome-enter-ease), var(--overview-chrome-enter-ease);
+  transition-delay: 88ms, 88ms;
+}
+
+html[data-canvas-overview-exiting] .studio-centre-title {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0) scale(0.98);
+  transition-timing-function: var(--overview-chrome-exit-ease), var(--overview-chrome-exit-ease),
+    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
+    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
+  transition-delay: 0ms, 0ms, 0ms, 0ms;
+}
+
+html[data-canvas-overview-exiting] .studio-centre-drag-handle-wrapper {
+  opacity: 0;
+  transform: translate3d(-10px, -8px, 0) scale(0.88);
+  pointer-events: none;
+  transition-delay: 0ms, 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-centre-title,
+  .studio-centre-drag-handle-wrapper {
+    transition: none !important;
+  }
+
+  html[data-fisheye-engaged]:not([data-canvas-overview-exiting]) .studio-centre-title,
+  html[data-fisheye-engaged]:not([data-canvas-overview-exiting])
+    .studio-centre-drag-handle-wrapper:not(.overview-chrome--concealed) {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .studio-centre-drag-handle {
-  opacity: var(--studio-centre-handle-opacity, 0.28);
+  opacity: var(--canvas-handle-opacity);
   transition: opacity 160ms ease-out;
 }
 
 .studio-centre-drag-handle:hover,
 .studio-centre-drag-handle:focus-visible {
-  opacity: var(--studio-centre-handle-opacity-hover, 0.42);
+  opacity: var(--canvas-handle-opacity-hover, var(--canvas-handle-opacity));
 }
 
-html[data-fisheye-engaged] .studio-centre-drag-handle-wrapper {
+html[data-fisheye-engaged]:not([data-canvas-overview-exiting])
+  .studio-centre-drag-handle-wrapper:not(.overview-chrome--concealed) {
   pointer-events: auto !important;
 }
 
@@ -1583,7 +1826,15 @@ html[data-studio-centre-dragging] .canvas-minimap-expanded-menu__plate-wrap {
 }
 
 html[data-studio-centre-dragging] .studio-centre-drag-handle {
-  opacity: var(--studio-centre-handle-opacity-active, 0.48);
+  opacity: var(--canvas-handle-opacity-hover, var(--canvas-handle-opacity));
+}
+
+html[data-canvas-minimap-expanded]
+  .canvas-minimap-expanded-menu__plate
+  .studio-centre-drag-handle-wrapper {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
 }
 
 /* Massive placeholder — below each canvas plate in fisheye overview. */
@@ -1594,6 +1845,7 @@ html[data-studio-centre-dragging] .studio-centre-drag-handle {
   position: absolute;
   left: 50%;
   top: calc(100% + 22px);
+  transform: translate3d(-50%, 14px, 0) scale(0.94);
   z-index: 7000;
   min-width: min(88%, 360px);
   padding: 14px 28px;
@@ -1612,7 +1864,6 @@ html[data-studio-centre-dragging] .studio-centre-drag-handle {
   color: color-mix(in srgb, var(--studio-centre-bound) 52%, transparent);
   cursor: pointer;
   touch-action: none;
-  pointer-events: auto;
   user-select: none;
 }
 
@@ -1625,10 +1876,6 @@ html[data-studio-centre-dragging] .studio-centre-drag-handle {
     calc(-1 * var(--studio-centre-reposition-hit-slop-bottom))
     calc(-1 * var(--studio-centre-reposition-hit-slop-x));
   border-radius: inherit;
-}
-
-html[data-fisheye-engaged] .canvas-plate-reposition-btn {
-  pointer-events: auto !important;
 }
 
 html[data-pause-mesh] [data-mesh-blob] {
@@ -1676,23 +1923,32 @@ html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
   position: absolute;
   right: 64px;
   bottom: 0;
-  opacity: 0;
-  filter: blur(4px);
-  transition:
-    opacity 0.18s ease-out,
-    filter 0.18s ease-out;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
   width: max-content;
   pointer-events: auto;
-  /* background/border/radius live on the child cards (.pen-fab-toolbar, .pen-fab-tool-settings, .pen-fab-lasso-panel) */
 }
 
-.pen-fab-menu--visible {
-  opacity: 1;
-  filter: blur(0px);
+.pen-fab-tool-settings {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pen-fab-settings-shell {
+  overflow: hidden;
+  border-radius: 16px;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+.pen-fab-settings-shell .pen-fab-tool-settings,
+.pen-fab-settings-shell .pen-fab-lasso-panel,
+.pen-fab-settings-shell .pen-fab-eraser-panel {
+  display: flex;
+  align-items: center;
 }
 
 .chrome-fab-trigger {
@@ -1706,8 +1962,10 @@ html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
   flex-shrink: 0;
   outline: none;
   pointer-events: auto;
-  box-shadow: var(--glass-shadow);
-  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, background 150ms ease;
+  transition:
+    transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.2s ease-out,
+    background 150ms ease;
 }
 
 .chrome-fab-trigger--hover {
@@ -1731,29 +1989,11 @@ html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
   transform: rotate(-20deg) scale(1.05);
 }
 
-.pen-fab-settings-shell {
-  overflow: hidden;
-  border-radius: 16px;
-}
-
 .pen-fab-toolbar,
 .pen-fab-tool-settings,
-.pen-fab-lasso-panel {
+.pen-fab-lasso-panel,
+.pen-fab-eraser-panel {
   overflow: hidden;
-  isolation: isolate;
-}
-
-.pen-fab-lasso-panel .lasso-target-label {
-  font-size: 12px;
-  line-height: 1;
-  color: var(--ui-text-muted);
-  opacity: 0.68;
-  transition: color 150ms ease, opacity 150ms ease;
-}
-
-.pen-fab-lasso-panel button[aria-pressed='true'] .lasso-target-label {
-  color: color-mix(in srgb, var(--ui-text) 72%, var(--ui-text-muted));
-  opacity: 1;
 }
 
 /* ─── Phone layout (narrow + coarse pointer; iPad unchanged) ─────────────── */
@@ -1768,17 +2008,13 @@ html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone {
   pointer-events: none;
 }
 
-html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone:not(.pen-fab-menu--visible) {
-  transform: scale(0.94);
+html[data-layout='phone'] .pen-fab-menu--phone.pen-fab-tool-settings,
+html[data-layout='phone'] .pen-fab-menu--phone.pen-fab-lasso-panel,
+html[data-layout='phone'] .pen-fab-menu--phone.pen-fab-eraser-panel {
+  pointer-events: auto;
 }
 
-html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone.pen-fab-menu--visible {
-  transform: scale(0.94);
-}
-
-html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-tool-settings,
-html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-lasso-panel,
-html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-toolbar {
+html[data-layout='phone'] .pen-fab-menu--phone.pen-fab-toolbar {
   pointer-events: auto;
 }
 
@@ -1847,6 +2083,31 @@ html[data-layout='phone'] .cutline-space-back-pill-host {
   max-width: none;
 }
 
+.space-back-pill-chevron svg {
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .space-back-pill-chevron:hover svg {
+    transform: translateX(-1.5px);
+  }
+}
+
+.space-back-pill-chevron:active svg {
+  transform: translateX(-2px) scale(0.92);
+  transition-duration: 0.08s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .space-back-pill-chevron svg {
+    transition: none;
+  }
+
+  .space-back-pill-chevron:active svg {
+    transform: none;
+  }
+}
+
 /* Expand the back-arrow hit target beyond its visible 32×32 bounds.
    Asymmetric inset keeps the right edge close so taps on the name still hit the name. */
 .space-back-pill-chevron::before {
@@ -1868,31 +2129,25 @@ html[data-layout='phone'] .cutline-space-back-pill-host {
 }
 
 html[data-layout='phone'] [data-plus-fab] {
-  z-index: 22;
+  z-index: 26;
 }
 
 html[data-layout='phone'] [data-pen-fab] {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  z-index: 23;
+  z-index: 27;
   opacity: 0;
-  filter: blur(6px);
-  transition: opacity 0.16s ease-out, filter 0.16s ease-out;
+  transition: opacity 0.16s ease-out;
 }
 
 html[data-layout='phone'] [data-pen-fab].pen-fab-host--visible {
   opacity: 1;
-  filter: blur(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
   html[data-layout='phone'] [data-pen-fab] {
     transition: opacity 0.12s ease-out;
-  }
-
-  html[data-layout='phone'] [data-pen-fab]:not(.pen-fab-host--visible) {
-    filter: none;
   }
 }
 
@@ -1986,6 +2241,10 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   --canvas-void-grid-size: 900px;
   --canvas-void-grid-opacity: 0.36;
   --canvas-void-grid-opacity-fisheye: 0.94;
+  /* Selection dim + canvas customize backdrop — keep in sync with tokens.ts CANVAS_FOCUS_BACKDROP_BLUR_PX. */
+  --canvas-focus-backdrop-blur: 12px;
+  --canvas-focus-backdrop-dim-light: rgba(0, 0, 0, 0.06);
+  --canvas-focus-backdrop-dim-dark: rgba(0, 0, 0, 0.18);
   --ui-accent: #5a7ab0;
   --ui-divider: rgba(20, 30, 50, 0.06);
   --ui-divider-vertical: rgba(20, 30, 50, 0.08);
@@ -1995,7 +2254,6 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   --vignette-rgba-mid: rgba(26, 34, 48, 0.15);
   --vignette-rgba-soft: rgba(26, 34, 48, 0.06);
   --vignette-glow-rgba: rgba(18, 24, 36, 0.42);
-  --study-hub-focus-scrim: rgba(26, 34, 48, 0.14);
   --glass-shadow: 0 4px 24px rgba(20, 30, 50, 0.08);
   --card-shadow: 0 8px 40px rgba(20, 30, 50, 0.14);
   --sticky-rest-shadow: 0 2px 10px rgba(20, 30, 50, 0.12);
@@ -2005,19 +2263,19 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   --pill-surface: rgba(255, 255, 255, 0.45);
   --chrome-solid-bg: #ffffff;
   --pill-icon-halo: #ffffff;
-  --canvas-handle-color: rgba(30, 35, 45, 0.32);
-  --canvas-handle-color-hover: rgba(30, 35, 45, 0.48);
-  --canvas-resize-handle-color-hover: rgba(30, 35, 45, 0.4);
-  --canvas-handle-opacity: 0.38;
+  --canvas-handle-color: rgba(30, 35, 45, 0.42);
+  --canvas-handle-color-hover: rgba(30, 35, 45, 0.58);
+  --canvas-resize-handle-color-hover: rgba(30, 35, 45, 0.5);
+  --canvas-handle-opacity: 0.58;
   --studio-centre-handle-opacity: 0.26;
   --studio-centre-handle-opacity-hover: 0.4;
   --studio-centre-handle-opacity-active: 0.52;
-  --canvas-resize-handle-opacity: 0.28;
-  --canvas-handle-opacity-hover: 0.62;
-  --canvas-resize-handle-opacity-hover: 0.48;
-  --canvas-handle-opacity-active: 0.72;
+  --canvas-resize-handle-opacity: 0.48;
+  --canvas-handle-opacity-hover: 0.78;
+  --canvas-resize-handle-opacity-hover: 0.64;
+  --canvas-handle-opacity-active: 0.82;
   --canvas-text-item-outline: rgba(30, 35, 45, 0.22);
-  --canvas-text-handle-opacity: 0.42;
+  --canvas-text-handle-opacity: 0.62;
   --lasso-selection-border: rgba(0, 0, 0, 0.11);
   --lasso-draw-fill: rgba(0, 0, 0, 0.035);
   --lasso-draw-stroke: rgba(0, 0, 0, 0.4);
@@ -2050,9 +2308,9 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
      unmodified base dim, ramping into a darker corner. */
   --ui-customize-vignette: radial-gradient(
     ellipse at center,
-    rgba(0, 0, 0, 0) 35%,
-    rgba(0, 0, 0, 0.22) 70%,
-    rgba(0, 0, 0, 0.42) 100%
+    rgba(0, 0, 0, 0) 22%,
+    rgba(0, 0, 0, 0.46) 62%,
+    rgba(0, 0, 0, 0.76) 100%
   );
 }
 
@@ -2060,9 +2318,9 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   --ui-customize-backdrop: rgba(0, 0, 0, 0.44);
   --ui-customize-vignette: radial-gradient(
     ellipse at center,
-    rgba(0, 0, 0, 0) 35%,
-    rgba(0, 0, 0, 0.26) 70%,
-    rgba(0, 0, 0, 0.5) 100%
+    rgba(0, 0, 0, 0) 22%,
+    rgba(0, 0, 0, 0.54) 62%,
+    rgba(0, 0, 0, 0.88) 100%
   );
   --menu-row-hover-bg: rgba(255, 255, 255, 0.05);
   --menu-row-hover-fill: rgba(255, 255, 255, 0.05);
@@ -2205,23 +2463,22 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   --vignette-rgba-mid: rgba(236, 240, 248, 0.039);
   --vignette-rgba-soft: rgba(236, 240, 248, 0.017);
   --vignette-glow-rgba: rgba(248, 250, 255, 0.088);
-  --study-hub-focus-scrim: rgba(8, 10, 16, 0.28);
   --profile-cohort-bg: #121820;
   --profile-cohort-border: rgba(0, 0, 0, 0.45);
   --profile-cohort-text: rgba(240, 244, 252, 0.94);
   --canvas-handle-color: rgba(228, 232, 242, 0.55);
   --canvas-handle-color-hover: rgba(240, 244, 252, 0.82);
   --canvas-resize-handle-color-hover: rgba(235, 240, 250, 0.68);
-  --canvas-handle-opacity: 0.5;
+  --canvas-handle-opacity: 0.58;
   --studio-centre-handle-opacity: 0.34;
   --studio-centre-handle-opacity-hover: 0.5;
   --studio-centre-handle-opacity-active: 0.62;
-  --canvas-resize-handle-opacity: 0.42;
-  --canvas-handle-opacity-hover: 0.74;
-  --canvas-resize-handle-opacity-hover: 0.6;
+  --canvas-resize-handle-opacity: 0.5;
+  --canvas-handle-opacity-hover: 0.8;
+  --canvas-resize-handle-opacity-hover: 0.66;
   --canvas-handle-opacity-active: 0.86;
   --canvas-text-item-outline: rgba(228, 232, 242, 0.3);
-  --canvas-text-handle-opacity: 0.56;
+  --canvas-text-handle-opacity: 0.64;
   --lasso-selection-border: rgba(228, 232, 242, 0.42);
   --lasso-draw-fill: rgba(255, 255, 255, 0.05);
   --lasso-draw-stroke: rgba(228, 232, 242, 0.52);
@@ -2298,6 +2555,15 @@ textarea,
   pointer-events: auto;
 }
 
+/* Study hub menu-focus — below bottom-right FABs (26+) but above canvas (0). */
+.cutline-chrome-overlays {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  pointer-events: none;
+  overflow: visible;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cutline-app-shell {
     transition: none;
@@ -2322,6 +2588,13 @@ input::placeholder {
   --studio-centre-active-ease: cubic-bezier(0.22, 0.94, 0.28, 1);
   --studio-centre-glow-duration: 420ms;
   --studio-centre-glow-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Overview hyper path — studio plate only inside the composited transform layer. */
+.cutline-canvas-plate-shell {
+  position: relative;
+  background: transparent;
+  overflow: visible;
 }
 
 /* Dim void + margin while repositioning; studio draw-target stays above (z-index 1). */
@@ -2438,6 +2711,298 @@ html[data-fisheye-engaged] .cutline-canvas-void-grid {
   will-change: transform;
   filter: blur(var(--canvas-motion-blur, 0px));
   transition: filter 160ms ease-out;
+  overflow: visible;
+}
+
+.cutline-canvas-viewport .canvas-pan-shell {
+  position: relative;
+  z-index: 1;
+}
+
+/* Viewport-fixed void — synced to virtual pan in overview hyper mode. */
+.cutline-canvas-void-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background-color: transparent;
+}
+
+.cutline-canvas-void-backdrop__grid {
+  position: absolute;
+  inset: 0;
+  opacity: var(--canvas-void-grid-opacity, 0.36);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--ui-text) 30%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--ui-text) 30%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: var(--canvas-void-grid-step, 900px) var(--canvas-void-grid-step, 900px);
+  background-position: var(--canvas-void-grid-offset-x, 0px)
+    var(--canvas-void-grid-offset-y, 0px);
+  mask-image: radial-gradient(
+    ellipse 50% 50% at 50% 50%,
+    #000 var(--canvas-void-grid-mask-inner, 32.3%),
+    transparent 100%
+  );
+}
+
+html[data-fisheye-engaged] .cutline-canvas-void-backdrop__grid {
+  opacity: var(--canvas-void-grid-opacity-fisheye, 0.94);
+}
+
+.cutline-canvas-void-backdrop__dim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--studio-centre-dim-duration, 560ms)
+    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
+  background: color-mix(in srgb, #000 7%, transparent);
+}
+
+html[data-studio-centre-dragging] .cutline-canvas-void-backdrop__dim {
+  opacity: 1;
+}
+
+html[data-selection-blur-active] .cutline-canvas-void-backdrop__grid {
+  -webkit-backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
+  backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
+}
+
+/*
+ * Overview hyper path — defer lighter widgets only. Study hubs and images use
+ * nested transforms / raster layers; content-visibility delays their layout
+ * until exit settling ends, which reads as a late positional snap.
+ */
+html[data-canvas-overview-hyper]:not([data-canvas-overview-transitioning])
+  [data-canvas-item]:not([data-canvas-item='study_hub']):not([data-canvas-item='image']) {
+  contain: strict;
+  content-visibility: auto;
+}
+
+html[data-canvas-overview-transitioning]
+  :is([data-canvas-item='study_hub'], [data-canvas-item='image']),
+html[data-canvas-overview-exit-settling]
+  :is([data-canvas-item='study_hub'], [data-canvas-item='image']),
+html[data-canvas-overview-frost-reveal]
+  :is([data-canvas-item='study_hub'], [data-canvas-item='image']) {
+  content-visibility: visible !important;
+  contain: none !important;
+}
+
+/*
+ * Overview void pan — drop expensive paint while the plate layer translates.
+ * Scoped to hyper overview + void pan only (not studio plate drag).
+ */
+html[data-fisheye-engaged][data-canvas-overview-hyper][data-canvas-panning]:not([data-studio-centre-dragging])
+  [data-canvas-item] {
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+html[data-fisheye-engaged][data-canvas-overview-hyper][data-canvas-panning]:not([data-studio-centre-dragging])
+  :is([data-canvas-item='study_hub'], [data-canvas-item='image']) {
+  contain: paint;
+}
+
+/*
+ * Overview exit — keep plate frame + item handles hidden until exit fully completes,
+ * then fade them in together (see beginExitSettling → setEngaged(false)).
+ */
+html[data-canvas-overview-exiting] .studio-centre-bounds__edge,
+html[data-canvas-overview-exiting] .canvas-item-drag-handle-wrapper,
+html[data-canvas-overview-exiting] .canvas-item-drag-handle,
+html[data-canvas-overview-exiting] .canvas-item-resize-handle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Avoid dark outer-bg flash while viewport void backdrop still carries the grid. */
+html[data-canvas-overview-exiting] .cutline-canvas-expanded,
+html[data-canvas-overview-chrome-reveal] .cutline-canvas-expanded {
+  background-color: transparent;
+}
+
+html[data-canvas-overview-chrome-reveal]:not([data-canvas-overview-chrome-reveal-active])
+  .studio-centre-bounds__edge,
+html[data-canvas-overview-chrome-reveal]:not([data-canvas-overview-chrome-reveal-active])
+  .canvas-item-drag-handle-wrapper,
+html[data-canvas-overview-chrome-reveal]:not([data-canvas-overview-chrome-reveal-active])
+  .canvas-item-drag-handle,
+html[data-canvas-overview-chrome-reveal]:not([data-canvas-overview-chrome-reveal-active])
+  .canvas-item-resize-handle {
+  opacity: 0;
+}
+
+html[data-canvas-overview-chrome-reveal-active] .studio-centre-bounds__edge,
+html[data-canvas-overview-chrome-reveal-active] .canvas-item-drag-handle-wrapper,
+html[data-canvas-overview-chrome-reveal-active] .canvas-item-drag-handle,
+html[data-canvas-overview-chrome-reveal-active] .canvas-item-resize-handle {
+  transition: opacity 480ms ease-out;
+}
+
+/*
+ * Frosted canvas items — swap blur for an opaque surface in overview so the
+ * void grid does not read through (WebKit also ghosts backdrop-filter on stale
+ * compositor layers while zoomed out). Instant snap — not during frost crossfades.
+ */
+html[data-fisheye-engaged]:not([data-canvas-overview-frost-conceal])
+  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+html[data-canvas-overview-transitioning]:not([data-canvas-overview-frost-conceal])
+  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+html[data-canvas-overview-hyper]:not([data-canvas-overview-frost-conceal])
+  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+html[data-canvas-overview-exit-settling]
+  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+html[data-fisheye-engaged]:not([data-canvas-overview-frost-conceal])
+  [data-canvas-item='study_hub']
+  .study-hub-widget,
+html[data-canvas-overview-transitioning]:not([data-canvas-overview-frost-conceal])
+  [data-canvas-item='study_hub']
+  .study-hub-widget,
+html[data-canvas-overview-hyper]:not([data-canvas-overview-frost-conceal])
+  [data-canvas-item='study_hub']
+  .study-hub-widget,
+html[data-canvas-overview-exit-settling] [data-canvas-item='study_hub'] .study-hub-widget,
+html[data-fisheye-engaged]:not([data-canvas-overview-frost-conceal]) .ui-space-glass,
+html[data-canvas-overview-transitioning]:not([data-canvas-overview-frost-conceal])
+  .ui-space-glass,
+html[data-canvas-overview-hyper]:not([data-canvas-overview-frost-conceal]) .ui-space-glass,
+html[data-canvas-overview-exit-settling] .ui-space-glass {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+  background: var(--chrome-solid-bg) !important;
+  --study-hub-surface-bg: var(--chrome-solid-bg);
+}
+
+/*
+ * Overview enter — ease frosted glass to solid (mirror of exit frost-reveal).
+ * Hold frosted on frost-conceal, then frost-conceal-active animates on next frame.
+ */
+html[data-canvas-overview-frost-conceal]
+  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+html[data-canvas-overview-frost-conceal] [data-canvas-item='study_hub'] .study-hub-widget,
+html[data-canvas-overview-frost-conceal] .ui-space-glass {
+  transition:
+    backdrop-filter var(--overview-frost-crossfade-duration, 320ms)
+      cubic-bezier(0.4, 0, 0.2, 1),
+    -webkit-backdrop-filter var(--overview-frost-crossfade-duration, 320ms)
+      cubic-bezier(0.4, 0, 0.2, 1),
+    background var(--overview-frost-crossfade-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1),
+    filter var(--overview-frost-crossfade-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html[data-canvas-overview-frost-conceal] .ui-space-glass {
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  filter: saturate(var(--ui-saturate, 1));
+  background: var(--glass-bg) !important;
+}
+
+html[data-canvas-overview-frost-conceal-active]
+  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+html[data-canvas-overview-frost-conceal-active]
+  [data-canvas-item='study_hub']
+  .study-hub-widget,
+html[data-canvas-overview-frost-conceal-active]
+  .ui-space-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  filter: none;
+  background: var(--chrome-solid-bg);
+  --study-hub-surface-bg: var(--chrome-solid-bg);
+}
+
+html[data-canvas-overview-frost-conceal-active] .ui-space-glass {
+  background: var(--chrome-solid-bg) !important;
+}
+
+@media (pointer: coarse) {
+  html[data-canvas-overview-frost-conceal] .ui-space-glass {
+    -webkit-backdrop-filter: blur(8px) saturate(130%);
+    backdrop-filter: blur(8px) saturate(130%);
+  }
+}
+
+/*
+ * Exit settle tail — ease solid surfaces back to frosted glass (matches study-hub
+ * resize crossfade timing). Hold solid on frost-reveal, then frost-reveal-active
+ * animates blur/background on the next frame so the transition has a start state.
+ */
+html[data-canvas-overview-frost-reveal]
+  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+html[data-canvas-overview-frost-reveal] [data-canvas-item='study_hub'] .study-hub-widget,
+html[data-canvas-overview-frost-reveal] .ui-space-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  filter: none;
+  background: var(--chrome-solid-bg);
+  --study-hub-surface-bg: var(--chrome-solid-bg);
+  transition:
+    backdrop-filter var(--overview-frost-crossfade-duration, 320ms)
+      cubic-bezier(0.4, 0, 0.2, 1),
+    -webkit-backdrop-filter var(--overview-frost-crossfade-duration, 320ms)
+      cubic-bezier(0.4, 0, 0.2, 1),
+    background var(--overview-frost-crossfade-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1),
+    filter var(--overview-frost-crossfade-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html[data-canvas-overview-frost-reveal] [data-canvas-item='study_hub'] .study-hub-widget {
+  background: var(--chrome-solid-bg);
+}
+
+html[data-canvas-overview-frost-reveal-active] .ui-space-glass {
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  filter: saturate(var(--ui-saturate, 1));
+  background: var(--glass-bg) !important;
+}
+
+@media (pointer: coarse) {
+  html[data-canvas-overview-frost-reveal-active] .ui-space-glass {
+    -webkit-backdrop-filter: blur(8px) saturate(130%);
+    backdrop-filter: blur(8px) saturate(130%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-canvas-overview-frost-reveal]
+    :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+  html[data-canvas-overview-frost-reveal] [data-canvas-item='study_hub'] .study-hub-widget,
+  html[data-canvas-overview-frost-reveal] .ui-space-glass,
+  html[data-canvas-overview-frost-conceal]
+    :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
+  html[data-canvas-overview-frost-conceal] [data-canvas-item='study_hub'] .study-hub-widget,
+  html[data-canvas-overview-frost-conceal] .ui-space-glass {
+    transition-duration: 0ms !important;
+  }
+}
+
+/* Framer layout projection clones read as ghost previews during overview exit. */
+html[data-fisheye-engaged] [data-projection-id],
+html[data-canvas-overview-transitioning] [data-projection-id],
+html[data-canvas-overview-exit-settling] [data-projection-id],
+html[data-canvas-overview-frost-reveal] [data-projection-id],
+html[data-canvas-overview-frost-conceal] [data-projection-id] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+html[data-fisheye-engaged] [data-canvas-item],
+html[data-canvas-overview-transitioning] [data-canvas-item],
+html[data-canvas-overview-exit-settling] [data-canvas-item],
+html[data-canvas-overview-frost-reveal] [data-canvas-item],
+html[data-canvas-overview-frost-conceal] [data-canvas-item] {
+  transition: none !important;
 }
 
 /* Menu / plate fly-to — snap blur to per-frame velocity (no filter lag). */
@@ -2642,6 +3207,11 @@ html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transfor
   margin-top: -5px;
 }
 
+/* Emoji glyphs — 20% desaturation (matches imported media). */
+[data-ui-customization-tray] .ui-emoji-picker-root button > span[aria-hidden] {
+  filter: saturate(0.8);
+}
+
 [data-ui-customization-tray] [data-ui-draw-canvas] {
   cursor: crosshair;
 }
@@ -2726,6 +3296,165 @@ html[data-tool-mode='lasso'] [data-ui-customization-tray] [data-ui-draw-canvas] 
   transition-duration: 90ms;
 }
 
+.study-hub-menu-dismiss--outside {
+  z-index: 5;
+}
+
+.study-hub-menu-dismiss--active {
+  color: var(--ui-text);
+  background: color-mix(in srgb, var(--glass-bg) 72%, var(--ui-text));
+  box-shadow: var(--card-shadow);
+}
+
+.study-hub-menu-focus-frame {
+  pointer-events: none;
+}
+
+.study-hub-menu-focus-frame .study-hub-menu-dismiss,
+.study-hub-menu-focus-frame .study-hub-menu-focus-frame__controls,
+.study-hub-menu-focus-frame .study-hub-menu-focus-frame__hub,
+.study-hub-menu-focus-frame .study-hub-menu-focus-frame__scratch-wrap,
+.study-hub-menu-focus-frame .study-hub-menu-focus-frame__split {
+  pointer-events: auto;
+}
+
+.study-hub-menu-focus-frame__split {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  user-select: none;
+}
+
+.study-hub-menu-focus-frame__split::before {
+  content: '';
+  width: 2px;
+  height: 72%;
+  margin: auto 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-text) 22%, transparent);
+  opacity: 0.55;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    width 120ms ease;
+}
+
+.study-hub-menu-focus-frame__split:hover::before,
+.study-hub-menu-focus-frame__split:focus-visible::before,
+.study-hub-menu-focus-frame[data-study-hub-split-dragging] .study-hub-menu-focus-frame__split::before {
+  width: 3px;
+  opacity: 0.95;
+  background: color-mix(in srgb, var(--ui-text) 42%, transparent);
+}
+
+.study-hub-menu-focus-frame[data-study-hub-split-dragging] .study-hub-menu-focus-frame__hub,
+.study-hub-menu-focus-frame[data-study-hub-split-dragging]
+  .study-hub-menu-focus-frame__scratch-wrap {
+  transition: none !important;
+}
+
+.study-hub-menu-focus-frame__hub--fluid {
+  container-type: inline-size;
+}
+
+.study-hub-menu-focus-frame__hub-inner {
+  position: absolute;
+  inset: 0;
+}
+
+.study-hub-menu-focus-frame__hub--fluid .study-hub-widget {
+  transition:
+    padding 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.study-hub-menu-focus-frame__hub--fluid .study-hub-header,
+.study-hub-menu-focus-frame__hub--fluid .study-hub-practice,
+.study-hub-menu-focus-frame__hub--fluid .study-hub-scroll {
+  transition:
+    padding 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.study-hub-scroll__panel {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .study-hub-menu-focus-frame__hub--fluid .study-hub-widget,
+  .study-hub-menu-focus-frame__hub--fluid .study-hub-header,
+  .study-hub-menu-focus-frame__hub--fluid .study-hub-practice,
+  .study-hub-menu-focus-frame__hub--fluid .study-hub-scroll {
+    transition-duration: 0.01ms;
+  }
+}
+
+@container (max-width: 400px) {
+  .study-hub-menu-focus-frame__hub--fluid .study-hub-widget {
+    --study-hub-inset: 14px;
+  }
+}
+
+@container (max-width: 320px) {
+  .study-hub-menu-focus-frame__hub--fluid .study-hub-widget {
+    --study-hub-inset: 12px;
+  }
+
+  .study-hub-menu-focus-frame__hub--fluid .study-hub-header {
+    gap: 10px;
+    padding-top: 16px;
+  }
+
+  .study-hub-menu-focus-frame__hub--fluid .study-hub-header__progress {
+    width: 72px;
+  }
+}
+
+.study-hub-menu-focus-frame__controls {
+  z-index: 5;
+}
+
+.study-hub-menu-focus-frame__scratch-wrap {
+  z-index: 1;
+}
+
+.study-hub-scratch-pad {
+  width: 100%;
+  height: 100%;
+  background: var(--chrome-solid-bg);
+  box-shadow: var(--glass-shadow);
+  touch-action: none;
+  overflow: hidden;
+}
+
+html[data-tool-mode='pen'] .study-hub-scratch-pad,
+html[data-tool-mode='pen'][data-space-draw] .study-hub-scratch-pad {
+  cursor: url('/cursors/pen.svg') 1 14, crosshair;
+}
+
+html[data-tool-mode='highlighter'] .study-hub-scratch-pad,
+html[data-tool-mode='highlighter'][data-space-draw] .study-hub-scratch-pad {
+  cursor: url('/cursors/highlighter.svg') 2 11, crosshair;
+}
+
+html[data-tool-mode='erase'] .study-hub-scratch-pad,
+html[data-tool-mode='erase'][data-space-draw] .study-hub-scratch-pad {
+  cursor: url('/cursors/eraser.svg') 2 11, crosshair;
+}
+
+html[data-tool-mode='lasso'] .study-hub-scratch-pad,
+html[data-tool-mode='lasso'][data-space-draw] .study-hub-scratch-pad {
+  cursor: var(--cursor-default);
+}
+
+html[data-space-draw] .study-hub-scratch-pad {
+  cursor: crosshair;
+}
+
+html[data-theme='dark'] .study-hub-scratch-pad {
+  background: var(--chrome-solid-bg);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .study-hub-menu-dismiss {
     transition-duration: 0.01ms;
@@ -2734,9 +3463,7 @@ html[data-tool-mode='lasso'] [data-ui-customization-tray] [data-ui-draw-canvas] 
 
 .study-hub-widget--resizing,
 .study-hub-widget--perf-drag {
-  --study-hub-glass-blur: 0px;
-  --study-hub-glass-saturate: 100%;
-  --study-hub-surface-bg: var(--card-bg);
+  --study-hub-surface-bg: var(--chrome-solid-bg);
 }
 
 .study-hub-widget--perf-drag.plus-fab-menu-glass {
@@ -2835,9 +3562,10 @@ html[data-theme='dark'] .study-subject-menu-row__track {
   font-weight: 500;
   color: var(--ui-text-muted);
   transition:
-    color 150ms ease,
-    background 150ms ease,
-    box-shadow 150ms ease;
+    color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    font-weight 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .study-hub-mode-tab:hover {
@@ -2860,10 +3588,14 @@ html[data-theme='dark'] .study-hub-mode-tab--active {
 }
 
 .study-hub-exam-menu {
+  margin-top: 0;
+}
+
+.study-hub-exam-menu__inner {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 16px;
-  margin-top: 12px;
+  padding-top: 12px;
 }
 
 .study-hub-exam-row {
@@ -2904,7 +3636,11 @@ html[data-theme='dark'] .study-hub-mode-tab--active {
   font-size: 13px;
   font-weight: 500;
   color: var(--ui-text-muted);
-  transition: color 150ms ease, background 150ms ease;
+  transition:
+    color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    font-weight 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .study-hub-segment:hover {
@@ -3080,7 +3816,7 @@ html[data-theme='dark'] .study-hub-mode-tab--active {
   padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--card-bg) 72%, transparent);
+  background: color-mix(in srgb, var(--card-bg) 48%, transparent);
   cursor: var(--cursor-default);
   font-family: inherit;
   text-align: left;
@@ -3230,38 +3966,38 @@ html[data-theme='dark'] .plus-fab-menu-glass {
     inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 }
 
-/* Study hub canvas widget — gradual frosted ↔ solid during resize. */
-.study-hub-widget.plus-fab-menu-glass {
-  --study-hub-glass-blur: 64px;
-  --study-hub-glass-saturate: 240%;
-  --study-hub-surface-bg: var(--glass-bg);
-  -webkit-backdrop-filter: blur(var(--study-hub-glass-blur)) saturate(var(--study-hub-glass-saturate));
-  backdrop-filter: blur(var(--study-hub-glass-blur)) saturate(var(--study-hub-glass-saturate));
+/*
+ * Menu-focus portal — solid surface (study hubs never use frosted glass).
+ */
+.study-hub-menu-focus-portal .study-hub-canvas-shell.plus-fab-menu-glass {
+  background: var(--chrome-solid-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Study hub canvas widget — solid surface, no frosted backdrop-filter. */
+:is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  filter: none;
+  background: var(--chrome-solid-bg);
+  --study-hub-surface-bg: var(--chrome-solid-bg);
   transition:
-    backdrop-filter 320ms cubic-bezier(0.4, 0, 0.2, 1),
-    -webkit-backdrop-filter 320ms cubic-bezier(0.4, 0, 0.2, 1),
     background 320ms cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 320ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Lift drop shadow lives on the rounded shell (CanvasItemShell); keep inset rim only here. */
-[data-canvas-item='study_hub'][data-active] .study-hub-widget.plus-fab-menu-glass {
+[data-canvas-item='study_hub'][data-active] .study-hub-canvas-shell.plus-fab-menu-glass {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1px 0 rgba(255, 255, 255, 0.12);
 }
 
-html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-widget.plus-fab-menu-glass {
+html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-canvas-shell.plus-fab-menu-glass {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     inset 0 -1px 0 rgba(255, 255, 255, 0.04);
-}
-
-@media (pointer: coarse) {
-  .study-hub-widget.plus-fab-menu-glass {
-    --study-hub-glass-blur: 36px;
-    --study-hub-glass-saturate: 210%;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3271,7 +4007,7 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-w
 }
 
 @media (pointer: coarse) {
-  .plus-fab-menu-glass {
+  .plus-fab-menu-glass:not(.study-hub-canvas-shell) {
     -webkit-backdrop-filter: blur(36px) saturate(210%);
     backdrop-filter: blur(36px) saturate(210%);
   }
@@ -3284,6 +4020,22 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-w
   .ui-chrome-card {
     -webkit-backdrop-filter: blur(28px) saturate(185%);
     backdrop-filter: blur(28px) saturate(185%);
+  }
+}
+
+/* Shortcut overlay — fade the glass panel itself (keeps backdrop-filter intact). */
+.study-hub-ephemeral-overlay__panel {
+  opacity: 0;
+  transition: opacity 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.study-hub-ephemeral-overlay__panel.is-visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .study-hub-ephemeral-overlay__panel {
+    transition-duration: 0.01ms;
   }
 }
 
@@ -3328,11 +4080,7 @@ html[data-canvas-panning] .ui-space-glass {
 }
 
 html[data-canvas-panning] .study-hub-widget.plus-fab-menu-glass {
-  --study-hub-glass-blur: 0px;
-  --study-hub-glass-saturate: 100%;
   transition:
-    backdrop-filter 120ms ease-in,
-    -webkit-backdrop-filter 120ms ease-in,
     background 120ms ease-in,
     box-shadow 120ms ease-in;
 }
@@ -3344,6 +4092,31 @@ html[data-canvas-panning] .study-hub-widget.plus-fab-menu-glass {
 .canvas-item-drag-handle,
 .canvas-item-resize-handle {
   transition: opacity 200ms ease-in-out;
+}
+
+/* Sticky embedded-image overflow ghost — fades with selection (not instant mount). */
+[data-sticky-embedded-overflow] {
+  opacity: 0;
+  transition:
+    opacity var(--sticky-overflow-fade-out, 0.34s)
+    var(--sticky-overflow-fade-out-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+[data-sticky-embedded-overflow][data-revealed] {
+  opacity: 1;
+  transition:
+    opacity var(--sticky-overflow-fade-in, 0.48s)
+    var(--sticky-overflow-fade-in-ease, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+[data-sticky-embedded-overflow][data-instant] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-sticky-embedded-overflow] {
+    transition: none;
+  }
 }
 
 html[data-canvas-panning] .canvas-item-drag-handle-wrapper,
@@ -3366,19 +4139,24 @@ html[data-studio-strokes-bleed] .cutline-draw-target,
   overflow: visible;
 }
 
-html[data-selection-blur-active] .cutline-draw-target--positioned {
+html[data-selection-blur-active] .cutline-draw-target--positioned,
+html[data-selection-blur-active] .cutline-draw-target--pocket {
   isolation: auto;
 }
 
-/* Blur canvas behind selection (no saturate — that boosted the whole background). */
-.ui-selection-depth {
-  -webkit-backdrop-filter: blur(7px);
-  backdrop-filter: blur(7px);
+html[data-selection-blur-active] .pocket-strip-surface {
+  isolation: auto;
 }
 
-/* Study-hub menu focus — extra dim on top of the selection blur. */
-.ui-selection-depth--menu-focus {
-  background: var(--study-hub-focus-scrim);
+/* Blur + dim canvas behind selection — matches canvas customize backdrop. */
+.ui-selection-depth {
+  background: var(--canvas-focus-backdrop-dim-light);
+  -webkit-backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
+  backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
+}
+
+html[data-theme='dark'] .ui-selection-depth {
+  background: var(--canvas-focus-backdrop-dim-dark);
 }
 
 [data-canvas-item-z-menu] button {
@@ -3427,12 +4205,6 @@ html[data-selection-blur-active] .cutline-draw-target--positioned {
 .canvas-item-z-pulse-back {
   animation: canvas-item-z-pulse-back 340ms ease-out;
   transform-origin: center center;
-}
-
-.space-preview-adjust {
-  box-shadow:
-    inset 0 0 0 1px var(--glass-border),
-    0 0 0 2px color-mix(in srgb, var(--ui-accent, #5b8def) 42%, transparent);
 }
 
 .space-preview-vignette {
@@ -3515,6 +4287,68 @@ html[data-selection-blur-active] .cutline-draw-target--positioned {
 }
 
 /* --- Pencil-hold tool pill (portaled; solid — no backdrop-filter on motion layer) --- */
+
+.pen-tool-pill-settings {
+  border-radius: 16px;
+  isolation: isolate;
+}
+
+/* ─── Lasso target picker (pill + pen FAB) ─────────────────────────────────── */
+
+.lasso-target-settings--pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+}
+
+.lasso-target-settings__pill-track {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--tool-settings-swatch-track-bg);
+  box-sizing: border-box;
+}
+
+.lasso-target-settings__pill-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  color: var(--ui-text-muted);
+  transition:
+    background-color 120ms ease,
+    color 150ms ease,
+    transform 120ms ease;
+}
+
+.lasso-target-settings__pill-btn:hover {
+  background: var(--menu-row-hover-fill);
+  color: var(--ui-text);
+}
+
+.lasso-target-settings__pill-btn[aria-pressed='true'] {
+  background: var(--ui-divider-vertical);
+  color: color-mix(in srgb, var(--ui-text) 88%, var(--ui-text-muted));
+}
+
+.pen-fab-lasso-panel,
+.pen-fab-eraser-panel {
+  width: 100%;
+  box-sizing: border-box;
+}
 
 .pen-tool-pill {
   position: relative;
@@ -3643,6 +4477,7 @@ html.canvas-item-drag-active .canvas-item-drag-handle {
   opacity: var(--canvas-handle-opacity-active);
 }
 
+html[data-canvas-item-dragging] [data-space-preview],
 html[data-multi-touch] .canvas-item-drag-handle,
 html[data-multi-touch] .canvas-item-resize-handle {
   pointer-events: none;
@@ -3689,6 +4524,12 @@ html[data-multi-touch] .canvas-item-resize-handle {
 
 .canvas-text-editor {
   font-weight: 400;
+}
+
+[data-canvas-item='text'][data-selected] .canvas-text-editor,
+[data-canvas-item='sticky'][data-selected] .canvas-text-editor {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 [data-canvas-item='text'] .canvas-text-editor {
@@ -3859,7 +4700,7 @@ html[data-multi-touch] .canvas-item-resize-handle {
   initial-value: 1;
 }
 
-html[data-ui-customize='1'] [data-ui-anchor] {
+html[data-ui-customize='1'] [data-ui-anchor]:not([data-ui-canvas-item-customize-lift]):not([data-ui-anchor^='canvas-item:']) {
   --ui-focus-tx: 0px;
   --ui-focus-ty: 0px;
   --ui-focus-scale: 1;
@@ -3891,8 +4732,34 @@ html[data-ui-customize='1'] [data-ui-anchor] {
 }
 
 
-/* Focused anchor sits above the dim backdrop. */
-html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-focused='1'] {
+/* Canvas customize lift — fixed viewport placement; transform via JS + CSS transition. */
+html[data-ui-customize='1'] [data-ui-canvas-item-customize-lift] {
+  z-index: 53 !important;
+  transform-origin: top left;
+}
+
+html[data-ui-customize='1']
+  [data-ui-canvas-item-customize-lift][data-ui-anchor-motion='1'] {
+  animation: ui-anchor-motion-blur 380ms cubic-bezier(0.32, 1.2, 0.55, 1) both;
+}
+
+/* Sticky embeds sit outside the motion surface — blur only the note chrome. */
+html[data-ui-customize='1']
+  [data-ui-canvas-item-customize-lift]
+  [data-ui-customize-motion-surface][data-ui-anchor-motion='1'] {
+  animation: ui-anchor-motion-blur 380ms cubic-bezier(0.32, 1.2, 0.55, 1) both;
+}
+
+html[data-ui-customize='1']
+  [data-ui-canvas-item-customize-lift][data-ui-anchor-motion='1']:has(
+    [data-ui-customize-motion-surface]
+  ) {
+  animation: none;
+}
+
+/* Focused chrome anchor sits above the dim backdrop (not canvas-item widgets). */
+html[data-ui-customize='1']
+  [data-ui-anchor][data-ui-anchor-focused='1']:not([data-ui-anchor^='canvas-item:']) {
   z-index: 80 !important;
 }
 
@@ -3917,7 +4784,10 @@ html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-focused='1'] {
    begins inhaling from 1 → 1.018 → 1 instead of snapping to a mid-cycle
    value. The previous staggered negative `animation-delay` was the source
    of that snap (e.g. search bar resumed at ~1.005 not 1). */
-html[data-ui-customize='1']:not([data-ui-focused='1']) [data-ui-anchor] {
+/* Canvas widgets on the board (`data-ui-anchor="canvas-item:…"`) are excluded
+   from chrome breath / glow rules so the board stays visually stable. */
+html[data-ui-customize='1']:not([data-ui-focused='1'])
+  [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   animation: ui-anchor-breath 3.2s ease-in-out infinite;
 }
 
@@ -3939,6 +4809,48 @@ html[data-ui-customize='1'] [data-ui-anchor='notifications'] {
 html[data-ui-customize='1'] [data-ui-anchor='pen-fab'],
 html[data-ui-customize='1'] [data-ui-anchor='plus-fab'] {
   --ui-breath-peak: 1.06;
+}
+
+html[data-ui-canvas-item-customize-focused='1'] [data-ui-customization-drag-ghost],
+[data-ui-customization-drag-ghost] {
+  z-index: 101 !important;
+  pointer-events: none;
+}
+
+html[data-ui-canvas-item-customize-focused='1'] [data-ui-pin-toolbar] {
+  z-index: 102 !important;
+}
+
+/* Customize backdrop — canvas-item tone still uses fill + backdrop-active. */
+[data-ui-customization-backdrop] [data-ui-customize-backdrop-fill] {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0px) saturate(1);
+  -webkit-backdrop-filter: blur(0px) saturate(1);
+  transition:
+    background 880ms cubic-bezier(0.16, 1, 0.3, 1),
+    backdrop-filter 920ms cubic-bezier(0.16, 1, 0.3, 1),
+    -webkit-backdrop-filter 920ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html[data-ui-customize-backdrop-active='1']
+  [data-ui-customization-backdrop][data-ui-customize-backdrop-tone='canvas']
+  [data-ui-customize-backdrop-fill] {
+  backdrop-filter: blur(var(--canvas-focus-backdrop-blur)) saturate(1);
+  -webkit-backdrop-filter: blur(var(--canvas-focus-backdrop-blur)) saturate(1);
+}
+
+html[data-ui-customize-backdrop-active='1']
+  [data-ui-customization-backdrop][data-ui-customize-backdrop-tone='canvas'][data-theme-effective='light']
+  [data-ui-customize-backdrop-fill] {
+  background: var(--canvas-focus-backdrop-dim-light);
+}
+
+html[data-ui-customize-backdrop-active='1']
+  [data-ui-customization-backdrop][data-ui-customize-backdrop-tone='canvas'][data-theme-effective='dark']
+  [data-ui-customize-backdrop-fill] {
+  background: var(--canvas-focus-backdrop-dim-dark);
 }
 
 /* Ambient 40%-strength glow on all anchors while the customisation menu is
@@ -3973,12 +4885,12 @@ html[data-ui-customize='1']:not([data-ui-focused='1'])
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.19448));
 }
 
-/* Dark mode: −20% ambient anchor glow (brightness lift + shadow opacity). */
+/* Dark mode: softer ambient anchor glow (brightness lift + shadow opacity). */
 html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
-  [data-ui-anchor] {
-  filter: brightness(1.03)
-    drop-shadow(0 0 20px rgba(255, 255, 255, 0.095))
-    drop-shadow(0 0 6px rgba(255, 255, 255, 0.12));
+  [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
+  filter: brightness(1.024)
+    drop-shadow(0 0 20px rgba(255, 255, 255, 0.076))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.096));
 }
 
 html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
@@ -3989,15 +4901,15 @@ html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor='news'],
 html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor='notifications'] {
-  filter: brightness(1.039)
-    drop-shadow(0 0 20px rgba(255, 255, 255, 0.124))
-    drop-shadow(0 0 6px rgba(255, 255, 255, 0.156));
+  filter: brightness(1.031)
+    drop-shadow(0 0 20px rgba(255, 255, 255, 0.099))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.125));
 }
 
 /* Hover affordance in the "select an element" state — full-strength glow,
    no geometry change. Overrides the ambient glow above via :hover specificity. */
 html[data-ui-customize='1']:not([data-ui-focused='1'])
-  [data-ui-anchor]:hover {
+  [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']):hover {
   filter: brightness(1.0935)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.297))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.374));
@@ -4005,7 +4917,7 @@ html[data-ui-customize='1']:not([data-ui-focused='1'])
 
 /* Dark mode: −30% anchor hover glow (brightness lift + shadow opacity). */
 html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
-  [data-ui-anchor]:hover {
+  [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']):hover {
   filter: brightness(1.0524)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.1664))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.2096));
@@ -4049,14 +4961,14 @@ html[data-ui-customize='1']:not([data-ui-focused='1']) [data-ui-select-prompt] {
 /* Dark mode: softer halo — white drop-shadows read harsh on dark chrome. */
 @keyframes ui-select-prompt-glow-dark {
   0%, 100% {
-    filter: brightness(1.016)
-      drop-shadow(0 0 5px rgba(255, 255, 255, 0.056))
-      drop-shadow(0 0 2px rgba(255, 255, 255, 0.072));
+    filter: brightness(1.013)
+      drop-shadow(0 0 5px rgba(255, 255, 255, 0.045))
+      drop-shadow(0 0 2px rgba(255, 255, 255, 0.058));
   }
   50% {
-    filter: brightness(1.04)
-      drop-shadow(0 0 10px rgba(255, 255, 255, 0.096))
-      drop-shadow(0 0 4px rgba(255, 255, 255, 0.112));
+    filter: brightness(1.032)
+      drop-shadow(0 0 10px rgba(255, 255, 255, 0.077))
+      drop-shadow(0 0 4px rgba(255, 255, 255, 0.09));
   }
 }
 
@@ -4073,7 +4985,7 @@ html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
   100% { scale: 1; }
 }
 
-html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor] {
+html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   animation: ui-anchor-nudge-in 500ms cubic-bezier(0.32, 1.28, 0.48, 1) both;
 }
 
@@ -4090,7 +5002,7 @@ html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor='search-bar'] 
 
 /* ── Prompt hover: all anchors glow + backdrop darkens ─────────────────── */
 html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
-  [data-ui-anchor] {
+  [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   filter: brightness(1.058)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.184))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.232));
@@ -4114,7 +5026,7 @@ html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
 
 /* Dark mode prompt-hover anchor glow. */
 html[data-theme='dark'][data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
-  [data-ui-anchor] {
+  [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   filter: brightness(1.046)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.147))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.186));
@@ -4166,7 +5078,9 @@ html[data-ui-customize='1'][data-ui-prompt-hover] [data-ui-customization-backdro
   }
 }
 
-html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1'] {
+html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1']:not(
+    [data-ui-canvas-item-customize-lift]
+  ) {
   animation: ui-anchor-motion-blur 380ms cubic-bezier(0.32, 1.2, 0.55, 1) both;
 }
 
@@ -4178,22 +5092,24 @@ html[data-ui-customize='1'] [data-plus-fab] {
   z-index: 60 !important;
 }
 
-/* While an element is focused, fade the *other* anchors so the focused one
-   reads as the active surface. */
-html[data-ui-customize='1'][data-ui-focused='1']
-  [data-ui-anchor]:not([data-ui-anchor-focused='1']) {
+/* While a chrome anchor is focused, fade the *other* anchors so the focused one
+   reads as the active surface. Canvas-item customize keeps chrome at full
+   strength — only the board blurs. */
+html[data-ui-customize='1'][data-ui-focused='1']:not([data-ui-canvas-item-customize-focused='1'])
+  [data-ui-anchor]:not([data-ui-anchor-focused='1']):not([data-ui-anchor^='canvas-item:']) {
   opacity: 0.32;
 }
 
-/* Edit mode default cursor: chrome buttons act as selectable cards. */
-html[data-ui-customize='1'] [data-ui-anchor] {
-  cursor: pointer;
+html[data-ui-canvas-item-customize-focused='1']
+  [data-ui-anchor]:not([data-ui-canvas-item-customize-lift]):not([data-ui-anchor^='canvas-item:']) {
+  opacity: 1;
+  cursor: default;
 }
 
-@property --ui-pin-breath-scale {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 1;
+/* Edit mode default cursor: chrome buttons act as selectable cards. */
+html[data-ui-customize='1']:not([data-ui-canvas-item-customize-focused='1'])
+  [data-ui-anchor]:not([data-ui-canvas-item-customize-lift]):not([data-ui-anchor^='canvas-item:']) {
+  cursor: pointer;
 }
 
 /* Pin pointer events: inert while editing unfocused anchors; interactive on
@@ -4208,37 +5124,118 @@ html:not([data-ui-customize='1']) [data-ui-pin] {
   cursor: default;
 }
 
-html[data-ui-customize='1']
-  [data-ui-anchor-focused='1']
+html[data-ui-customize='1'] [data-ui-anchor-focused='1'] [data-ui-pin],
+html[data-ui-canvas-item-customize-focused='1']
+  [data-ui-canvas-item-customize-lift]
   [data-ui-pin] {
   pointer-events: auto;
 }
 
+html[data-ui-pin-dragging='1'] [data-ui-canvas-item-customize-lift] [data-ui-pin] {
+  filter: none !important;
+  transition: none !important;
+}
+
+/* Sticky customize portal remounts pins — avoid filter transition flash on handoff. */
+html[data-ui-canvas-item-customize-focused='1']
+  [data-ui-canvas-item-customize-lift]
+  [data-ui-pin] {
+  transition: filter 0ms ease-out;
+}
+
+/* Exit handoff: keep sticky ink/text/embed layering and opacity stable while the
+   on-canvas copy is revealed (pre-mounted during exit — no portal remount flash). */
+[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='lifting']
+  [data-canvas-item='sticky']
+  [data-canvas-item='image']
+  .media-item-surface,
+[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='live']
+  [data-canvas-item='sticky']
+  [data-canvas-item='image']
+  .media-item-surface {
+  opacity: 1 !important;
+  transition: opacity 0s !important;
+}
+
+html[data-ui-canvas-item-customize-handoff] [data-canvas-item='sticky'] [data-ui-customize-motion-surface] {
+  z-index: 0 !important;
+}
+
+/* Enter lift: portal content lands once — keep ink under embedded images/text. */
+[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='lifting']
+  [data-ui-customize-motion-surface],
+[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='live']
+  [data-ui-customize-motion-surface] {
+  z-index: 0 !important;
+}
+
+[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='lifting']
+  [data-canvas-item='sticky']
+  .media-item-surface,
+[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='live']
+  [data-canvas-item='sticky']
+  .media-item-surface,
+[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='lifting']
+  [data-canvas-item='sticky']
+  .canvas-text-editor,
+[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='live']
+  [data-canvas-item='sticky']
+  .canvas-text-editor {
+  transition: opacity 0s !important;
+}
+
+html[data-ui-canvas-item-customize-handoff] [data-canvas-item='sticky'] .media-item-surface,
+html[data-ui-canvas-item-customize-handoff] [data-canvas-item='sticky'] .canvas-text-editor,
+html[data-ui-canvas-item-customize-handoff] [data-canvas-item='sticky'] [data-ui-customize-motion-surface] svg,
+html[data-ui-canvas-item-customize-handoff] [data-canvas-item='sticky'] [data-canvas-item='image'] .media-item-surface {
+  transition: opacity 0s !important;
+}
+
+html[data-ui-pin-dragging='1']
+  [data-ui-canvas-item-customize-lift]
+  [data-ui-pin-asset] {
+  animation: none !important;
+  transform: none;
+  transition: none !important;
+}
+
 /* Placed pins — idle breath + hover lift on the asset layer so enter/exit
-   and body rotation stay intact. Uses @property so the scale interpolates
-   reliably (same model as ui-anchor-breath). */
+   and body rotation stay intact. Emojis use a brightness pulse instead of scale
+   — scaling color-font glyphs re-rasterizes every frame and jitters. */
 @keyframes ui-pin-idle-breathe {
   0%,
   100% {
-    --ui-pin-breath-scale: 1;
+    transform: scale(1);
   }
   50% {
-    --ui-pin-breath-scale: var(--ui-pin-breath-peak, 1.05);
+    transform: scale(var(--ui-pin-breath-peak, 1.05));
+  }
+}
+
+@keyframes ui-pin-emoji-idle-breathe {
+  0%,
+  100% {
+    filter: saturate(0.8) brightness(1);
+  }
+  50% {
+    filter: saturate(0.8) brightness(1.07);
   }
 }
 
 [data-ui-pin-anim]:not([data-ui-pin-enter='1']):not([data-ui-pin-exit='1'])
   [data-ui-pin-asset] {
   --ui-pin-breath-peak: 1.05;
-  --ui-pin-breath-scale: 1;
-  transform: scale(var(--ui-pin-breath-scale));
   transform-origin: center center;
   animation: ui-pin-idle-breathe 3.2s ease-in-out infinite;
-  transition: --ui-pin-breath-scale 220ms cubic-bezier(0.32, 1.2, 0.55, 1);
 }
 
 [data-ui-pin-kind='emoji'] [data-ui-pin-asset] {
-  --ui-pin-breath-peak: 1.085;
+  animation: ui-pin-emoji-idle-breathe 3.2s ease-in-out infinite;
+  transform: none;
+}
+
+[data-ui-customization-drag-ghost][data-ui-ghost-asset='emoji'] {
+  filter: saturate(0.8);
 }
 
 html:not([data-ui-customize='1']) [data-ui-pin] {
@@ -4248,11 +5245,13 @@ html:not([data-ui-customize='1']) [data-ui-pin] {
 
 [data-ui-pin]:hover [data-ui-pin-asset] {
   animation-play-state: paused;
-  --ui-pin-breath-scale: 1.14;
+  transform: scale(1.14);
+  transition: transform 220ms cubic-bezier(0.32, 1.2, 0.55, 1);
 }
 
 [data-ui-pin-kind='emoji']:hover [data-ui-pin-asset] {
-  --ui-pin-breath-scale: 1.18;
+  transform: scale(1.18);
+  filter: saturate(0.8);
 }
 
 html:not([data-ui-customize='1']) [data-ui-pin]:hover {
@@ -4287,7 +5286,8 @@ html[data-ui-customize='1']
   [data-ui-pin][data-ui-pin-selected]
   [data-ui-pin-asset] {
   animation-play-state: paused;
-  --ui-pin-breath-scale: 1.12;
+  transform: scale(1.12);
+  transition: transform 220ms cubic-bezier(0.32, 1.2, 0.55, 1);
 }
 
 html[data-ui-customize='1']
@@ -4298,7 +5298,8 @@ html[data-ui-customize='1']
   [data-ui-anchor-focused='1']
   [data-ui-pin-kind='emoji'][data-ui-pin-selected]
   [data-ui-pin-asset] {
-  --ui-pin-breath-scale: 1.16;
+  transform: scale(1.16);
+  filter: saturate(0.8);
 }
 
 @keyframes ui-customize-spin {
@@ -4368,22 +5369,25 @@ html[data-ui-customize='1']
 
   [data-ui-pin]:hover [data-ui-pin-asset] {
     animation-play-state: paused;
-    --ui-pin-breath-scale: 1.1;
+    transform: scale(1.1);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html[data-ui-customize='1'] [data-ui-anchor] {
+  html[data-ui-customize='1'] [data-ui-anchor]:not([data-ui-canvas-item-customize-lift]):not([data-ui-anchor^='canvas-item:']) {
     transition-duration: 0ms;
   }
-  html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1'] {
-    animation: none;
-  }
-  html[data-ui-customize='1']:not([data-ui-focused='1']) [data-ui-anchor] {
+  html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1']:not(
+      [data-ui-canvas-item-customize-lift]
+    ) {
     animation: none;
   }
   html[data-ui-customize='1']:not([data-ui-focused='1'])
-    [data-ui-anchor]:hover {
+    [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
+    animation: none;
+  }
+  html[data-ui-customize='1']:not([data-ui-focused='1'])
+    [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']):hover {
     --ui-hover-scale: 1;
   }
   html[data-ui-customize='1']
@@ -4422,7 +5426,8 @@ html[data-ui-customize='1']
 /* ─── Pin selection toolbar ───────────────────────────────────────────────── */
 
 [data-ui-pin-toolbar] {
-  /* pill shadow handled via inline style; just ensure it stacks above chrome */
+  /* Above focused anchors (z-index 80) and customize portal. */
+  z-index: 90;
   isolation: isolate;
 }
 
@@ -4442,8 +5447,151 @@ html[data-ui-customize='1']
   [data-ui-anchor-focused='1'][data-ui-anchor-drag-hover='1'] {
     animation: none;
   }
+
+  .cutline-stroke-erasing {
+    animation-duration: 0.01ms;
+  }
+}
+
+/* Eraser — brief opacity fade before stroke is removed from state. */
+@keyframes cutline-stroke-erase-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.cutline-stroke-erasing {
+  animation: cutline-stroke-erase-fade 80ms ease-out forwards;
 }
 
 textarea::-webkit-resizer {
   opacity: 0.5;
+}
+
+/* ─── Profile pinned track — now-playing preview ──────────────────────────── */
+
+.profile-track-preview__art-wrap {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  overflow: hidden;
+  display: block;
+  line-height: 0;
+}
+
+.profile-track-preview__art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform-origin: center center;
+}
+
+.profile-track-preview__title-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.profile-track-preview__title {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform-origin: left center;
+}
+
+@keyframes profile-track-art-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes profile-track-art-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 110, 160, 0);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px rgba(90, 110, 160, 0.2),
+      0 0 8px rgba(90, 110, 160, 0.12);
+  }
+}
+
+@keyframes profile-track-title-pulse {
+  0%,
+  100% {
+    opacity: 0.78;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes profile-track-title-marquee {
+  0%,
+  14%,
+  86%,
+  100% {
+    transform: translateX(0);
+  }
+  42%,
+  58% {
+    transform: translateX(calc(-1 * var(--profile-track-title-overflow, 0px)));
+  }
+}
+
+.profile-track-preview[data-profile-track-playing] .profile-track-preview__art-wrap {
+  animation: profile-track-art-halo 2.6s ease-in-out infinite;
+}
+
+.profile-track-preview[data-profile-track-playing] .profile-track-preview__art {
+  animation: profile-track-art-breathe 2.6s ease-in-out infinite;
+}
+
+.profile-track-preview[data-profile-track-playing]:not([data-title-marquee])
+  .profile-track-preview__title {
+  animation: profile-track-title-pulse 2.6s ease-in-out infinite;
+}
+
+.profile-track-preview[data-profile-track-playing][data-title-marquee]
+  .profile-track-preview__title {
+  text-overflow: clip;
+  animation: profile-track-title-marquee 7s ease-in-out infinite;
+}
+
+html[data-theme='dark'] .profile-track-preview[data-profile-track-playing]
+  .profile-track-preview__art-wrap {
+  animation: profile-track-art-halo-dark 2.6s ease-in-out infinite;
+}
+
+@keyframes profile-track-art-halo-dark {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(180, 195, 230, 0);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px rgba(180, 195, 230, 0.24),
+      0 0 10px rgba(140, 165, 220, 0.16);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-track-preview[data-profile-track-playing] .profile-track-preview__art-wrap,
+  .profile-track-preview[data-profile-track-playing] .profile-track-preview__art,
+  .profile-track-preview[data-profile-track-playing] .profile-track-preview__title {
+    animation: none;
+  }
 }

@@ -10,7 +10,7 @@ export function overviewEnterScale(
   return getCanvasOverviewScale(viewportWidth, viewportHeight)
 }
 
-/** Normal max zoom-out when leaving overview. */
+/** Pinch zoom-out floor when leaving overview (former max zoom-out). */
 export function overviewExitScale(
   viewportWidth: number,
   viewportHeight: number,

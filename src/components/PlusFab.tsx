@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { playSound } from '../sound/playSound'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Plus, StickyNote, Layers, Type, Image, LayoutGrid } from 'lucide-react'
@@ -8,11 +8,11 @@ import {
   CHROME_FROSTED_MENU_CLASS,
   CHROME_GLASS_CLASS,
   CHROME_SURFACE_BG_TRANSITION,
+  PLUS_FAB_MENU_PANEL_CLASS,
+  chromeFabMenuWrapperMotion,
   chromeFrostedMenuStyle,
-  chromeGlassSurfaceBg,
-  chromeMenuMotionY,
   chromeBottomRightFixed,
-  card,
+  chromeGlassSurfaceBg,
   font,
   glass,
   menuDividerStyle,
@@ -32,8 +32,6 @@ import { STUDY_SUBJECTS, type StudySubjectId } from './study/studyHubData'
 import UiPinHost from '../uiCustomization/UiPinHost'
 import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import {
-  bottomRightFabPlusAnimate,
-  bottomRightFabPlusTransition,
   bottomRightFabRightCss,
 } from './bottomRightFabLayout'
 
@@ -91,8 +89,6 @@ const plusFabSectionDividerStyle: React.CSSProperties = {
   ...menuDividerStyle,
   margin: '12px 16px',
 }
-
-const PLUS_FAB_MENU_MOTION = chromeMenuMotionY(4)
 
 function MainMenuContent({
   onAddToCanvas,
@@ -182,28 +178,25 @@ export default function PlusFab({
   const isPhone = useIsPhoneLayout()
   const reduceMotion = useReducedMotion()
   const canvasEditEnabled = useCanvasEditStore((s) => s.enabled)
-  const showCanvasEditSection = !isPhone || canvasEditEnabled
+  const studyHubMenuFocusRevealed = useCanvasItemsStore(
+    (s) =>
+      s.menuFocusRevealed &&
+      (s.menuFocusReturnCamera != null || s.menuFocusEphemeralSubjectId != null),
+  )
+  const showCanvasEditSection =
+    (!isPhone || canvasEditEnabled) && !studyHubMenuFocusRevealed
   const [isOpen, setIsOpen] = useState(false)
   const [fabHoverScale, setFabHoverScale] = useState(false)
   const editingUi = useUiCustomizationStore((s) => s.editing)
   const fabHoverLift = fabHoverScale && !editingUi
-  const chromeVisible = true
   const [widgetsComingSoon, setWidgetsComingSoon] = useState(false)
   const spaceWidgetCount = useCanvasItemsStore((s) => countSpaceWidgets(s.items))
 
   const containerRef = useRef<HTMLDivElement>(null)
-  const menuPanelRef = useRef<HTMLDivElement>(null)
-  const menuContentRef = useRef<HTMLDivElement>(null)
-  const [menuShellHeight, setMenuShellHeight] = useState(440)
   const isOpenRef = useRef(isOpen)
   isOpenRef.current = isOpen
 
   useCanvasMeshPauseWhile(isOpen)
-
-  function captureMenuShellHeight() {
-    const h = menuContentRef.current?.scrollHeight
-    if (h && h > 0) setMenuShellHeight(h)
-  }
 
   function closeMenu(opts?: ChromeMenuSoundOpts) {
     if (!opts?.silent && isOpenRef.current) playSound('menuClose')
@@ -239,15 +232,8 @@ export default function PlusFab({
 
   function handleStudySubjectClick(subject: StudySubjectId) {
     closeMenu({ silent: true })
-    playSound('menuOpen')
     onStudySubjectSelect?.(subject)
   }
-
-  useLayoutEffect(() => {
-    if (!isOpen) return
-    captureMenuShellHeight()
-  }, [isOpen, showSpaceOption, showCanvasEditSection])
-
 
   useEffect(() => {
     useShortcutUiStore.getState().registerPlusFab({
@@ -270,11 +256,6 @@ export default function PlusFab({
   })
 
   useEffect(() => {
-    if (chromeVisible || !isOpen) return
-    closeMenu()
-  }, [chromeVisible, isOpen])
-
-  useEffect(() => {
     if (!isOpen) return
 
     function handleKeyDown(e: KeyboardEvent) {
@@ -287,12 +268,9 @@ export default function PlusFab({
   }, [isOpen])
 
   return (
-    <motion.div
+    <div
       ref={containerRef}
       data-plus-fab=""
-      aria-hidden={!chromeVisible}
-      animate={bottomRightFabPlusAnimate(chromeVisible, reduceMotion)}
-      transition={bottomRightFabPlusTransition(chromeVisible, reduceMotion)}
       style={{
         ...chromeBottomRightFixed,
         right: bottomRightFabRightCss(),
@@ -302,39 +280,40 @@ export default function PlusFab({
         alignItems: 'flex-end',
       }}
     >
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {isOpen && (
           <motion.div
             key="fab-menu"
-            ref={menuPanelRef}
-            {...(isPhone ? phoneFabMenuSlideMotion : PLUS_FAB_MENU_MOTION)}
-            className={`theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+            data-plus-fab-menu=""
+            className={`theme-surface ${PLUS_FAB_MENU_PANEL_CLASS} ${CHROME_FROSTED_MENU_CLASS}`}
+            {...(isPhone
+              ? phoneFabMenuSlideMotion
+              : chromeFabMenuWrapperMotion(reduceMotion))}
             style={{
               ...(isPhone
                 ? phoneFabSheetStyle({ pointerEvents: 'auto' })
-                : { width: 308, marginBottom: 12 }),
+                : {
+                    width: 308,
+                    marginBottom: 12,
+                    pointerEvents: 'auto',
+                    transformOrigin: '100% 100%',
+                  }),
               ...chromeFrostedMenuStyle,
-              borderRadius: card.radius,
               fontFamily: font.family,
               color: font.colorPrimary,
               overflow: 'hidden',
-              pointerEvents: 'auto',
             }}
+            onMouseDown={(e) => e.stopPropagation()}
           >
             <SubmenuSoundScope>
-              <div
-                ref={menuContentRef}
-                style={isPhone ? undefined : { minHeight: menuShellHeight }}
-              >
-                <MainMenuContent
-                  onAddToCanvas={handleAddToCanvas}
-                  onWidgetsClick={handleWidgetsClick}
-                  onStudySubjectClick={handleStudySubjectClick}
-                  showSpaceOption={showSpaceOption}
-                  showCanvasEditSection={showCanvasEditSection}
-                  spaceWidgetCount={spaceWidgetCount}
-                />
-              </div>
+              <MainMenuContent
+                onAddToCanvas={handleAddToCanvas}
+                onWidgetsClick={handleWidgetsClick}
+                onStudySubjectClick={handleStudySubjectClick}
+                showSpaceOption={showSpaceOption}
+                showCanvasEditSection={showCanvasEditSection}
+                spaceWidgetCount={spaceWidgetCount}
+              />
             </SubmenuSoundScope>
           </motion.div>
         )}
@@ -353,25 +332,28 @@ export default function PlusFab({
           data-ui-anchor="plus-fab"
           aria-label={isOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={isOpen}
-          tabIndex={chromeVisible ? 0 : -1}
           onClick={handleFabTriggerClick}
           onMouseEnter={() => setFabHoverScale(true)}
           onMouseLeave={() => setFabHoverScale(false)}
           className={`chrome-fab-trigger theme-surface ${CHROME_GLASS_CLASS} ${
             isOpen ? 'chrome-fab-trigger--open' : ''
-          } ${fabHoverScale ? 'chrome-fab-trigger--hover' : ''}`}
+          } ${fabHoverLift ? 'chrome-fab-trigger--hover' : ''}`}
           style={{
             transition: editingUi ? undefined : CHROME_SURFACE_BG_TRANSITION,
-            background: chromeGlassSurfaceBg({ active: isOpen, hoverLift: fabHoverLift }),
+            background: chromeGlassSurfaceBg({
+              active: isOpen,
+              hoverLift: fabHoverLift,
+            }),
             border: glass.border,
+            boxShadow: glass.shadow,
             position: 'relative',
-            pointerEvents: chromeVisible ? 'auto' : 'none',
+            pointerEvents: 'auto',
           }}
         >
           <Plus size={22} color="var(--ui-text)" strokeWidth={2} />
           <UiPinHost anchorId="plus-fab" />
         </button>
       </ChromeTapSqueezeWrap>
-    </motion.div>
+    </div>
   )
 }

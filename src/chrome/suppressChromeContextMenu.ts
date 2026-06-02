@@ -5,6 +5,7 @@ export const CHROME_CONTEXT_MENU_ROOTS = [
   '.ui-chrome-card',
   '.canvas-search-island',
   '.pen-tool-pill',
+  '.pen-tool-pill-settings',
   '[data-pen-fab]',
   '[data-plus-fab]',
   '[data-cutline-submenu]',

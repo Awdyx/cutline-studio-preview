@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { useCanvasCustomizeStore } from '../canvasItemCustomize/canvasCustomizeStore'
+import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { generateItemId } from '../canvasItems/itemId'
 import { pushUndoSnapshot } from '../canvasHistory/canvasHistory'
 import { scheduleMediaBlobGc } from '../media/mediaBlobGc'
@@ -6,15 +8,19 @@ import {
   loadUiCustomizationFromStorage,
   saveUiCustomizationToStorage,
 } from './uiCustomizationPersistence'
+import { clearPinEnterAnimation } from './uiPinEnterAnimation'
 import {
-  UI_PIN_DEFAULT_EMOJI_SIZE,
-  UI_PIN_DEFAULT_SIZE,
+  defaultPinSizeForAnchor,
+  clampPinSizeForAnchor,
+} from './uiPinDefaults'
+import {
   clampPinSize,
   isFreeFormPinAsset,
-  pinRectFromSize,
+  parseCanvasItemIdFromUiAnchor,
   type UiAnchorId,
   type UiPin,
   type UiPinAsset,
+  pinRectFromSize,
 } from './types'
 
 export const DRAW_TOOL_DARK_COLOR = '#464a4e'
@@ -39,7 +45,7 @@ export const DRAW_TOOL_SIZE_DEFAULT = 6
 
 export type DrawTool = { color: string; size: number }
 
-/** Visual scale applied to the chrome anchor in focus. */
+/** Visual scale applied to chrome anchors in focus. */
 export const UI_FOCUS_SCALE = 1.6
 
 /** Pin exit fade-out — keep in sync with `ui-pin-exit` keyframes. */
@@ -68,7 +74,6 @@ type UiCustomizationState = {
   deletingPinIds: ReadonlySet<string>
   /** Active drag-from-tray gesture, or null when idle. */
   pinDrag: PinDrag | null
-
   hydrate: () => void
   setEditing: (editing: boolean) => void
   setFocusedAnchorId: (id: UiAnchorId | null) => void
@@ -92,6 +97,8 @@ type UiCustomizationState = {
   deletePin: (id: string) => void
   bringPinToFront: (id: string) => void
   setSelectedPinId: (id: string | null) => void
+
+  removePinsForAnchor: (anchorId: UiAnchorId) => void
 
   startPinDrag: (asset: UiPinAsset, startX: number, startY: number, previewUrl?: string) => void
   endPinDrag: () => void
@@ -129,7 +136,6 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
     clippedAnchorIds: new Set<UiAnchorId>(),
     deletingPinIds: new Set<string>(),
     pinDrag: null,
-
     hydrate: () => {
       const loaded = loadUiCustomizationFromStorage()
       set({
@@ -141,20 +147,37 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
     },
 
     setEditing: (editing) => {
-      set((s) => ({
-        editing,
-        drawing: editing ? s.drawing : false,
-        focusedAnchorId: editing ? s.focusedAnchorId : null,
-        selectedPinId: editing ? s.selectedPinId : null,
-      }))
-      syncEditingAttribute(editing)
+      const state = get()
+      if (!editing) {
+        const customize = useCanvasCustomizeStore.getState()
+        if (customize.active && !customize.exiting) {
+          customize.dismiss()
+          return
+        }
+        if (customize.active || customize.exiting) return
+        set({
+          editing: false,
+          drawing: false,
+          focusedAnchorId: null,
+          selectedPinId: null,
+        })
+        syncEditingAttribute(false)
+      } else {
+        set({
+          editing: true,
+          drawing: state.drawing,
+          focusedAnchorId: state.focusedAnchorId,
+          selectedPinId: state.selectedPinId,
+        })
+      }
     },
 
     setFocusedAnchorId: (id) => {
-      set((s) => ({
+      const state = get()
+      set({
         focusedAnchorId: id,
-        selectedPinId: id === s.focusedAnchorId ? s.selectedPinId : null,
-      }))
+        selectedPinId: id === state.focusedAnchorId ? state.selectedPinId : null,
+      })
     },
 
     setDrawing: (drawing) => {
@@ -192,9 +215,8 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
     addPin: ({ anchorId, offsetX, offsetY, asset, size, rotation }) => {
       pushUndoSnapshot()
       const id = generateItemId()
-      const defaultSize =
-        asset.kind === 'emoji' ? UI_PIN_DEFAULT_EMOJI_SIZE : UI_PIN_DEFAULT_SIZE
-      const clamped = clampPinSize(size ?? defaultSize)
+      const defaultSize = defaultPinSizeForAnchor(anchorId, asset)
+      const clamped = clampPinSizeForAnchor(anchorId, size ?? defaultSize)
       const pin: UiPin = {
         id,
         anchorId,
@@ -235,7 +257,10 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
     },
 
     resizePinUniform: (id, size) => {
-      const clamped = clampPinSize(size)
+      const anchorId = get().pins.find((p) => p.id === id)?.anchorId
+      const clamped = anchorId
+        ? clampPinSizeForAnchor(anchorId, size)
+        : clampPinSize(size)
       let changed = false
       set((s) => {
         const pins = s.pins.map((p) => {
@@ -249,8 +274,13 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
     },
 
     resizePinRect: (id, width, height) => {
-      const w = clampPinSize(width)
-      const h = clampPinSize(height)
+      const anchorId = get().pins.find((p) => p.id === id)?.anchorId
+      const w = anchorId
+        ? clampPinSizeForAnchor(anchorId, width)
+        : clampPinSize(width)
+      const h = anchorId
+        ? clampPinSizeForAnchor(anchorId, height)
+        : clampPinSize(height)
       let changed = false
       set((s) => {
         const pins = s.pins.map((p) => {
@@ -305,6 +335,7 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
         })
         persist(get().pins, get().clippedAnchorIds)
         scheduleMediaBlobGc()
+        clearPinEnterAnimation(id)
       }, UI_PIN_EXIT_DURATION_MS)
     },
 
@@ -323,6 +354,25 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
     },
 
     setSelectedPinId: (id) => set({ selectedPinId: id }),
+
+    removePinsForAnchor: (anchorId) => {
+      set((s) => {
+        const pins = s.pins.filter((pin) => pin.anchorId !== anchorId)
+        const selectedStillExists =
+          s.selectedPinId != null &&
+          pins.some((pin) => pin.id === s.selectedPinId)
+        const nextClipped = new Set(s.clippedAnchorIds)
+        nextClipped.delete(anchorId)
+        return {
+          pins,
+          selectedPinId: selectedStillExists ? s.selectedPinId : null,
+          focusedAnchorId:
+            s.focusedAnchorId === anchorId ? null : s.focusedAnchorId,
+          clippedAnchorIds: nextClipped,
+        }
+      })
+      persist(get().pins, get().clippedAnchorIds)
+    },
 
     startPinDrag: (asset, startX, startY, previewUrl) => {
       set({ pinDrag: { asset, startX, startY, previewUrl } })

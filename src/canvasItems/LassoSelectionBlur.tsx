@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useLassoStore } from '../drawing/useLassoStore'
 import { useStrokesStore } from '../drawing/strokesStore'
 import { useCanvasItemsStore } from './canvasItemsStore'
+import { SELECTION_DEPTH_CLASS } from '../styles/tokens'
 import { Z_SELECTION_DIM } from './canvasZOrder'
 import type { Stroke } from '../drawing/types'
 import type { CanvasItem } from './types'
@@ -105,6 +106,7 @@ export default function LassoSelectionBlur() {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.22, ease: 'easeOut' }}
           aria-hidden
+          className={SELECTION_DEPTH_CLASS}
           data-lock-flatten-skip
           style={{
             position: 'absolute',
@@ -114,8 +116,6 @@ export default function LassoSelectionBlur() {
             height: renderBounds.height,
             zIndex: Z_SELECTION_DIM,
             pointerEvents: 'none',
-            backdropFilter: 'blur(7px)',
-            WebkitBackdropFilter: 'blur(7px)',
             maskImage: mask,
             WebkitMaskImage: mask,
             // intersect both gradient layers so only the overlapping opaque region blurs

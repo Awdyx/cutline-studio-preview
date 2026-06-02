@@ -1,7 +1,12 @@
+import { backgroundMusic } from '../sound/backgroundMusic'
 import {
-  backgroundMusic,
-  PINNED_PREVIEW_DUCK_FADE_SEC,
-} from '../sound/backgroundMusic'
+  isTrackPreviewSessionActive,
+  markTrackPreviewSessionEnded,
+  markTrackPreviewSessionStarted,
+} from './trackPreviewSession'
+
+/** Play buttons that preview a pinned track — skip ambient-music unlock on pointerdown. */
+export const TRACK_PREVIEW_TRIGGER = 'data-track-preview-trigger'
 
 /** Peak level for profile / picker song previews (after fade-in). */
 export const PREVIEW_PLAYBACK_VOLUME = 0.12
@@ -26,7 +31,27 @@ type ActiveProfilePreview = {
 
 let activeProfilePreview: ActiveProfilePreview | null = null
 let outroRetainedPreview: HTMLAudioElement | null = null
-let dismissOutroPromise: Promise<void> | null = null
+
+const previewCancelGeneration = new WeakMap<HTMLAudioElement, number>()
+
+let previewTransport: Promise<void> = Promise.resolve()
+
+function runPreviewTransport<T>(work: () => Promise<T>): Promise<T> {
+  const next = previewTransport.then(work, work)
+  previewTransport = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  return next
+}
+
+function bumpPreviewCancelGeneration(el: HTMLAudioElement): void {
+  previewCancelGeneration.set(el, (previewCancelGeneration.get(el) ?? 0) + 1)
+}
+
+function isPreviewStartCancelled(el: HTMLAudioElement, generation: number): boolean {
+  return (previewCancelGeneration.get(el) ?? 0) !== generation
+}
 
 /** Keep preview audio alive after the profile UI unmounts so outro fades can finish. */
 function retainPreviewElementForOutro(el: HTMLAudioElement): void {
@@ -49,14 +74,14 @@ function releasePreviewElementAfterOutro(el: HTMLAudioElement): void {
   el.remove()
 }
 
-/** Subtle muffled-room color for profile / picker song previews. */
+/** Light room color for profile / picker song previews — clearer than heavy muffling. */
 const PREVIEW_ACOUSTICS = {
-  lowpassHz: 3_400,
-  lowpassQ: 0.65,
-  reverbWet: 0.13,
-  reverbDry: 0.87,
-  impulseDurationSec: 1.4,
-  impulseDecay: 2.1,
+  lowpassHz: 10_500,
+  lowpassQ: 0.5,
+  reverbWet: 0.07,
+  reverbDry: 0.93,
+  impulseDurationSec: 1.0,
+  impulseDecay: 2.4,
 } as const
 
 /** Required for Web Audio routing of cross-origin iTunes preview URLs. */
@@ -373,16 +398,32 @@ function wirePreviewAudioElement(el: HTMLAudioElement): PreviewWireState | null 
   return state
 }
 
-export function duckBackgroundMusicForPreview(): void {
-  void backgroundMusic.fadeAmbientForPreview(true, {
-    durationSec: PINNED_PREVIEW_DUCK_FADE_SEC,
+export function beginTrackPreviewSession(): void {
+  if (!markTrackPreviewSessionStarted()) return
+  backgroundMusic.prepareForTrackPreview()
+}
+
+export function endTrackPreviewSession(): void {
+  if (!markTrackPreviewSessionEnded()) return
+  void backgroundMusic.resumeAfterTrackPreview()
+}
+
+/** End the ambient-music session after a natural cutoff fade (serialized with play/stop). */
+export function completeTrackPreviewSession(): Promise<void> {
+  return runPreviewTransport(async () => {
+    endTrackPreviewSession()
   })
 }
 
-export function restoreBackgroundMusicAfterPreview(): void {
-  void backgroundMusic.fadeAmbientForPreview(false, {
-    durationSec: PINNED_PREVIEW_DUCK_FADE_SEC,
-  })
+async function stopPreviewPlaybackInner(
+  el: HTMLAudioElement,
+  fadeSec = PREVIEW_MANUAL_STOP_FADE_SEC,
+): Promise<void> {
+  unbindPreviewEndCutoff(el)
+  await fadePreviewLevel(el, 0, fadeSec)
+  el.pause()
+  resetPreviewLevel(el)
+  endTrackPreviewSession()
 }
 
 export async function preparePreviewForPlayback(
@@ -404,27 +445,43 @@ export async function preparePreviewForPlayback(
 }
 
 /** Load, play, and fade the preview in over {@link PREVIEW_TRACK_FADE_SEC}. */
-export async function startPreviewPlayback(
+export function startPreviewPlayback(
   el: HTMLAudioElement,
   url: string,
   startTime: number,
 ): Promise<void> {
-  duckBackgroundMusicForPreview()
-  await preparePreviewForPlayback(el, url)
-  el.currentTime = startTime
-  await el.play()
-  void fadePreviewLevel(el, PREVIEW_PLAYBACK_VOLUME, PREVIEW_TRACK_FADE_SEC)
+  return runPreviewTransport(async () => {
+    const generation = previewCancelGeneration.get(el) ?? 0
+
+    beginTrackPreviewSession()
+    try {
+      await preparePreviewForPlayback(el, url)
+      if (isPreviewStartCancelled(el, generation)) {
+        endTrackPreviewSession()
+        return
+      }
+
+      el.currentTime = startTime
+      await el.play()
+      if (isPreviewStartCancelled(el, generation)) {
+        await stopPreviewPlaybackInner(el)
+        return
+      }
+
+      void fadePreviewLevel(el, PREVIEW_PLAYBACK_VOLUME, PREVIEW_TRACK_FADE_SEC)
+    } catch (err) {
+      endTrackPreviewSession()
+      throw err
+    }
+  })
 }
 
 /** Fade the preview out, then pause. Uses a short fade for manual stop. */
-export async function stopPreviewPlayback(
+export function stopPreviewPlayback(
   el: HTMLAudioElement,
   fadeSec = PREVIEW_MANUAL_STOP_FADE_SEC,
 ): Promise<void> {
-  unbindPreviewEndCutoff(el)
-  await fadePreviewLevel(el, 0, fadeSec)
-  el.pause()
-  resetPreviewLevel(el)
+  return runPreviewTransport(() => stopPreviewPlaybackInner(el, fadeSec))
 }
 
 export function bindActiveProfilePreview(
@@ -440,43 +497,38 @@ export function bindActiveProfilePreview(
 }
 
 export function unbindActiveProfilePreview(el: HTMLAudioElement): void {
-  if (activeProfilePreview?.el === el) activeProfilePreview = null
-}
-
-export function isProfilePreviewOutroActive(): boolean {
-  return dismissOutroPromise !== null || outroRetainedPreview !== null
-}
-
-/** Long outro fade when the profile menu dismisses — matches natural end cutoff. */
-export async function stopActiveProfilePreviewPlayback(): Promise<void> {
-  if (dismissOutroPromise) {
-    await dismissOutroPromise
-    return
+  if (activeProfilePreview?.el === el) {
+    activeProfilePreview = null
+    bumpPreviewCancelGeneration(el)
   }
+}
 
-  const active = activeProfilePreview
-  if (!active) return
+/** Long outro fade when a profile card / menu dismisses — serialized with play/stop. */
+export function stopActiveProfilePreviewPlayback(): Promise<void> {
+  return runPreviewTransport(async () => {
+    const active = activeProfilePreview
+    activeProfilePreview = null
 
-  activeProfilePreview = null
+    if (active) {
+      const { el, onStopped, startTime, endTime } = active
+      bumpPreviewCancelGeneration(el)
 
-  dismissOutroPromise = (async () => {
-    const { el, onStopped, startTime, endTime } = active
+      if (!el.paused) {
+        retainPreviewElementForOutro(el)
+        const fadeSec = getPreviewOutroFadeSec(startTime, endTime, el.currentTime)
+        await stopPreviewPlaybackInner(el, fadeSec)
+        releasePreviewElementAfterOutro(el)
+      } else {
+        unbindPreviewEndCutoff(el)
+        endTrackPreviewSession()
+      }
 
-    if (!el.paused) {
-      retainPreviewElementForOutro(el)
-      const fadeSec = getPreviewOutroFadeSec(startTime, endTime, el.currentTime)
-      await stopPreviewPlayback(el, fadeSec)
-      releasePreviewElementAfterOutro(el)
-    } else {
-      unbindPreviewEndCutoff(el)
+      onStopped()
+      return
     }
 
-    onStopped()
-  })()
-
-  try {
-    await dismissOutroPromise
-  } finally {
-    dismissOutroPromise = null
-  }
+    if (isTrackPreviewSessionActive()) {
+      endTrackPreviewSession()
+    }
+  })
 }

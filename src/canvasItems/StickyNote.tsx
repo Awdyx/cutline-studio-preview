@@ -18,11 +18,11 @@ import {
   storedContentToHtml,
 } from './textEditorContent'
 import { playSound } from '../sound/playSound'
-import { handleTextFormatShortcutEvent } from './textEditorFormat'
-import { prepareEditorForTyping, STICKY_DEFAULT_FONT_SIZE } from './textEditorFontSize'
-import { applyTextFormatToAll, formatKindFromShortcutKey } from './textEditorFormat'
-import { useTextFormatShortcuts } from './useTextFormatShortcuts'
+import { formatKindFromShortcutKey } from './textEditorFormat'
+import { isFontSizeShortcut, prepareEditorForTyping, STICKY_DEFAULT_FONT_SIZE } from './textEditorFontSize'
 import { useTextEditorShortcuts } from './useTextEditorShortcuts'
+import { useTextEditorSelectionMemory } from './useTextEditorSelectionMemory'
+import { recallEditorSelection, restoreEditorBookmark } from './textEditorSelectionBookmark'
 import {
   textAlignmentContainerStyle,
   textAlignmentEditorStyle,
@@ -34,6 +34,10 @@ import { useEditableCanvasTap } from '../canvas/useEditableCanvasTap'
 import { useCanvasItemAreaPointer } from '../canvas/useCanvasItemAreaPointer'
 import { dismissSelectionForOutsideItemTap } from '../canvas/canvasSelectionDismiss'
 import { useCanvasEditStore } from '../canvasEdit/canvasEditStore'
+import {
+  useCanvasCustomizeItemHandoff,
+  useCanvasCustomizeStore,
+} from '../canvasItemCustomize/canvasCustomizeStore'
 import { useIsPhoneLayout } from '../hooks/useLayoutProfile'
 import { useCanvasItemDrag } from './useCanvasItemDrag'
 import { useStickyDropStore } from './stickyDropStore'
@@ -47,6 +51,10 @@ import { stickyHasInk, STICKY_TEXT_INSET, isImageInSticky, type StickyCanvasItem
 const textSaveDelayMs = 400
 const stickyEmptyHint = 'click here to type'
 const stickyEmptyHintTransition = { duration: 0.2, ease: 'easeOut' as const }
+const stickyEmptyHintCustomizeExitTransition = {
+  duration: 0.6,
+  ease: 'easeOut' as const,
+}
 const stickyEmptyHintOpacity = 0.4
 const stickyEmptyHintOpacityWithInk = stickyEmptyHintOpacity * 0.5
 
@@ -66,10 +74,32 @@ export default function StickyNote({
   const isLocked = useCanvasLockStore((s) => s.isLocked)
   const frozen = isItemFrozen(item, isLocked)
   const editableRef = useRef<HTMLDivElement>(null)
+  const hydrateEditorFromStore = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (!el) return
+      const html = storedContentToHtml(item.text)
+      if (el.innerHTML !== html) {
+        el.innerHTML = html
+      }
+      setEditorEmpty(isEditorEmpty(el))
+    },
+    [item.text],
+  )
+
+  const setEditableRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      editableRef.current = node
+      if (node) hydrateEditorFromStore(node)
+    },
+    [hydrateEditorFromStore],
+  )
   const containerRef = useRef<HTMLDivElement>(null)
   const shouldFocusRef = useRef(false)
   const selectAllOnFocusRef = useRef(false)
   const pendingInitialCharRef = useRef<string | null>(null)
+  const pendingSelectionRestoreRef = useRef<{ start: number; end: number } | null>(
+    null,
+  )
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editorEmpty, setEditorEmpty] = useState(() => isStoredTextEmpty(item.text))
   const [isEditing, setIsEditing] = useState(false)
@@ -90,6 +120,12 @@ export default function StickyNote({
   const isDropHoverTarget = dropHoverStickyId === item.id
   const isDropConfirmTarget = dropConfirmStickyId === item.id
   const [embeddedHandleHost, setEmbeddedHandleHost] = useState<HTMLElement | null>(null)
+  const customizeSessionActive = useCanvasCustomizeItemHandoff(item.id)
+  const customizeEnterPhase = useCanvasCustomizeStore((s) =>
+    s.itemId === item.id ? s.enterPhase : 'idle',
+  )
+  const customizeLiftComplete =
+    customizeSessionActive && customizeEnterPhase === 'live'
 
   const { onGrabPointerDown } = useCanvasItemDrag(item.id)
   const isPhone = useIsPhoneLayout()
@@ -116,49 +152,13 @@ export default function StickyNote({
   const commitTextEdit = useCallback(() => {
     const el = editableRef.current
     const html = el ? readEditorHtml(el) : ''
+    if (!html && !isStoredTextEmpty(item.text)) return
     useCanvasItemsStore.getState().commitStickyTextEdit(item.id, html)
-  }, [item.id])
+  }, [item.id, item.text])
 
   const syncFromStore = useCallback(() => {
-    const el = editableRef.current
-    if (!el) return
-    const html = storedContentToHtml(item.text)
-    if (el.innerHTML !== html) {
-      el.innerHTML = html
-    }
-    setEditorEmpty(isEditorEmpty(el))
-  }, [item.text])
-
-  const notifyFormatApplied = useCallback(() => {
-    const el = editableRef.current
-    if (!el) return
-    setEditorEmpty(isEditorEmpty(el))
-    scheduleSave(readEditorHtml(el))
-  }, [scheduleSave])
-
-  useTextFormatShortcuts(editableRef, isEditing, notifyFormatApplied)
-  useTextEditorShortcuts(
-    editableRef,
-    isEditing,
-    STICKY_DEFAULT_FONT_SIZE,
-    notifyFormatApplied,
-  )
-
-  useEffect(() => {
-    syncFromStore()
-  }, [item.id])
-
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    const el = editableRef.current
-    if (!el || document.activeElement === el) return
-    syncFromStore()
-  }, [item.text, syncFromStore])
+    hydrateEditorFromStore(editableRef.current)
+  }, [hydrateEditorFromStore])
 
   const focusEditor = useCallback((atEnd = true) => {
     const el = editableRef.current
@@ -182,6 +182,46 @@ export default function StickyNote({
     setIsEditing(true)
     if (focus) shouldFocusRef.current = true
   }, [])
+
+  const notifyFormatApplied = useCallback(() => {
+    const el = editableRef.current
+    if (!el) return
+    setEditorEmpty(isEditorEmpty(el))
+    scheduleSave(readEditorHtml(el))
+    if (!isEditing) {
+      pendingSelectionRestoreRef.current = recallEditorSelection(el)
+      beginEditing(false)
+    }
+  }, [beginEditing, isEditing, scheduleSave])
+
+  useTextEditorSelectionMemory(editableRef, isSelected || isEditing)
+  useTextEditorShortcuts(
+    editableRef,
+    isSelected || isEditing,
+    isEditing,
+    STICKY_DEFAULT_FONT_SIZE,
+    notifyFormatApplied,
+  )
+
+  useLayoutEffect(() => {
+    hydrateEditorFromStore(editableRef.current)
+  }, [hydrateEditorFromStore, item.id])
+
+  useEffect(() => {
+    syncFromStore()
+  }, [item.id, syncFromStore])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    const el = editableRef.current
+    if (!el || document.activeElement === el) return
+    syncFromStore()
+  }, [item.text, syncFromStore])
 
   const stopEditing = useCallback(() => {
     setIsEditing(false)
@@ -217,16 +257,22 @@ export default function StickyNote({
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
     }
+    if (customizeSessionActive) return
     commitTextEdit()
-  }, [commitTextEdit])
+  }, [commitTextEdit, customizeSessionActive])
+
+  useLayoutEffect(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    hydrateEditorFromStore(editableRef.current)
+  }, [customizeSessionActive, hydrateEditorFromStore, item.text])
 
   useEffect(() => {
-    if (!isSelected || isEditing || frozen) return
+    if (!isSelected || isEditing || frozen || customizeSessionActive) return
 
     function onKeyDown(e: KeyboardEvent) {
-      // Don't intercept when the pen/tool palette is open
-      if (useShortcutUiStore.getState().toolPaletteOpen) return
-
       const mod = e.metaKey || e.ctrlKey
       const key = e.key
 
@@ -242,6 +288,8 @@ export default function StickyNote({
         if (k === 'd') return          // duplicate
         if (k === 'c' || k === 'x') return  // copy / cut
         if (k === 'l') return          // toggle lock
+        if (formatKindFromShortcutKey(k, e.shiftKey)) return // bold/italic/…
+        if (isFontSizeShortcut(e)) return // ⌘[ / ⌘]
 
         // ⌘A → enter edit mode + select all
         if (k === 'a') {
@@ -252,25 +300,13 @@ export default function StickyNote({
           return
         }
 
-        // ⌘B / ⌘I / ⌘U / ⌘⇧X → apply format to all text silently (no edit mode)
-        const formatKind = formatKindFromShortcutKey(k, e.shiftKey)
-        if (formatKind) {
-          e.preventDefault()
-          e.stopPropagation()
-          const el = editableRef.current
-          if (el) {
-            const html = applyTextFormatToAll(el, formatKind)
-            if (html != null) {
-              useCanvasItemsStore.getState().updateStickyText(item.id, html)
-            }
-          }
-          return
-        }
-
-        // All other ⌘ combos (⌘I, ⌘E, ⌘S, ⌘K, ⌘F …) → swallow
+        // All other ⌘ combos (⌘E, ⌘S, ⌘K, ⌘F …) → swallow
         e.stopPropagation()
         return
       }
+
+      // Don't intercept when the pen/tool palette is open
+      if (useShortcutUiStore.getState().toolPaletteOpen) return
 
       // Plain printable character → start typing immediately
       if (key.length === 1 && !e.altKey) {
@@ -287,13 +323,14 @@ export default function StickyNote({
 
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
-  }, [isSelected, isEditing, frozen, beginEditing])
+  }, [isSelected, isEditing, frozen, beginEditing, customizeSessionActive])
 
   const pendingEditorFocusId = useCanvasItemsStore((s) => s.pendingEditorFocusId)
 
   useEffect(() => {
+    if (customizeSessionActive) return
     if (!isSelected) setIsEditing(false)
-  }, [isSelected])
+  }, [isSelected, customizeSessionActive])
 
   useEffect(() => {
     if (frozen) return
@@ -301,6 +338,15 @@ export default function StickyNote({
     if (!useCanvasItemsStore.getState().takePendingEditorFocus(item.id)) return
     beginEditing(true)
   }, [beginEditing, frozen, item.id, pendingEditorFocusId])
+
+  useLayoutEffect(() => {
+    if (!isEditing) return
+    const pending = pendingSelectionRestoreRef.current
+    if (!pending) return
+    pendingSelectionRestoreRef.current = null
+    const el = editableRef.current
+    if (el) restoreEditorBookmark(el, pending)
+  }, [isEditing])
 
   useLayoutEffect(() => {
     if (!isEditing || !shouldFocusRef.current) return
@@ -327,9 +373,21 @@ export default function StickyNote({
     } else {
       focusEditor()
     }
-  }, [focusEditor, isEditing, notifyFormatApplied])
+  }, [focusEditor, isEditing])
 
-  const showEmptyHint = editorEmpty && isSelected && !isEditing && !frozen
+  const showEmptyHint =
+    editorEmpty &&
+    isSelected &&
+    !isEditing &&
+    !frozen &&
+    !customizeLiftComplete
+  const stickyEmptyHintMotionTransition = {
+    ...stickyEmptyHintTransition,
+    exit:
+      customizeLiftComplete && editorEmpty
+        ? stickyEmptyHintCustomizeExitTransition
+        : stickyEmptyHintTransition,
+  }
 
   const canvasItems = useCanvasItemsStore((s) => s.items)
   const hasEmbeddedImages = useMemo(
@@ -343,14 +401,15 @@ export default function StickyNote({
     [canvasItems, item.id],
   )
 
-  const textPointerEvents = frozen
+  const textPointerEvents = frozen || customizeSessionActive
     ? 'none'
     : isEditing || !hasEmbeddedImages
       ? 'auto'
       : 'none'
 
   const onFacePointerDownCapture = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (customizeSessionActive) return
       if (!hasEmbeddedImages || isEditing || frozen) return
       if (e.pointerType === 'pen') return
       if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return
@@ -381,6 +440,7 @@ export default function StickyNote({
       isEditing,
       isSelected,
       onGrabPointerDown,
+      customizeSessionActive,
     ],
   )
 
@@ -395,6 +455,7 @@ export default function StickyNote({
         stickyId={item.id}
         stickyWidth={item.width}
         stickyHeight={item.height}
+        interactive={!frozen && !customizeSessionActive && !moveBlocked}
       />
       <div
         ref={setEmbeddedHandleHost}
@@ -417,6 +478,7 @@ export default function StickyNote({
           borderRadius: 4,
           backgroundColor: stickyBg,
           transition: 'background-color 320ms ease',
+          pointerEvents: customizeSessionActive ? 'none' : undefined,
         }}
       >
         <AnimatePresence initial={false}>
@@ -429,30 +491,33 @@ export default function StickyNote({
             <StickyDropConfirmChrome key={`sticky-drop-confirm-${dropConfirmNonce}`} />
           ) : null}
         </AnimatePresence>
-        <StickyStrokesSvg
-          stickyId={item.id}
-          strokes={item.strokes}
-          annotationStrokes={item.annotationStrokes ?? []}
-          width={item.width}
-          height={item.height}
-        />
-        {dropGhost ? <StickyDropGhost key={dropGhost.id} ghost={dropGhost} /> : null}
-        <StickyEmbeddedImages
-          stickyId={item.id}
-          transformRef={transformRef}
-          onItemResizeStateChange={onItemResizeStateChange}
-          handlesPortal={embeddedHandleHost}
-        />
         <div
-          ref={containerRef}
+          data-ui-customize-motion-surface=""
           style={{
             position: 'absolute',
             inset: 0,
-            zIndex: 1,
+            zIndex: 0,
             pointerEvents: 'none',
-            ...textAlignmentContainerStyle(item.textAlign),
           }}
         >
+          <StickyStrokesSvg
+            stickyId={item.id}
+            strokes={item.strokes}
+            annotationStrokes={item.annotationStrokes ?? []}
+            width={item.width}
+            height={item.height}
+          />
+          {dropGhost ? <StickyDropGhost key={dropGhost.id} ghost={dropGhost} /> : null}
+          <div
+            ref={containerRef}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 1,
+              pointerEvents: 'none',
+              ...textAlignmentContainerStyle(item.textAlign),
+            }}
+          >
           <AnimatePresence initial={false}>
             {showEmptyHint ? (
               <motion.div
@@ -461,7 +526,7 @@ export default function StickyNote({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={stickyEmptyHintTransition}
+                transition={stickyEmptyHintMotionTransition}
                 style={{
                   position: 'absolute',
                   inset: 0,
@@ -495,7 +560,7 @@ export default function StickyNote({
             role="textbox"
             aria-label="Sticky note text"
             aria-multiline
-            ref={editableRef}
+            ref={setEditableRef}
             contentEditable={!frozen && isEditing}
             spellCheck={false}
             suppressContentEditableWarning
@@ -537,14 +602,11 @@ export default function StickyNote({
             scheduleSave(readEditorHtml(el))
           }}
           onBlur={() => {
-            setIsEditing(false)
+            if (customizeSessionActive) return
             flushSaveAndCommit()
+            setIsEditing(false)
           }}
           onKeyDown={(e) => {
-            const editor = editableRef.current
-            if (editor && handleTextFormatShortcutEvent(e, editor, notifyFormatApplied)) {
-              return
-            }
             if (e.key === 'Escape') {
               e.preventDefault()
               flushSaveAndCommit()
@@ -577,7 +639,14 @@ export default function StickyNote({
             }}
             className={`canvas-text-editor sticky-note-editor${editorEmpty ? ' canvas-text-editor--empty' : ''}`}
           />
+          </div>
         </div>
+        <StickyEmbeddedImages
+          stickyId={item.id}
+          transformRef={transformRef}
+          onItemResizeStateChange={onItemResizeStateChange}
+          handlesPortal={embeddedHandleHost}
+        />
       </div>
     </CanvasItemShell>
   )

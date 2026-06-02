@@ -11,6 +11,7 @@ const COLOR_OPTIONS: { id: StickyColorId; label: string }[] = [
   { id: 'yellow', label: 'Yellow' },
   { id: 'pink', label: 'Pink' },
   { id: 'blue', label: 'Blue' },
+  { id: 'green', label: 'Green' },
 ]
 
 function ColorSwatch({

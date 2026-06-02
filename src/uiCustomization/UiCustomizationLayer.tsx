@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { createPortal, flushSync } from 'react-dom'
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { Check, Crop, Pencil } from 'lucide-react'
+import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { playSound } from '../sound/playSound'
 import { font } from '../styles/tokens'
 import type { UiPinAsset } from './types'
@@ -10,33 +12,61 @@ import {
   UI_FOCUS_SCALE,
   useUiCustomizationStore,
 } from './uiCustomizationStore'
-import { UI_ANCHOR_IDS, type UiAnchorId } from './types'
+import {
+  UI_ANCHOR_IDS,
+  canvasItemUiAnchorId,
+  isCanvasItemUiAnchorId,
+  type UiAnchorId,
+} from './types'
+import { queryUiPinElement } from './uiPinDom'
+import { uiAnchorElement, uiAnchorFocusScale } from './uiAnchorFocusScale'
+import {
+  UI_CUSTOMIZE_BACKDROP_BLUR_OFF,
+  UI_CUSTOMIZE_CHROME_BACKDROP_BLUR,
+  UI_CUSTOMIZE_EASE_OUT,
+  UI_CUSTOMIZE_VIGNETTE_ENTER,
+  UI_CUSTOMIZE_VIGNETTE_EXIT,
+} from './canvasItemCustomizeLayout'
+
+const CHROME_BACKDROP_BLUR_ENTER_MS = 900
+const CHROME_BACKDROP_BLUR_EXIT_MS = 1180
 import { useMediaBlobUrl } from '../hooks/useMediaBlobUrl'
 import { DrawingStrokesSvg } from './DrawingStrokesSvg'
+import { useCanvasCustomizeActive, useCanvasCustomizeStore } from '../canvasItemCustomize/canvasCustomizeStore'
+import { pulseUiAnchorMotionBlur } from './uiAnchorMotionBlur'
+import { UiCustomizeFocusButton } from './UiCustomizeFocusButton'
 
-const ANCHOR_SELECTOR = UI_ANCHOR_IDS.map(
-  (id) => `[data-ui-anchor='${id}']`,
-).join(', ')
+const ANCHOR_SELECTOR = [
+  ...UI_ANCHOR_IDS.map((id) => `[data-ui-anchor='${id}']`),
+  '[data-ui-anchor^="canvas-item:"]',
+].join(', ')
 
 const GHOST_SIZE = 72
+/** Tray stack sits this far below the focused anchor's viewport centre. */
+const CHROME_FOCUS_TRAY_CENTER_OFFSET = 72
+const FOCUS_TOOLBAR_ROW_HEIGHT = 38
+const FOCUS_TOOLBAR_MIN_TOP = 72
+const FOCUS_TOOLBAR_ENTER = {
+  opacity: { duration: 0.78, ease: UI_CUSTOMIZE_EASE_OUT },
+  filter: { duration: 0.82, ease: UI_CUSTOMIZE_EASE_OUT },
+} as const
+const FOCUS_TOOLBAR_EXIT = {
+  opacity: { duration: 0.45, ease: UI_CUSTOMIZE_EASE_OUT },
+  filter: { duration: 0.45, ease: UI_CUSTOMIZE_EASE_OUT },
+} as const
+const FOCUS_TOOLBAR_EXIT_MS = 450
 
-/**
- * Restart the motion-blur keyframe on `el`. Removing the attribute and forcing
- * a reflow guarantees the animation replays even when focus toggles before the
- * previous pulse finishes.
- */
-function pulseMotionBlur(el: HTMLElement) {
-  el.removeAttribute('data-ui-anchor-motion')
-  void el.offsetWidth
-  el.setAttribute('data-ui-anchor-motion', '1')
-  const onEnd = (event: AnimationEvent) => {
-    if (event.animationName !== 'ui-anchor-motion-blur') return
-    el.removeAttribute('data-ui-anchor-motion')
-    el.removeEventListener('animationend', onEnd)
-    el.removeEventListener('animationcancel', onEnd)
-  }
-  el.addEventListener('animationend', onEnd)
-  el.addEventListener('animationcancel', onEnd)
+/** Resting toolbar top once the anchor is centred — keeps buttons from riding the focus move. */
+function focusedToolbarTopForCenteredAnchor(el: HTMLElement): number {
+  const centerY = window.innerHeight / 2
+  const trayTop = centerY + CHROME_FOCUS_TRAY_CENTER_OFFSET
+  const visualH = el.offsetHeight * UI_FOCUS_SCALE
+  const anchorTop = centerY - visualH / 2
+  const gap = trayTop - (anchorTop + visualH)
+  return Math.max(
+    FOCUS_TOOLBAR_MIN_TOP,
+    anchorTop - gap - FOCUS_TOOLBAR_ROW_HEIGHT,
+  )
 }
 
 /**
@@ -45,18 +75,28 @@ function pulseMotionBlur(el: HTMLElement) {
 function applyAnchorFocus(anchorId: UiAnchorId | null) {
   if (typeof document === 'undefined') return
 
+  const root = document.documentElement
+
   document
     .querySelectorAll<HTMLElement>('[data-ui-anchor-focused="1"]')
     .forEach((el) => {
+      const anchorId = el.getAttribute('data-ui-anchor')
+      // Canvas-item anchors own focus via React — don't strip the attribute.
+      if (anchorId && isCanvasItemUiAnchorId(anchorId)) return
       el.removeAttribute('data-ui-anchor-focused')
       el.style.removeProperty('--ui-focus-tx')
       el.style.removeProperty('--ui-focus-ty')
       el.style.removeProperty('--ui-focus-scale')
-      pulseMotionBlur(el)
+      pulseUiAnchorMotionBlur(el)
     })
 
   if (!anchorId) {
-    document.documentElement.removeAttribute('data-ui-focused')
+    root.removeAttribute('data-ui-focused')
+    return
+  }
+
+  if (isCanvasItemUiAnchorId(anchorId)) {
+    root.setAttribute('data-ui-focused', '1')
     return
   }
 
@@ -64,7 +104,7 @@ function applyAnchorFocus(anchorId: UiAnchorId | null) {
     `[data-ui-anchor='${anchorId}']`,
   )
   if (!el) {
-    document.documentElement.removeAttribute('data-ui-focused')
+    root.removeAttribute('data-ui-focused')
     return
   }
 
@@ -85,8 +125,8 @@ function applyAnchorFocus(anchorId: UiAnchorId | null) {
   el.style.setProperty('--ui-focus-ty', `${ty}px`)
   el.style.setProperty('--ui-focus-scale', `${UI_FOCUS_SCALE}`)
   el.setAttribute('data-ui-anchor-focused', '1')
-  document.documentElement.setAttribute('data-ui-focused', '1')
-  pulseMotionBlur(el)
+  root.setAttribute('data-ui-focused', '1')
+  pulseUiAnchorMotionBlur(el)
 }
 
 /** True when the pointer event target lies on a pin or its portaled toolbar. */
@@ -129,7 +169,7 @@ function isNearSelectedPin(x: number, y: number): boolean {
   if (!selectedPinId) return false
   // [data-ui-pin] is always present in the DOM while the pin exists, regardless
   // of render cycle, so this lookup is always current.
-  const pinEl = document.querySelector<HTMLElement>(`[data-ui-pin="${selectedPinId}"]`)
+  const pinEl = queryUiPinElement(selectedPinId)
   if (!pinEl) return false
   const r = pinEl.getBoundingClientRect()
   return (
@@ -142,10 +182,12 @@ function isNearSelectedPin(x: number, y: number): boolean {
 
 /** Returns true if (x, y) is within the bounds of the currently focused anchor. */
 function isPointerOverFocusedAnchor(x: number, y: number): boolean {
-  const el = document.querySelector<HTMLElement>('[data-ui-anchor-focused="1"]')
+  const focusedAnchorId = useUiCustomizationStore.getState().focusedAnchorId
+  if (!focusedAnchorId) return false
+  const el = uiAnchorElement(focusedAnchorId)
   if (!el) return false
   const rect = el.getBoundingClientRect()
-  // Slightly generous hit target
+  if (rect.width <= 0 || rect.height <= 0) return false
   const pad = 12
   return (
     x >= rect.left - pad &&
@@ -153,6 +195,16 @@ function isPointerOverFocusedAnchor(x: number, y: number): boolean {
     y >= rect.top - pad &&
     y <= rect.bottom + pad
   )
+}
+
+function focusedAnchorElement(): HTMLElement | null {
+  const focusedAnchorId = useUiCustomizationStore.getState().focusedAnchorId
+  if (!focusedAnchorId) return null
+  const focused = document.querySelector<HTMLElement>(
+    `[data-ui-anchor='${focusedAnchorId}'][data-ui-anchor-focused='1']`,
+  )
+  if (focused) return focused
+  return uiAnchorElement(focusedAnchorId)
 }
 
 // ─── Drag ghost content ──────────────────────────────────────────────────────
@@ -217,20 +269,61 @@ function GhostContent({ asset, previewUrl }: { asset: UiPinAsset; previewUrl?: s
   return null
 }
 
+function FocusedToolbarRow({
+  focusedAnchorId,
+  focusedAnchorClipped,
+  onDone,
+  onToggleClipping,
+}: {
+  focusedAnchorId: UiAnchorId | null
+  focusedAnchorClipped: boolean
+  onDone: () => void
+  onToggleClipping: () => void
+}) {
+  return (
+    <>
+      <UiCustomizeFocusButton
+        ariaLabel="Back to element selection"
+        icon={<Check size={14} strokeWidth={2.4} />}
+        label="done"
+        onClick={onDone}
+      />
+      {focusedAnchorId && (
+        <UiCustomizeFocusButton
+          ariaLabel={
+            focusedAnchorClipped
+              ? 'Disable clipping for this element'
+              : 'Enable clipping for this element'
+          }
+          ariaPressed={focusedAnchorClipped}
+          icon={<Crop size={14} strokeWidth={2.2} />}
+          label="clipping"
+          active={focusedAnchorClipped}
+          onClick={onToggleClipping}
+        />
+      )}
+    </>
+  )
+}
+
 // ─── Main layer ──────────────────────────────────────────────────────────────
 
-export default function UiCustomizationLayer() {
+export default function UiCustomizationLayer({
+  transformRef,
+}: {
+  transformRef: RefObject<ReactZoomPanPinchContentRef | null>
+}) {
   const editing = useUiCustomizationStore((s) => s.editing)
   const focusedAnchorId = useUiCustomizationStore((s) => s.focusedAnchorId)
+  const canvasCustomizeActive = useCanvasCustomizeActive()
+  const dismissCanvasCustomize = useCanvasCustomizeStore((s) => s.dismiss)
+  const reduceMotion = useReducedMotion()
   const setEditing = useUiCustomizationStore((s) => s.setEditing)
   const setFocusedAnchorId = useUiCustomizationStore((s) => s.setFocusedAnchorId)
   const setSelectedPinId = useUiCustomizationStore((s) => s.setSelectedPinId)
   const selectedPinId = useUiCustomizationStore((s) => s.selectedPinId)
   const toggleAnchorClipping = useUiCustomizationStore(
     (s) => s.toggleAnchorClipping,
-  )
-  const focusedAnchorClipped = useUiCustomizationStore((s) =>
-    focusedAnchorId ? s.clippedAnchorIds.has(focusedAnchorId) : false,
   )
   const pinDrag = useUiCustomizationStore((s) => s.pinDrag)
   const addPin = useUiCustomizationStore((s) => s.addPin)
@@ -255,11 +348,44 @@ export default function UiCustomizationLayer() {
 
   // Whether the ghost is visible (hasMoved threshold crossed)
   const [ghostVisible, setGhostVisible] = useState(false)
+  const [focusedToolbarTop, setFocusedToolbarTop] = useState<number | null>(null)
+  const toolbarAnchorRef = useRef<UiAnchorId | null>(null)
+  if (focusedAnchorId) toolbarAnchorRef.current = focusedAnchorId
+  if (focusedToolbarTop == null) toolbarAnchorRef.current = null
+  const toolbarAnchorId = focusedAnchorId ?? toolbarAnchorRef.current
+  const focusedAnchorClipped = useUiCustomizationStore((s) =>
+    toolbarAnchorId ? s.clippedAnchorIds.has(toolbarAnchorId) : false,
+  )
 
   // Drive the focus transform whenever the focused anchor changes.
   useEffect(() => {
     applyAnchorFocus(editing ? focusedAnchorId : null)
   }, [editing, focusedAnchorId])
+
+  useEffect(() => {
+    if (!editing || canvasCustomizeActive) {
+      setFocusedToolbarTop(null)
+      return
+    }
+
+    if (!focusedAnchorId) {
+      const t = window.setTimeout(
+        () => setFocusedToolbarTop(null),
+        FOCUS_TOOLBAR_EXIT_MS,
+      )
+      return () => window.clearTimeout(t)
+    }
+
+    const sync = () => {
+      const el = uiAnchorElement(focusedAnchorId)
+      if (el && el.offsetHeight > 0) {
+        setFocusedToolbarTop(focusedToolbarTopForCenteredAnchor(el))
+      }
+    }
+    sync()
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [editing, focusedAnchorId, canvasCustomizeActive])
 
   // Defensive: clear any inline focus styling if the layer unmounts mid-focus.
   useEffect(() => () => applyAnchorFocus(null), [])
@@ -267,7 +393,10 @@ export default function UiCustomizationLayer() {
   // Drop focus on viewport resize so the centred anchor doesn't drift.
   useEffect(() => {
     if (!focusedAnchorId) return
-    const onResize = () => setFocusedAnchorId(null)
+    const onResize = () => {
+      if (useCanvasCustomizeStore.getState().active) return
+      setFocusedAnchorId(null)
+    }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [focusedAnchorId, setFocusedAnchorId])
@@ -302,6 +431,7 @@ export default function UiCustomizationLayer() {
 
     const onDown = (event: PointerEvent) => {
       if (event.button !== 0) return
+      if (useCanvasCustomizeStore.getState().active) return
 
       // Second (or later) finger arrived — this is a multi-touch gesture.
       // Cancel any deselect that was scheduled by the first finger.
@@ -312,6 +442,7 @@ export default function UiCustomizationLayer() {
 
       const target = event.target
       if (!(target instanceof Element)) return
+      if (target.closest('[data-ui-customization-backdrop]')) return
       if (target.closest('[data-ui-customization-toolbar]')) return
       if (target.closest('[data-ui-pin-toolbar]')) return
       if (isOnPinSurface(event)) return
@@ -362,6 +493,20 @@ export default function UiCustomizationLayer() {
       const id = anchor.getAttribute('data-ui-anchor') as UiAnchorId | null
       if (!id) return
 
+      const canvasCustomize = useCanvasCustomizeStore.getState()
+      if (canvasCustomize.active && !canvasCustomize.exiting) {
+        const ownAnchor =
+          canvasCustomize.itemId != null
+            ? canvasItemUiAnchorId(canvasCustomize.itemId)
+            : null
+        if (id === ownAnchor) return
+
+        event.preventDefault()
+        event.stopPropagation()
+        if (canvasCustomize.dismiss()) playSound('menuClose')
+        return
+      }
+
       event.preventDefault()
       event.stopPropagation()
       if (useUiCustomizationStore.getState().focusedAnchorId === id) return
@@ -389,6 +534,10 @@ export default function UiCustomizationLayer() {
         setSelectedPinId(null)
         return
       }
+      if (useCanvasCustomizeStore.getState().active) {
+        if (dismissCanvasCustomize()) playSound('menuClose')
+        return
+      }
       if (state.focusedAnchorId) {
         setFocusedAnchorId(null)
         return
@@ -404,10 +553,7 @@ export default function UiCustomizationLayer() {
 
   useEffect(() => {
     if (!pinDrag || !editing) {
-      // Clean up anchor drag-hover attr if drag ended
-      document
-        .querySelector('[data-ui-anchor-focused="1"]')
-        ?.removeAttribute('data-ui-anchor-drag-hover')
+      focusedAnchorElement()?.removeAttribute('data-ui-anchor-drag-hover')
       return
     }
 
@@ -443,8 +589,7 @@ export default function UiCustomizationLayer() {
       if (over !== overAnchorRef.current) {
         overAnchorRef.current = over
         setOverAnchor(over)
-        // CSS attribute for anchor glow animation
-        const anchorEl = document.querySelector<HTMLElement>('[data-ui-anchor-focused="1"]')
+        const anchorEl = focusedAnchorElement()
         if (anchorEl) {
           if (over) anchorEl.setAttribute('data-ui-anchor-drag-hover', '1')
           else anchorEl.removeAttribute('data-ui-anchor-drag-hover')
@@ -462,29 +607,26 @@ export default function UiCustomizationLayer() {
       overAnchorRef.current = over
       setOverAnchor(over)
 
-      // Clear anchor hover attr
-      document
-        .querySelector('[data-ui-anchor-focused="1"]')
-        ?.removeAttribute('data-ui-anchor-drag-hover')
+      focusedAnchorElement()?.removeAttribute('data-ui-anchor-drag-hover')
 
       if (!hasMoved) {
-        // Simple tap — the element's own onClick handler adds the pin.
-        // We just clean up the drag state so it doesn't ghost.
+        // Simple tap — tray cells handle their own tap feedback; just clean up drag state.
         endPinDrag()
         return
       }
 
       if (over && anchorId) {
         // Compute precise offset from anchor center
-        const anchorEl = document.querySelector<HTMLElement>('[data-ui-anchor-focused="1"]')
+        const anchorEl = uiAnchorElement(anchorId)
         const rect = anchorEl?.getBoundingClientRect()
         let offsetX = 0
         let offsetY = 0
         if (rect) {
           const cx = rect.left + rect.width / 2
           const cy = rect.top + rect.height / 2
-          offsetX = (e.clientX - cx) / UI_FOCUS_SCALE
-          offsetY = (e.clientY - cy) / UI_FOCUS_SCALE
+          const scale = anchorId ? uiAnchorFocusScale(anchorId) : UI_FOCUS_SCALE
+          offsetX = (e.clientX - cx) / scale
+          offsetY = (e.clientY - cy) / scale
         }
 
         // Landing animation: ghost pops up slightly then snaps away in place.
@@ -512,10 +654,12 @@ export default function UiCustomizationLayer() {
     }
 
     document.addEventListener('pointermove', onMove, { passive: true })
-    document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointerup', onUp, true)
+    document.addEventListener('pointercancel', onUp, true)
     return () => {
       document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointerup', onUp, true)
+      document.removeEventListener('pointercancel', onUp, true)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinDrag != null, editing])
@@ -525,9 +669,7 @@ export default function UiCustomizationLayer() {
     if (!editing) {
       endPinDrag()
       setGhostVisible(false)
-      document
-        .querySelector('[data-ui-anchor-focused="1"]')
-        ?.removeAttribute('data-ui-anchor-drag-hover')
+      focusedAnchorElement()?.removeAttribute('data-ui-anchor-drag-hover')
     }
   }, [editing, endPinDrag])
 
@@ -536,26 +678,71 @@ export default function UiCustomizationLayer() {
     playSound('menuClose')
   }, [setEditing])
 
-  // Backdrop tap: step back from focus, or exit entirely.
+  const exitFocusedAnchor = useCallback(() => {
+    setFocusedAnchorId(null)
+    playSound('menuClose')
+  }, [setFocusedAnchorId])
+
+  // Backdrop tap: same steps as Esc — pin → focus → exit.
   const onBackdropDown = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target !== e.currentTarget) return
-      setSelectedPinId(null)
-      if (useUiCustomizationStore.getState().focusedAnchorId) {
-        setFocusedAnchorId(null)
-        playSound('menuClose')
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.stopPropagation()
+      const state = useUiCustomizationStore.getState()
+      if (state.selectedPinId) {
+        setSelectedPinId(null)
+        return
+      }
+      if (state.focusedAnchorId) {
+        exitFocusedAnchor()
         return
       }
       handleDone()
     },
-    [handleDone, setFocusedAnchorId, setSelectedPinId],
+    [exitFocusedAnchor, handleDone, setSelectedPinId],
   )
 
   const [showTaunt, setShowTaunt] = useState(false)
   const tauntTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const showSelectPrompt = editing && !focusedAnchorId
-  const showFocusedPanel = editing && !!focusedAnchorId
+  const showSelectPrompt =
+    editing && !focusedAnchorId && !canvasCustomizeActive
+  const showFocusedPanel =
+    editing && !!focusedAnchorId && !canvasCustomizeActive
+  const vignetteEnterTransition = reduceMotion
+    ? { opacity: { duration: 0.01 } }
+    : UI_CUSTOMIZE_VIGNETTE_ENTER
+  const vignetteExitTransition = reduceMotion
+    ? { opacity: { duration: 0.01 } }
+    : UI_CUSTOMIZE_VIGNETTE_EXIT
+
+  const showChromeCustomize = editing && !canvasCustomizeActive
+  const chromeBackdropRef = useRef<HTMLDivElement>(null)
+  const [chromeBackdropBlurred, setChromeBackdropBlurred] = useState(false)
+  const [chromeBackdropBlurMs, setChromeBackdropBlurMs] = useState(
+    CHROME_BACKDROP_BLUR_ENTER_MS,
+  )
+  const chromeBackdropMotionTransition = reduceMotion
+    ? { duration: 0.01 }
+    : {
+        duration: 0.88,
+        ease: UI_CUSTOMIZE_EASE_OUT,
+        exit: { duration: 1.12, ease: [0.45, 0, 0.2, 1] as const },
+      }
+
+  useLayoutEffect(() => {
+    if (!showChromeCustomize) return
+    setChromeBackdropBlurMs(CHROME_BACKDROP_BLUR_ENTER_MS)
+    flushSync(() => setChromeBackdropBlurred(false))
+    void chromeBackdropRef.current?.getBoundingClientRect()
+    setChromeBackdropBlurred(true)
+  }, [showChromeCustomize])
+
+  useLayoutEffect(() => {
+    if (canvasCustomizeActive) return
+    const root = document.documentElement
+    if (editing) root.setAttribute('data-ui-customize', '1')
+    else root.removeAttribute('data-ui-customize')
+  }, [editing, canvasCustomizeActive])
 
   // Clean up prompt attributes when the prompt disappears
   useEffect(() => {
@@ -565,107 +752,173 @@ export default function UiCustomizationLayer() {
     }
   }, [showSelectPrompt])
 
+  useEffect(() => {
+    if (pinDrag && editing) {
+      document.documentElement.setAttribute('data-ui-tray-pin-drag', '1')
+      return () => document.documentElement.removeAttribute('data-ui-tray-pin-drag')
+    }
+    document.documentElement.removeAttribute('data-ui-tray-pin-drag')
+  }, [pinDrag, editing])
+
+  const pinDragGhostNode = pinDrag ? (
+      <motion.div
+        key="pin-drag-ghost"
+        data-ui-customization-drag-ghost=""
+        data-ui-ghost-asset={pinDrag.asset.kind}
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          x: ghostX,
+          y: ghostY,
+          width: GHOST_SIZE,
+          height: GHOST_SIZE,
+          pointerEvents: 'none',
+          scale: ghostScale,
+          opacity: ghostOpacity,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 14,
+          overflow: 'hidden',
+          transformOrigin: 'center center',
+        }}
+        animate={{
+          borderRadius: overAnchor ? '50%' : 14,
+          boxShadow: overAnchor
+            ? '0 0 0 2.5px rgba(20, 30, 50, 0.15), 0 8px 28px rgba(0,0,0,0.28)'
+            : '0 4px 16px rgba(0,0,0,0.22)',
+        }}
+        transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+      >
+        <motion.div
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          animate={{ scale: overAnchor ? 1.1 : 1 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 24 }}
+        >
+          <GhostContent asset={pinDrag.asset} previewUrl={pinDrag.previewUrl} />
+        </motion.div>
+      </motion.div>
+    ) : null
+
   return (
     <>
       <AnimatePresence>
-        {editing && (
+        {showChromeCustomize && (
           <motion.div
-            key="ui-customize-backdrop"
+            ref={chromeBackdropRef}
+            key="chrome-customize-backdrop"
             data-ui-customization-backdrop=""
+            data-ui-customize-backdrop-tone="chrome"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.24, ease: 'easeOut' }}
+            transition={chromeBackdropMotionTransition}
+            onExitStart={() => {
+              setChromeBackdropBlurMs(CHROME_BACKDROP_BLUR_EXIT_MS)
+              setChromeBackdropBlurred(false)
+            }}
             onPointerDown={onBackdropDown}
             style={{
               position: 'fixed',
               inset: 0,
               zIndex: 50,
-              pointerEvents: 'auto',
               cursor: 'default',
+              pointerEvents: 'auto',
               background: 'var(--ui-customize-backdrop)',
-              backdropFilter: 'blur(6px) saturate(0.92)',
-              WebkitBackdropFilter: 'blur(6px) saturate(0.92)',
+              backdropFilter: chromeBackdropBlurred
+                ? UI_CUSTOMIZE_CHROME_BACKDROP_BLUR
+                : UI_CUSTOMIZE_BACKDROP_BLUR_OFF,
+              WebkitBackdropFilter: chromeBackdropBlurred
+                ? UI_CUSTOMIZE_CHROME_BACKDROP_BLUR
+                : UI_CUSTOMIZE_BACKDROP_BLUR_OFF,
+              transition: !reduceMotion
+                ? `backdrop-filter ${chromeBackdropBlurMs}ms cubic-bezier(0.16, 1, 0.3, 1)`
+                : undefined,
             }}
           />
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showFocusedPanel && (
-          <motion.div
-            key="ui-customize-vignette"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.42, ease: [0.32, 0.72, 0.32, 1] }}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 51,
-              pointerEvents: 'none',
-              background: 'var(--ui-customize-vignette)',
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {editing && !canvasCustomizeActive && (
+        <motion.div
+          data-ui-customize-vignette=""
+          initial={false}
+          animate={{ opacity: showFocusedPanel ? 1 : 0 }}
+          transition={
+            reduceMotion
+              ? { duration: 0.01 }
+              : showFocusedPanel
+                ? vignetteEnterTransition
+                : vignetteExitTransition
+          }
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 51,
+            pointerEvents: 'none',
+            background: 'var(--ui-customize-vignette)',
+            willChange: 'opacity',
+          }}
+        />
+      )}
 
-      <AnimatePresence>
-        {showFocusedPanel && (
+      {editing && !canvasCustomizeActive && (
+        <div
+          data-ui-customization-toolbar=""
+          style={{
+            position: 'fixed',
+            top: focusedToolbarTop ?? 0,
+            left: 0,
+            right: 0,
+            zIndex: 56,
+            pointerEvents: 'none',
+            visibility: focusedToolbarTop != null ? 'visible' : 'hidden',
+          }}
+        >
           <motion.div
-            key="focused-toolbar"
-            data-ui-customization-toolbar=""
-            initial={{ opacity: 0, y: 8, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-            transition={{
-              type: 'spring',
-              stiffness: 320,
-              damping: 26,
-              mass: 0.7,
+            initial={false}
+            animate={{
+              opacity: showFocusedPanel && focusedToolbarTop != null ? 1 : 0,
+              filter:
+                showFocusedPanel && focusedToolbarTop != null
+                  ? 'blur(0px)'
+                  : 'blur(8px)',
             }}
+            transition={
+              reduceMotion
+                ? { duration: 0.01 }
+                : showFocusedPanel && focusedToolbarTop != null
+                  ? FOCUS_TOOLBAR_ENTER
+                  : FOCUS_TOOLBAR_EXIT
+            }
             style={{
-              position: 'fixed',
-              bottom: 'calc(50% + 72px)',
-              left: 0,
-              right: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
-              zIndex: 56,
-              pointerEvents: 'none',
+              willChange: 'opacity, filter',
             }}
           >
-            <FocusedActionButton
-              ariaLabel="Back to element selection"
-              icon={<Check size={14} strokeWidth={2.4} />}
-              label="done"
-              onClick={() => {
-                setFocusedAnchorId(null)
-                playSound('menuClose')
+            <FocusedToolbarRow
+              focusedAnchorId={toolbarAnchorId}
+              focusedAnchorClipped={focusedAnchorClipped}
+              onDone={exitFocusedAnchor}
+              onToggleClipping={() => {
+                if (!toolbarAnchorId) return
+                toggleAnchorClipping(toolbarAnchorId)
+                playSound('menuOpen')
               }}
             />
-            {focusedAnchorId && (
-              <FocusedActionButton
-                ariaLabel={
-                  focusedAnchorClipped
-                    ? 'Disable clipping for this element'
-                    : 'Enable clipping for this element'
-                }
-                ariaPressed={focusedAnchorClipped}
-                icon={<Crop size={14} strokeWidth={2.2} />}
-                label="clipping"
-                active={focusedAnchorClipped}
-                onClick={() => {
-                  toggleAnchorClipping(focusedAnchorId)
-                  playSound('menuOpen')
-                }}
-              />
-            )}
           </motion.div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
 
       <div
         style={{
@@ -780,7 +1033,7 @@ export default function UiCustomizationLayer() {
             }}
             style={{
               position: 'fixed',
-              top: 'calc(50% + 72px)',
+              top: `calc(50% + ${CHROME_FOCUS_TRAY_CENTER_OFFSET}px)`,
               left: 0,
               right: 0,
               zIndex: 55,
@@ -803,97 +1056,7 @@ export default function UiCustomizationLayer() {
         )}
       </AnimatePresence>
 
-      {/* Drag ghost */}
-      {(ghostVisible || ghostDismissing) && pinDrag && (
-        <motion.div
-          key="pin-drag-ghost"
-          data-ui-customization-drag-ghost=""
-          style={{
-            position: 'fixed',
-            x: ghostX,
-            y: ghostY,
-            width: GHOST_SIZE,
-            height: GHOST_SIZE,
-            zIndex: 65,
-            pointerEvents: 'none',
-            scale: ghostScale,
-            opacity: ghostOpacity,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 14,
-            overflow: 'hidden',
-            transformOrigin: 'center center',
-          }}
-          animate={{
-            borderRadius: overAnchor ? '50%' : 14,
-            boxShadow: overAnchor
-              ? '0 0 0 2.5px rgba(20, 30, 50, 0.15), 0 8px 28px rgba(0,0,0,0.28)'
-              : '0 4px 16px rgba(0,0,0,0.22)',
-          }}
-          transition={{ type: 'spring', stiffness: 380, damping: 22 }}
-        >
-          <motion.div
-            style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            animate={{ scale: overAnchor ? 1.1 : 1 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 24 }}
-          >
-            <GhostContent asset={pinDrag.asset} previewUrl={pinDrag.previewUrl} />
-          </motion.div>
-        </motion.div>
-      )}
+      {pinDragGhostNode && createPortal(pinDragGhostNode, document.body)}
     </>
-  )
-}
-
-function FocusedActionButton({
-  ariaLabel,
-  ariaPressed,
-  icon,
-  label,
-  onClick,
-  active = false,
-}: {
-  ariaLabel: string
-  ariaPressed?: boolean
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-  active?: boolean
-}) {
-  return (
-    <motion.button
-      type="button"
-      aria-label={ariaLabel}
-      aria-pressed={ariaPressed}
-      onPointerDown={(e) => e.stopPropagation()}
-      onPointerUp={(e) => { e.stopPropagation(); onClick() }}
-      whileTap={{ scale: 0.96 }}
-      transition={{ type: 'spring', stiffness: 480, damping: 28, mass: 0.5 }}
-      style={{
-        pointerEvents: 'auto',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '10px 18px',
-        borderRadius: 999,
-        border: active
-          ? '1px solid var(--ui-text)'
-          : '1px solid var(--glass-border)',
-        background: active ? 'var(--ui-text)' : 'var(--card-bg)',
-        boxShadow: 'var(--card-shadow)',
-        color: active ? 'var(--card-bg)' : font.colorPrimary,
-        fontFamily: font.family,
-        fontSize: 13,
-        fontWeight: 600,
-        cursor: 'pointer',
-        touchAction: 'manipulation',
-        transition:
-          'background-color 160ms ease, color 160ms ease, border-color 160ms ease',
-      }}
-    >
-      {icon}
-      {label}
-    </motion.button>
   )
 }

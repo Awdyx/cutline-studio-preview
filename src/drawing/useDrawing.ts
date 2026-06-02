@@ -19,10 +19,13 @@ import { useStrokesStore } from './strokesStore'
 import { useToolStore } from './toolStore'
 import type { StrokePoint } from './types'
 import { clientToCanvasFromElementForStroke } from './canvasCoords'
+import { useEraserStore } from './useEraserStore'
 import { useLassoStore } from './useLassoStore'
 import { keepActiveLassoSelectionForPointer } from './lassoPointerGuard'
 import { isPointerOnCanvasItem } from '../canvas/canvasSelectionDismiss'
+import { isPointerOverOpenStudyHubScratchPad } from '../canvasItems/studyHubMenuFocus'
 import { isUiDrawCanvasTarget } from './penToolMenuLayout'
+import { shouldBlockCanvasDrawAt } from '../canvas/canvasMinimapDrawBlock'
 
 const captureOpts = { capture: true } as const
 const capturePassiveOpts = { capture: true, passive: false } as const
@@ -141,8 +144,21 @@ export function useDrawing(
       const now = performance.now()
       if (now - lastEraseAt < ERASE_THROTTLE_MS) return
       lastEraseAt = now
-      applyDragErase(coords)
-      useCanvasItemsStore.getState().applyStickyStrokeErase(coords)
+      const { targetTypes } = useEraserStore.getState()
+      const items = useCanvasItemsStore.getState()
+      const overSticky = hitTestStickyAtCanvasPoint(coords.x, coords.y) != null
+      if (targetTypes.includes('strokes')) applyDragErase(coords)
+      // Match pen routing: ink on a sticky is erased when Strokes is on and the tip
+      // is over that sticky, without requiring a separate Stickies target toggle.
+      if (
+        targetTypes.includes('sticky') ||
+        (targetTypes.includes('strokes') && overSticky)
+      ) {
+        items.applyStickyStrokeErase(coords)
+      }
+      if (targetTypes.includes('text') || targetTypes.includes('image')) {
+        items.applyDragItemErase(coords)
+      }
     }
 
     function strokeConfig() {
@@ -238,6 +254,22 @@ export function useDrawing(
       if (isPhoneLayout()) return
       if (!isPenDrawMode() || penMenu()?.isActive()) return
       if (!lastPointerPos) return
+      if (
+        isPointerOverOpenStudyHubScratchPad(
+          lastPointerPos.clientX,
+          lastPointerPos.clientY,
+        )
+      ) {
+        return
+      }
+      if (
+        shouldBlockCanvasDrawAt(
+          lastPointerPos.clientX,
+          lastPointerPos.clientY,
+        )
+      ) {
+        return
+      }
 
       e.preventDefault()
       setSpaceDrawHeld(true)
@@ -260,6 +292,15 @@ export function useDrawing(
     function onSpaceUp(e: KeyboardEvent) {
       if (e.code !== 'Space') return
       if (!isSpaceDrawHeld()) return
+      if (
+        lastPointerPos &&
+        isPointerOverOpenStudyHubScratchPad(
+          lastPointerPos.clientX,
+          lastPointerPos.clientY,
+        )
+      ) {
+        return
+      }
 
       e.preventDefault()
       setSpaceDrawHeld(false)
@@ -344,11 +385,24 @@ export function useDrawing(
     }
 
     function onPointerDown(event: PointerEvent) {
+      if (
+        shouldBlockCanvasDrawAt(
+          event.clientX,
+          event.clientY,
+          event.target,
+        )
+      ) {
+        return
+      }
       if (!isCanvasEventTarget(event.target)) return
       if (isHandleTarget(event.target)) return
       if (isLassoSelectionChromeTarget(event.target)) return
-      if (penMenu()?.isMenuOpen()) return
-      penMenu()?.onPointerDown(event)
+      const menuOnDown = penMenu()
+      if (menuOnDown?.isMenuOpen()) {
+        menuOnDown.onPointerDown(event)
+        return
+      }
+      menuOnDown?.onPointerDown(event)
       if (isUiDrawCanvasTarget(event.target)) return
       if (!canStartDrawingPointer(event)) return
 
@@ -411,15 +465,20 @@ export function useDrawing(
       }
 
       if (isSpaceDrawHeld() && event.pointerType === 'mouse') {
-        penMenu()?.moveSpaceHold(event.clientX, event.clientY)
-        if (!penMenu()?.isMenuOpen()) {
-          const spaceMode = useToolStore.getState().mode
-          if (spaceMode === 'lasso' && useLassoStore.getState().isDrawing) {
-            penMenu()?.cancelPendingHold()
-            useLassoStore.getState().addPoint(event.clientX, event.clientY)
-          } else {
-            const coords = toCanvasCoords(event.clientX, event.clientY)
-            if (coords) continueDrawAt(coords, readPressure(event.pressure))
+        if (
+          !isPointerOverOpenStudyHubScratchPad(event.clientX, event.clientY) &&
+          !shouldBlockCanvasDrawAt(event.clientX, event.clientY, event.target)
+        ) {
+          penMenu()?.moveSpaceHold(event.clientX, event.clientY)
+          if (!penMenu()?.isMenuOpen()) {
+            const spaceMode = useToolStore.getState().mode
+            if (spaceMode === 'lasso' && useLassoStore.getState().isDrawing) {
+              penMenu()?.cancelPendingHold()
+              useLassoStore.getState().addPoint(event.clientX, event.clientY)
+            } else {
+              const coords = toCanvasCoords(event.clientX, event.clientY)
+              if (coords) continueDrawAt(coords, readPressure(event.pressure))
+            }
           }
         }
       }
@@ -445,6 +504,15 @@ export function useDrawing(
 
       if (menu?.onPointerMove(event)) return
       if (!pointerPenActive || event.pointerId !== activePointerId) return
+      if (
+        shouldBlockCanvasDrawAt(
+          event.clientX,
+          event.clientY,
+          event.target,
+        )
+      ) {
+        return
+      }
 
       const mode = useToolStore.getState().mode
 

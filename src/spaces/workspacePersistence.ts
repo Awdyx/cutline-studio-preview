@@ -8,11 +8,12 @@ import type { StudioCentrePosition } from '../canvas/studioCentrePosition'
 import { normalizeStudioCentrePosition } from '../canvas/studioCentrePosition'
 import { isUninitializedMainCamera } from '../canvas/canvasCamera'
 import { CANVAS_MAX_SCALE } from '../drawing/canvasDimensions'
+import { defaultPocketStripState } from './pocketStripDimensions'
 import {
-  DEFAULT_SPACE_CAMERA,
   DEFAULT_SPACE_NAME,
   clampSpaceName,
   type ActiveCanvasId,
+  type PocketStripState,
   type SpaceCamera,
   type SpaceCanvasData,
 } from './types'
@@ -20,7 +21,7 @@ import {
 import { scopedStorageKey } from '../storage/storageScope'
 
 export const WORKSPACE_STORAGE_KEY = scopedStorageKey('cutline-workspace-v1')
-export const WORKSPACE_STORAGE_VERSION = 2
+export const WORKSPACE_STORAGE_VERSION = 4
 
 type PersistedSpace = {
   items: CanvasItem[]
@@ -28,7 +29,7 @@ type PersistedSpace = {
   annotationStrokes?: Stroke[]
   name: string
   snapshotId?: string | null
-  camera?: SpaceCamera
+  strip?: PocketStripState
 }
 
 type PersistedPayload = {
@@ -141,7 +142,7 @@ function serializeWorkspace(data: LoadedWorkspace): string | null {
           : undefined,
       name: space.name,
       snapshotId: space.snapshotId,
-      camera: space.camera,
+      strip: space.strip,
     }
   }
 
@@ -177,19 +178,20 @@ function normalizeSpace(raw: unknown, _spaceId: string): LoadedSpaceRow | null {
   const o = raw as PersistedSpace
   if (!Array.isArray(o.items)) return null
 
-  const camera = o.camera
-  const normalizedCamera: SpaceCamera =
-    camera &&
-    typeof camera.positionX === 'number' &&
-    typeof camera.positionY === 'number' &&
-    typeof camera.scale === 'number'
-      ? camera
-      : DEFAULT_SPACE_CAMERA
-
   const snapshotId =
     typeof o.snapshotId === 'string' && o.snapshotId.length > 0
       ? o.snapshotId
       : null
+
+  const strip =
+    o.strip &&
+    typeof o.strip.scrollY === 'number' &&
+    typeof o.strip.logicalWidth === 'number'
+      ? {
+          scrollY: o.strip.scrollY,
+          logicalWidth: o.strip.logicalWidth,
+        }
+      : defaultPocketStripState()
 
   return {
     items: o.items,
@@ -202,7 +204,7 @@ function normalizeSpace(raw: unknown, _spaceId: string): LoadedSpaceRow | null {
         ? clampSpaceName(o.name)
         : DEFAULT_SPACE_NAME,
     snapshotId,
-    camera: normalizedCamera,
+    strip,
   }
 }
 

@@ -54,3 +54,14 @@ export const stickyBringOutCanvasEnterTransition = {
   damping: 32,
   mass: 0.72,
 }
+
+/** Pasted image replacing a selected canvas image — subtle dissolve + settle. */
+export const canvasItemMediaSwapEnter = {
+  opacity: 0,
+  scale: 0.985,
+} as const
+
+export const canvasItemMediaSwapEnterTransition = {
+  opacity: { duration: 0.32, ease: [0.16, 1, 0.3, 1] as const },
+  scale: { duration: 0.36, ease: [0.16, 1, 0.3, 1] as const },
+}

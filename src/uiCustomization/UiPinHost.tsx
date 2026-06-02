@@ -40,9 +40,8 @@ export default function UiPinHost({ anchorId }: { anchorId: UiAnchorId }) {
         // extend past the anchor naturally.
         overflow: applyClipping ? 'hidden' : 'visible',
         borderRadius: applyClipping ? 'inherit' : undefined,
-        // Above in-flow anchor content (search input, icons) so pins paint and
-        // receive hover in live mode.
-        zIndex: 6,
+        // Above in-flow anchor content (sticky embeds, search input, icons).
+        zIndex: editing ? 200 : 6,
       }}
     >
       {pins.map((pin) => (

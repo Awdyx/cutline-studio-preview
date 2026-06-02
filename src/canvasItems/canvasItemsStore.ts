@@ -10,8 +10,10 @@ import {
   type CanvasLayer,
 } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
-import { ERASE_HIT_RADIUS, hitTestStroke } from '../drawing/eraseUtils'
-import { CANVAS_ORIGINAL_HEIGHT, CANVAS_ORIGINAL_WIDTH } from '../drawing/canvasDimensions'
+import { ERASE_HIT_RADIUS, eraserHitsItem, hitTestStroke } from '../drawing/eraseUtils'
+import { scheduleStrokeErase } from '../drawing/strokeEraseVisualStore'
+import { useEraserStore } from '../drawing/useEraserStore'
+import { clampItemPositionInActiveCanvas, clampItemPositionInPocketStrip } from '../spaces/activeCanvasLayout'
 import { useStrokesStore } from '../drawing/strokesStore'
 import { isLassoMode, useToolStore } from '../drawing/toolStore'
 import { useLassoStore } from '../drawing/useLassoStore'
@@ -23,8 +25,11 @@ import {
 } from '../drawing/strokePointDecimation'
 import type { DrawTool, Stroke, StrokePoint } from '../drawing/types'
 import { notifyWorkspacePersist, useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { previewLogicalWidth } from '../spaces/spacePreviewPan'
 import type { SpaceCamera } from '../spaces/types'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
+import { canvasItemUiAnchorId } from '../uiCustomization/types'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import { copyMediaBlob } from '../media/mediaBlobStore'
 import { scheduleMediaBlobGc } from '../media/mediaBlobGc'
 import { generateItemId } from './itemId'
@@ -68,7 +73,6 @@ import {
 } from './studyHubSpawnScale'
 import type { StudySubjectId } from './types'
 import { DEFAULT_SPACE_NAME } from '../spaces/types'
-import type { SpacePreviewPan } from '../spaces/spacePreviewPan'
 import {
   DEFAULT_SPACE_NAME_ALIGNMENT,
   DEFAULT_TEXT_ALIGNMENT,
@@ -121,11 +125,28 @@ let boundsSnapFrameId: number | null = null
 let boundsSnapItemId: string | null = null
 let stickyBringOutTimer: ReturnType<typeof setTimeout> | null = null
 let stickyBringOutEnterTimer: ReturnType<typeof setTimeout> | null = null
+let lastEraseDeleteSoundAt = 0
+const ERASE_DELETE_SOUND_MS = 110
 
 type ZOrderPulse = {
   id: string
   dir: 'front' | 'back'
   nonce: number
+}
+
+type MediaSwapPulse = {
+  id: string
+  nonce: number
+}
+
+export function findReplaceableSelectedImage(): ImageCanvasItem | null {
+  const { selectedIds, items } = useCanvasItemsStore.getState()
+  if (selectedIds.length !== 1) return null
+  const item = findItem(items, selectedIds[0])
+  if (!item || item.type !== 'image') return null
+  if (isImageInSticky(item)) return null
+  if (!itemIsMutable(item)) return null
+  return item
 }
 
 function emitZOrderFeedback(
@@ -153,10 +174,10 @@ function emitZOrderFeedback(
 type CanvasItemsState = {
   items: CanvasItem[]
   selectedIds: string[]
-  previewAdjustSpaceId: string | null
   restoreSizingAnimatingId: string | null
   boundsSnapAnimatingId: string | null
   zOrderPulse: ZOrderPulse | null
+  mediaSwapPulse: MediaSwapPulse | null
   /** Sole-selected item id that should not show the arrangement submenu (programmatic focus). */
   zMenuSuppressedItemId: string | null
   /** Camera to restore when dismissing a menu-driven study hub focus. */
@@ -167,6 +188,14 @@ type CanvasItemsState = {
   menuFocusDismissing: boolean
   /** Study hub that owns the dismissing portal (set before focus chrome clears). */
   menuFocusDismissItemId: string | null
+  /** Shortcut-only overlay subject — no canvas item. */
+  menuFocusEphemeralSubjectId: StudySubjectId | null
+  /** Split scratch pad open beside the menu-focus hub. */
+  menuFocusScratchPadOpen: boolean
+  /** Scratch-pad share of split width (0 = min pad, 1 = max pad); null = auto from hub fit. */
+  menuFocusScratchSplitShare: number | null
+  /** Placed-hub dismiss — scratch pad collapse before zoom-out. */
+  menuFocusDismissScratchClosing: boolean
   /** Set when user spawns text; consumed on mount to focus editor once. */
   pendingEditorFocusId: string | null
   activeStickyStroke: { stickyId: string; stroke: Stroke } | null
@@ -191,6 +220,8 @@ type CanvasItemsState = {
   ) => void
   clearMenuFocusChrome: () => void
   revealMenuFocus: () => void
+  toggleMenuFocusScratchPad: () => void
+  setMenuFocusScratchSplitShare: (share: number) => void
   takeMenuFocusReturnCamera: () => SpaceCamera | null
   clearSelection: (opts?: { silent?: boolean }) => void
   parkSelectionOffScreen: () => void
@@ -202,6 +233,12 @@ type CanvasItemsState = {
   addSticky: (x: number, y: number) => string
   addText: (x: number, y: number) => string
   addImage: (x: number, y: number, mediaId: string, width: number, height: number) => string
+  replaceImageMedia: (
+    itemId: string,
+    newMediaId: string,
+    importWidth: number,
+    importHeight: number,
+  ) => boolean
   addVideo: (x: number, y: number, mediaId: string, width: number, height: number) => string
   addSpace: (x: number, y: number) => string
   addStudyHub: (
@@ -209,6 +246,7 @@ type CanvasItemsState = {
     y: number,
     subjectId: StudySubjectId,
     spawnScale?: number,
+    dimensions?: { width: number; height: number },
   ) => string | null
   beginItemDrag: (id: string) => void
   moveItemToSpace: (
@@ -238,24 +276,26 @@ type CanvasItemsState = {
   ) => void
   restoreImportSizing: (id: string) => void
   snapToOriginalAspectRatio: (id: string) => void
+  snapStudyHubAspectRatio: (id: string) => void
   bringToFront: (id: string) => void
   sendToBack: (id: string) => void
   raiseInPlane: (id: string) => void
-  deleteItem: (id: string) => void
+  deleteItem: (id: string, opts?: { silent?: boolean }) => void
   commitStickyTextEdit: (id: string, text: string) => void
   updateStickyText: (id: string, text: string) => void
   commitTextItemEdit: (id: string, text: string) => void
   updateTextItemText: (id: string, text: string) => void
   setItemTextAlignment: (id: string, alignment: ItemTextAlignment) => void
   setStickyColor: (id: string, color: import('./types').StickyColorId | undefined) => void
-  setPreviewAdjustSpace: (id: string | null) => void
-  updateSpacePreviewPan: (id: string, pan: SpacePreviewPan) => void
+  setSpaceTint: (id: string, tint: import('./types').SpaceTintId | undefined) => void
   getStickyById: (id: string) => StickyCanvasItem | undefined
   startStickyStroke: (stickyId: string, point: StrokePoint, config: StrokeConfig) => void
   addStickyStrokePoint: (point: StrokePoint) => void
   endStickyStroke: () => void
   cancelActiveStickyStroke: () => void
   applyStickyStrokeErase: (canvasPos: { x: number; y: number }) => void
+  /** Remove text/image items under the eraser tip (undo batched by beginDragErase). */
+  applyDragItemErase: (canvasPos: { x: number; y: number }) => void
 }
 
 let persistEnabled = false
@@ -418,15 +458,19 @@ function cloneItem(
 export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   items: [],
   selectedIds: [],
-  previewAdjustSpaceId: null,
   restoreSizingAnimatingId: null,
   boundsSnapAnimatingId: null,
   zOrderPulse: null,
+  mediaSwapPulse: null,
   zMenuSuppressedItemId: null,
   menuFocusReturnCamera: null,
   menuFocusRevealed: false,
   menuFocusDismissing: false,
   menuFocusDismissItemId: null,
+  menuFocusEphemeralSubjectId: null,
+  menuFocusScratchPadOpen: false,
+  menuFocusScratchSplitShare: null,
+  menuFocusDismissScratchClosing: false,
   pendingEditorFocusId: null,
   activeStickyStroke: null,
   lastStickyColor: undefined,
@@ -479,6 +523,9 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
             zMenuSuppressedItemId: null,
             menuFocusReturnCamera: null,
             menuFocusRevealed: false,
+            menuFocusEphemeralSubjectId: null,
+            menuFocusScratchPadOpen: false,
+            menuFocusDismissScratchClosing: false,
             viewportSelectionPark: null,
           }
         }
@@ -488,16 +535,22 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           zMenuSuppressedItemId: null,
           menuFocusReturnCamera: null,
           menuFocusRevealed: false,
+          menuFocusEphemeralSubjectId: null,
+          menuFocusScratchPadOpen: false,
+          menuFocusDismissScratchClosing: false,
           viewportSelectionPark: null,
         }
       }
       if (state.selectedIds.length === 1 && state.selectedIds[0] === id) {
         if (options?.suppressZMenu) {
+          if (options.menuFocusReturnCamera) shouldPlay = true
           return {
             zMenuSuppressedItemId: id,
             menuFocusReturnCamera:
               options.menuFocusReturnCamera ?? state.menuFocusReturnCamera,
             menuFocusRevealed: false,
+            menuFocusScratchPadOpen: false,
+            menuFocusDismissScratchClosing: false,
           }
         }
         if (state.zMenuSuppressedItemId === id) {
@@ -505,6 +558,9 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
             zMenuSuppressedItemId: null,
             menuFocusReturnCamera: null,
             menuFocusRevealed: false,
+            menuFocusEphemeralSubjectId: null,
+            menuFocusScratchPadOpen: false,
+            menuFocusDismissScratchClosing: false,
           }
         }
         return state
@@ -518,6 +574,9 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
             ? options.menuFocusReturnCamera
             : null,
         menuFocusRevealed: false,
+        menuFocusEphemeralSubjectId: null,
+        menuFocusScratchPadOpen: false,
+        menuFocusDismissScratchClosing: false,
         viewportSelectionPark: null,
       }
     })
@@ -530,12 +589,6 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       prevSelected.filter((entry) => !nextSelected.includes(entry)),
     )
 
-    const adjustId = get().previewAdjustSpaceId
-    const soleSelected = nextSelected.length === 1 ? nextSelected[0] : null
-    if (adjustId && soleSelected !== adjustId) {
-      set({ previewAdjustSpaceId: null })
-    }
-
     if (shouldPlay) playSound('itemSelect')
   },
 
@@ -546,12 +599,30 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       menuFocusRevealed: false,
       menuFocusDismissing: false,
       menuFocusDismissItemId: null,
+      menuFocusEphemeralSubjectId: null,
+      menuFocusScratchPadOpen: false,
+      menuFocusScratchSplitShare: null,
+      menuFocusDismissScratchClosing: false,
+    })
+  },
+
+  toggleMenuFocusScratchPad: () => {
+    set((state) => ({
+      menuFocusScratchPadOpen: !state.menuFocusScratchPadOpen,
+    }))
+  },
+
+  setMenuFocusScratchSplitShare: (share) => {
+    set({
+      menuFocusScratchSplitShare: Math.max(0, Math.min(1, share)),
     })
   },
 
   revealMenuFocus: () => {
-    if (!get().menuFocusReturnCamera || get().menuFocusDismissing) return
-    if (get().menuFocusRevealed) return
+    if (get().menuFocusDismissing) return
+    const store = get()
+    if (!store.menuFocusReturnCamera && !store.menuFocusEphemeralSubjectId) return
+    if (store.menuFocusRevealed) return
     set({ menuFocusRevealed: true })
   },
 
@@ -564,7 +635,6 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       zMenuSuppressedItemId: null,
       menuFocusReturnCamera: null,
       menuFocusRevealed: false,
-      previewAdjustSpaceId: null,
       viewportSelectionPark: null,
     })
     flushActiveTextEditor()
@@ -580,12 +650,14 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     }
     set({
       selectedIds: [],
-      previewAdjustSpaceId: null,
       zMenuSuppressedItemId: null,
       menuFocusReturnCamera: null,
       menuFocusRevealed: false,
       menuFocusDismissing: false,
       menuFocusDismissItemId: null,
+      menuFocusEphemeralSubjectId: null,
+      menuFocusScratchPadOpen: false,
+      menuFocusDismissScratchClosing: false,
       viewportSelectionPark: null,
     })
     if (prevSelected.length > 0) {
@@ -601,12 +673,14 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const prevSelected = selectedIds
     set({
       selectedIds: [],
-      previewAdjustSpaceId: null,
       zMenuSuppressedItemId: null,
       menuFocusReturnCamera: null,
       menuFocusRevealed: false,
       menuFocusDismissing: false,
       menuFocusDismissItemId: null,
+      menuFocusEphemeralSubjectId: null,
+      menuFocusScratchPadOpen: false,
+      menuFocusDismissScratchClosing: false,
       viewportSelectionPark: {
         itemIds: [...selectedIds],
         leftViewportAt: Date.now(),
@@ -652,7 +726,6 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       return {
         items: nextItems,
         selectedIds: [],
-        previewAdjustSpaceId: null,
         activeStickyStroke:
           state.activeStickyStroke &&
           remove.has(state.activeStickyStroke.stickyId)
@@ -713,11 +786,17 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const prevSelected = get().selectedIds
     const layer = newItemLayer(useCanvasLockStore.getState().isLocked)
     const lastColor = get().lastStickyColor
+    const { x: clampedX, y: clampedY } = clampItemPositionInActiveCanvas(
+      x - STICKY_WIDTH / 2,
+      y - STICKY_HEIGHT / 2,
+      STICKY_WIDTH,
+      STICKY_HEIGHT,
+    )
     const sticky: StickyCanvasItem = {
       id,
       type: 'sticky',
-      x: x - STICKY_WIDTH / 2,
-      y: y - STICKY_HEIGHT / 2,
+      x: clampedX,
+      y: clampedY,
       zIndex: nextItemZIndex(items, layer),
       width: STICKY_WIDTH,
       height: STICKY_HEIGHT,
@@ -740,11 +819,17 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const id = generateItemId()
     const items = get().items
     const layer = newItemLayer(useCanvasLockStore.getState().isLocked)
+    const { x: clampedX, y: clampedY } = clampItemPositionInActiveCanvas(
+      x - TEXT_WIDTH / 2,
+      y - TEXT_HEIGHT / 2,
+      TEXT_WIDTH,
+      TEXT_HEIGHT,
+    )
     const textItem: TextCanvasItem = {
       id,
       type: 'text',
-      x: x - TEXT_WIDTH / 2,
-      y: y - TEXT_HEIGHT / 2,
+      x: clampedX,
+      y: clampedY,
       zIndex: nextItemZIndex(items, layer),
       width: TEXT_WIDTH,
       height: TEXT_HEIGHT,
@@ -767,11 +852,17 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     pushUndoSnapshot()
     const items = get().items
     const layer = newItemLayer(useCanvasLockStore.getState().isLocked)
+    const { x: clampedX, y: clampedY } = clampItemPositionInActiveCanvas(
+      x - width / 2,
+      y - height / 2,
+      width,
+      height,
+    )
     const image: ImageCanvasItem = {
       id: mediaId,
       type: 'image',
-      x: x - width / 2,
-      y: y - height / 2,
+      x: clampedX,
+      y: clampedY,
       zIndex: nextItemZIndex(items, layer),
       width,
       height,
@@ -786,15 +877,49 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     return mediaId
   },
 
+  replaceImageMedia: (itemId, newMediaId, importWidth, importHeight) => {
+    const item = findItem(get().items, itemId)
+    if (!item || item.type !== 'image') return false
+    if (isImageInSticky(item)) return false
+    if (!itemIsMutable(item)) return false
+
+    pushUndoSnapshot()
+    set((state) => ({
+      mediaSwapPulse: {
+        id: itemId,
+        nonce: (state.mediaSwapPulse?.nonce ?? 0) + 1,
+      },
+      items: state.items.map((entry) =>
+        entry.id === itemId
+          ? {
+              ...entry,
+              mediaId: newMediaId,
+              importWidth,
+              importHeight,
+            }
+          : entry,
+      ),
+    }))
+    scheduleMediaBlobGc()
+    persistItems({ immediate: true })
+    return true
+  },
+
   addVideo: (x, y, mediaId, width, height) => {
     pushUndoSnapshot()
     const items = get().items
     const layer = newItemLayer(useCanvasLockStore.getState().isLocked)
+    const { x: clampedX, y: clampedY } = clampItemPositionInActiveCanvas(
+      x - width / 2,
+      y - height / 2,
+      width,
+      height,
+    )
     const video: VideoCanvasItem = {
       id: mediaId,
       type: 'video',
-      x: x - width / 2,
-      y: y - height / 2,
+      x: clampedX,
+      y: clampedY,
       zIndex: nextItemZIndex(items, layer),
       width,
       height,
@@ -838,7 +963,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     return id
   },
 
-  addStudyHub: (x, y, subjectId, spawnScale = 1) => {
+  addStudyHub: (x, y, subjectId, spawnScale = 1, dimensions) => {
     const items = get().items
     if (hasStudyHubForSubject(items, subjectId)) return null
 
@@ -848,13 +973,20 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const layer = newItemLayer(useCanvasLockStore.getState().isLocked)
     const stackIndex = countStudyHubWidgets(items)
     const normalizedScale = normalizeSpawnScale(spawnScale)
-    const { width, height } = studyHubSpawnDimensions(normalizedScale)
+    const { width, height } =
+      dimensions ?? studyHubSpawnDimensions(normalizedScale)
     const offset = studyHubStackOffset(stackIndex, normalizedScale)
+    const { x: clampedX, y: clampedY } = clampItemPositionInActiveCanvas(
+      x - width / 2 + offset.x,
+      y - height / 2 + offset.y,
+      width,
+      height,
+    )
     const hub: StudyHubCanvasItem = {
       id,
       type: 'study_hub',
-      x: x - width / 2 + offset.x,
-      y: y - height / 2 + offset.y,
+      x: clampedX,
+      y: clampedY,
       zIndex: nextItemZIndex(items, layer),
       width,
       height,
@@ -887,28 +1019,56 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const space = workspace.spaces[spaceId]
     if (!space) return false
 
-    const x = Math.max(
-      0,
-      Math.min(CANVAS_ORIGINAL_WIDTH - item.width, canvasX - item.width / 2),
+    const logicalWidth = previewLogicalWidth(space.strip?.logicalWidth)
+    const { x, y } = clampItemPositionInPocketStrip(
+      canvasX - item.width / 2,
+      canvasY - item.height / 2,
+      item.width,
+      item.height,
+      logicalWidth,
     )
-    const y = Math.max(
-      0,
-      Math.min(CANVAS_ORIGINAL_HEIGHT - item.height, canvasY - item.height / 2),
-    )
-    const zIndex = nextZIndexAbove(space.items)
-    const transferred = {
+
+    const transferredItems: CanvasItem[] = []
+    let nextZ = nextZIndexAbove(space.items)
+    transferredItems.push({
       ...item,
       x,
       y,
-      zIndex,
+      zIndex: nextZ++,
       mainCanvasOrigin: { x: item.x, y: item.y, zIndex: item.zIndex },
+    })
+
+    const removeIds = new Set<string>([itemId])
+
+    if (item.type === 'sticky') {
+      for (const entry of get().items) {
+        if (
+          entry.type !== 'image' ||
+          !isImageInSticky(entry) ||
+          entry.stickyId !== itemId
+        ) {
+          continue
+        }
+        removeIds.add(entry.id)
+        transferredItems.push({
+          ...entry,
+          zIndex: nextZ++,
+          mainCanvasOrigin: {
+            x: entry.x,
+            y: entry.y,
+            zIndex: entry.zIndex,
+          },
+        })
+      }
     }
 
+    useUiCustomizationStore
+      .getState()
+      .removePinsForAnchor(canvasItemUiAnchorId(itemId))
+
     set((state) => ({
-      items: state.items.filter((entry) => entry.id !== itemId),
-      selectedIds: state.selectedIds.filter((id) => id !== itemId),
-      previewAdjustSpaceId:
-        state.previewAdjustSpaceId === itemId ? null : state.previewAdjustSpaceId,
+      items: state.items.filter((entry) => !removeIds.has(entry.id)),
+      selectedIds: state.selectedIds.filter((id) => !removeIds.has(id)),
       activeStickyStroke:
         state.activeStickyStroke?.stickyId === itemId
           ? null
@@ -923,7 +1083,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           ...state.spaces,
           [spaceId]: {
             ...current,
-            items: [...current.items, transferred],
+            items: [...current.items, ...transferredItems],
           },
         },
       }
@@ -1038,8 +1198,6 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     set((state) => ({
       items: state.items.filter((entry) => entry.id !== itemId),
       selectedIds: state.selectedIds.filter((id) => id !== itemId),
-      previewAdjustSpaceId:
-        state.previewAdjustSpaceId === itemId ? null : state.previewAdjustSpaceId,
       activeStickyStroke:
         state.activeStickyStroke?.stickyId === itemId
           ? null
@@ -1076,7 +1234,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           const clamp = opts?.clampStudyHub !== false
           const { width: w, height: h } = clamp
             ? studyHubDimensionsForWidth(width)
-            : { width, height: width / STUDY_HUB_ASPECT }
+            : { width, height }
           return { ...item, width: w, height: h }
         }
         return { ...item, width, height }
@@ -1094,10 +1252,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           const clamp = opts?.clampStudyHub !== false
           const { width: w, height: h } = clamp
             ? studyHubDimensionsForWidth(width)
-            : {
-                width,
-                height: width / STUDY_HUB_ASPECT,
-              }
+            : { width, height }
           return { ...item, x, y, width: w, height: h }
         }
         return { ...item, x, y, width, height }
@@ -1303,6 +1458,35 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     restoreSizingFrameId = requestAnimationFrame(tick)
   },
 
+  snapStudyHubAspectRatio: (id) => {
+    const item = findItem(get().items, id)
+    if (!item || item.type !== 'study_hub' || !itemIsMutable(item)) return
+
+    // Corner resize anchors top-left — only height snaps back to design aspect.
+    const { width: targetWidth, height: targetHeight } =
+      studyHubDimensionsForWidth(item.width)
+
+    if (
+      Math.abs(item.width - targetWidth) < 0.5 &&
+      Math.abs(item.height - targetHeight) < 0.5
+    ) {
+      return
+    }
+
+    // Interpolate height freely — clampStudyHub on each frame snaps height
+    // immediately when width is unchanged (no visible animation).
+    get().animateItemRectTo(
+      id,
+      {
+        x: item.x,
+        y: item.y,
+        width: targetWidth,
+        height: targetHeight,
+      },
+      { persist: true, clampStudyHub: false },
+    )
+  },
+
   bringToFront: (id) => {
     const item = findItem(get().items, id)
     if (!itemIsMutable(item)) return
@@ -1356,7 +1540,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     persistItems()
   },
 
-  deleteItem: (id) => {
+  deleteItem: (id, opts) => {
     if (!itemIsMutable(findItem(get().items, id))) return
     const target = findItem(get().items, id)
     pushUndoSnapshot()
@@ -1375,14 +1559,15 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       activeStickyStroke:
         state.activeStickyStroke?.stickyId === id ? null : state.activeStickyStroke,
       selectedIds: state.selectedIds.filter((sid) => sid !== id),
-      previewAdjustSpaceId:
-        state.previewAdjustSpaceId === id ? null : state.previewAdjustSpaceId,
     }))
     persistItems({ immediate: true })
+    useUiCustomizationStore
+      .getState()
+      .removePinsForAnchor(canvasItemUiAnchorId(id))
     if (target && (target.type === 'image' || target.type === 'video')) {
       scheduleMediaBlobGc()
     }
-    playSound('deleteElement', { layer: true })
+    if (!opts?.silent) playSound('deleteElement', { layer: true })
   },
 
   commitStickyTextEdit: (id, text) => {
@@ -1404,16 +1589,20 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
 
   commitTextItemEdit: (id, text) => {
     const item = get().items.find((i) => i.id === id)
-    if (!itemIsMutable(item) || item?.type !== 'text' || item.text === text) return
+    const normalized = isStoredTextEmpty(text) ? '' : text
+    if (!itemIsMutable(item) || item?.type !== 'text' || item.text === normalized) return
     pushUndoSnapshot()
-    get().updateTextItemText(id, text)
+    get().updateTextItemText(id, normalized)
   },
 
   updateTextItemText: (id, text) => {
     if (!itemIsMutable(findItem(get().items, id))) return
+    const normalized = isStoredTextEmpty(text) ? '' : text
     set((state) => ({
       items: state.items.map((item) =>
-        item.id === id && item.type === 'text' ? { ...item, text } : item,
+        item.id === id && item.type === 'text'
+          ? { ...item, text: normalized }
+          : item,
       ),
     }))
     persistItems()
@@ -1457,27 +1646,18 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     persistItems({ immediate: true })
   },
 
-  setPreviewAdjustSpace: (id) => {
-    const current = get().previewAdjustSpaceId
-    if (current === id) return
-    if (id != null) {
-      const item = findItem(get().items, id)
-      if (!itemIsMutable(item) || item?.type !== 'space') return
-    }
-    set({ previewAdjustSpaceId: id })
-  },
-
-  updateSpacePreviewPan: (id, pan) => {
-    const item = findItem(get().items, id)
+  setSpaceTint: (id, tint) => {
+    const item = get().items.find((i) => i.id === id)
     if (!itemIsMutable(item) || item?.type !== 'space') return
+    pushUndoSnapshot()
     set((state) => ({
       items: state.items.map((entry) =>
         entry.id === id && entry.type === 'space'
-          ? { ...entry, previewPan: pan }
+          ? { ...entry, tint }
           : entry,
       ),
     }))
-    persistItems()
+    persistItems({ immediate: true })
   },
 
   getStickyById: (id) => {
@@ -1513,48 +1693,92 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     const isLocked = effectiveCanvasLocked(
       useCanvasLockStore.getState().isLocked,
     )
+    const { items } = get()
 
-    let changed = false
-    set((state) => {
-      const items = state.items.map((item) => {
-        if (!isStickyItem(item)) return item
+    const removeStickyStroke = (
+      itemId: string,
+      strokeId: string,
+      field: 'strokes' | 'annotationStrokes',
+    ) => {
+      set((state) => ({
+        items: state.items.map((entry) => {
+          if (!isStickyItem(entry) || entry.id !== itemId) return entry
+          const list = field === 'strokes' ? entry.strokes : (entry.annotationStrokes ?? [])
+          const next = list.filter((stroke) => stroke.id !== strokeId)
+          if (next.length === list.length) return entry
+          return field === 'strokes'
+            ? { ...entry, strokes: next }
+            : { ...entry, annotationStrokes: next }
+        }),
+      }))
+      persistItems()
+    }
 
-        const localX = canvasPos.x - item.x
-        const localY = canvasPos.y - item.y
+    for (const item of items) {
+      if (!isStickyItem(item)) continue
 
-        if (isLocked) {
-          if (item.layer === 'annotation') {
-            const next = item.strokes.filter(
-              (stroke) =>
-                !hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS),
+      const localX = canvasPos.x - item.x
+      const localY = canvasPos.y - item.y
+
+      if (isLocked) {
+        if (item.layer === 'annotation') {
+          for (const stroke of item.strokes) {
+            if (!hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS)) continue
+            scheduleStrokeErase(stroke.id, () =>
+              removeStickyStroke(item.id, stroke.id, 'strokes'),
             )
-            if (next.length === item.strokes.length) return item
-            changed = true
-            return { ...item, strokes: next }
           }
-
-          const ann = item.annotationStrokes ?? []
-          if (ann.length === 0) return item
-          const next = ann.filter(
-            (stroke) => !hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS),
-          )
-          if (next.length === ann.length) return item
-          changed = true
-          return { ...item, annotationStrokes: next }
+          continue
         }
 
-        if (item.strokes.length === 0) return item
-        const next = item.strokes.filter(
-          (stroke) => !hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS),
+        for (const stroke of item.annotationStrokes ?? []) {
+          if (!hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS)) continue
+          scheduleStrokeErase(stroke.id, () =>
+            removeStickyStroke(item.id, stroke.id, 'annotationStrokes'),
+          )
+        }
+        continue
+      }
+
+      for (const stroke of item.strokes) {
+        if (!hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS)) continue
+        scheduleStrokeErase(stroke.id, () =>
+          removeStickyStroke(item.id, stroke.id, 'strokes'),
         )
-        if (next.length === item.strokes.length) return item
-        changed = true
-        return { ...item, strokes: next }
+      }
+    }
+  },
+
+  applyDragItemErase: (canvasPos) => {
+    const { targetTypes } = useEraserStore.getState()
+    const wantsText = targetTypes.includes('text')
+    const wantsImage = targetTypes.includes('image')
+    if (!wantsText && !wantsImage) return
+
+    const { items } = get()
+    const hit = items
+      .filter((item) => {
+        if (!itemIsMutable(item)) return false
+        if (item.type === 'text' && wantsText) return true
+        if (item.type === 'image' && wantsImage) return true
+        return false
       })
-      if (!changed) return state
-      return { items }
-    })
-    if (changed) persistItems()
+      .sort((a, b) => b.zIndex - a.zIndex)
+      .find((item) => eraserHitsItem(item, canvasPos.x, canvasPos.y, ERASE_HIT_RADIUS))
+
+    if (!hit) return
+
+    set((state) => ({
+      items: state.items.filter((entry) => entry.id !== hit.id),
+      selectedIds: state.selectedIds.filter((sid) => sid !== hit.id),
+    }))
+    persistItems({ immediate: true })
+    if (hit.type === 'image') scheduleMediaBlobGc()
+    const now = performance.now()
+    if (now - lastEraseDeleteSoundAt >= ERASE_DELETE_SOUND_MS) {
+      lastEraseDeleteSoundAt = now
+      playSound('deleteElement', { layer: true })
+    }
   },
 
   endStickyStroke: () => {
@@ -1787,5 +2011,11 @@ export function useItemIsSoleSelected(id: string): boolean {
 export function useItemZOrderPulse(id: string): ZOrderPulse | null {
   return useCanvasItemsStore((s) =>
     s.zOrderPulse && s.zOrderPulse.id === id ? s.zOrderPulse : null,
+  )
+}
+
+export function useItemMediaSwapPulse(id: string): MediaSwapPulse | null {
+  return useCanvasItemsStore((s) =>
+    s.mediaSwapPulse && s.mediaSwapPulse.id === id ? s.mediaSwapPulse : null,
   )
 }

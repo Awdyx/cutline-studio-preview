@@ -5,6 +5,7 @@ import {
   CANVAS_ORIGINAL_HEIGHT,
   CANVAS_ORIGINAL_WIDTH,
 } from '../drawing/canvasDimensions'
+import { virtualCameraFromLibrary } from './canvasVirtualPan'
 import { useStudioCentrePositionStore } from './studioCentrePositionStore'
 
 export type CanvasMinimapRect = {
@@ -140,10 +141,11 @@ export function readCanvasMinimapViewport(
   const { positionX, positionY, scale } = ref.state
   if (!Number.isFinite(scale) || scale <= 0) return null
 
-  const x = clamp(-positionX / scale, 0, canvasWidth)
-  const y = clamp(-positionY / scale, 0, canvasHeight)
-  const right = clamp((wrapperWidth - positionX) / scale, 0, canvasWidth)
-  const bottom = clamp((wrapperHeight - positionY) / scale, 0, canvasHeight)
+  const virtual = virtualCameraFromLibrary({ positionX, positionY, scale })
+  const x = clamp(-virtual.positionX / virtual.scale, 0, canvasWidth)
+  const y = clamp(-virtual.positionY / virtual.scale, 0, canvasHeight)
+  const right = clamp((wrapperWidth - virtual.positionX) / virtual.scale, 0, canvasWidth)
+  const bottom = clamp((wrapperHeight - virtual.positionY) / virtual.scale, 0, canvasHeight)
 
   return {
     x,

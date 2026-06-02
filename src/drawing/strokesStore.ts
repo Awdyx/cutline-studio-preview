@@ -21,6 +21,10 @@ import {
 } from './strokePointDecimation'
 import { strokeToSvgPath, ensureMinimumStrokePoints } from './strokePath'
 import { generateStrokeId } from './strokeId'
+import {
+  cancelPendingStrokeErases,
+  scheduleStrokeErase,
+} from './strokeEraseVisualStore'
 import type { DrawTool, Stroke, StrokePoint } from './types'
 
 type StrokeConfig = {
@@ -68,6 +72,17 @@ function persist(opts?: { immediate?: boolean }) {
     return
   }
   notifyWorkspacePersist()
+}
+
+function scheduleHitStrokeErases(
+  strokes: Stroke[],
+  pos: { x: number; y: number },
+  remove: (id: string) => void,
+) {
+  for (const stroke of strokes) {
+    if (!hitTestStroke(stroke, pos.x, pos.y, ERASE_HIT_RADIUS)) continue
+    scheduleStrokeErase(stroke.id, () => remove(stroke.id))
+  }
 }
 
 export const useStrokesStore = create<StrokesState>((set, get) => ({
@@ -158,31 +173,32 @@ export const useStrokesStore = create<StrokesState>((set, get) => ({
     const { strokes, annotationStrokes } = get()
 
     if (isLocked) {
-      const next = annotationStrokes.filter(
-        (stroke) => !hitTestStroke(stroke, pos.x, pos.y, ERASE_HIT_RADIUS),
-      )
-      if (next.length === annotationStrokes.length) return
-      set({ annotationStrokes: next })
-      persist({ immediate: true })
+      scheduleHitStrokeErases(annotationStrokes, pos, (id) => {
+        set((s) => ({
+          annotationStrokes: s.annotationStrokes.filter((stroke) => stroke.id !== id),
+        }))
+        persist({ immediate: true })
+      })
       return
     }
 
-    const next = strokes.filter(
-      (stroke) => !hitTestStroke(stroke, pos.x, pos.y, ERASE_HIT_RADIUS),
-    )
-    if (next.length === strokes.length) return
-
-    set({ strokes: next })
-    persist({ immediate: true })
+    scheduleHitStrokeErases(strokes, pos, (id) => {
+      set((s) => ({
+        strokes: s.strokes.filter((stroke) => stroke.id !== id),
+      }))
+      persist({ immediate: true })
+    })
   },
 
   undo: () => {
+    cancelPendingStrokeErases()
     const changed = historyUndo()
     if (changed) playSound('undo')
     return changed
   },
 
   redo: () => {
+    cancelPendingStrokeErases()
     const changed = historyRedo()
     if (changed) playSound('redo')
     return changed
@@ -202,9 +218,12 @@ export const useStrokesStore = create<StrokesState>((set, get) => ({
 
   deleteStrokes: (ids, opts) => {
     if (!opts?.skipSnapshot) pushUndoSnapshot()
-    const idSet = new Set(ids)
-    set((s) => ({ strokes: s.strokes.filter((st) => !idSet.has(st.id)) }))
-    persist()
+    for (const id of ids) {
+      scheduleStrokeErase(id, () => {
+        set((s) => ({ strokes: s.strokes.filter((st) => st.id !== id) }))
+        persist()
+      })
+    }
   },
 
   recolorStrokes: (ids, color) => {

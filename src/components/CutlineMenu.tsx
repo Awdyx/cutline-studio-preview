@@ -27,6 +27,7 @@ import { MenuRow } from './MenuRow'
 import { SubmenuSoundScope } from './SubmenuSoundScope'
 import { useMenuOutsideDismiss } from './useMenuOutsideDismiss'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
+import { useUiCustomizationStore } from '../uiCustomization/uiCustomizationStore'
 import { desktopChromePanelAnchorLeft, desktopChromePanelTop } from '../platform/chromeLayout'
 
 interface CutlineMenuProps {
@@ -256,7 +257,7 @@ export default function CutlineMenu({
             userSelect: 'none',
           }}
         >
-          v1.21
+          v1.7
         </span>
         <SubmenuSoundScope>
         <CutlineAppNavSection onNavigate={onClose} transformRef={transformRef} />
@@ -299,10 +300,8 @@ export default function CutlineMenu({
             onClick={() => {
             closeAllSubmenus()
             onClose({ silent: true })
-            window.setTimeout(() => {
-              useUiCustomizationStore.getState().setEditing(true)
-              playSound('menuOpen')
-            }, 40)
+            useUiCustomizationStore.getState().setEditing(true)
+            playSound('menuOpen')
           }}
         />
         {!isPhone && (

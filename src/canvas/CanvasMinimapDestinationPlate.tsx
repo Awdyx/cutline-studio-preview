@@ -9,6 +9,7 @@ import {
   type CanvasMinimapRect,
 } from './canvasMinimapGeometry'
 import { onStudioCentreMinimapDragPointerDown } from './studioCentreDrag'
+import StudioPlateDragHandle from './StudioPlateDragHandle'
 import { panCanvasMinimapToItem } from './canvasMinimapPanToItem'
 import { playSubmenuTap } from '../sound/submenuSound'
 import { useStudioCentreDragStore } from './studioCentreDragStore'
@@ -54,10 +55,9 @@ export default function CanvasMinimapDestinationPlate({
     panCanvasMinimapToItem(transformRef, canvasMinimapStudioRect())
   }, [transformRef])
 
-  const onPlatePointerDown = useCallback(
+  const onHandlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
       event.preventDefault()
-      event.stopPropagation()
 
       const frame = frameRef.current
       if (!frame) return
@@ -117,9 +117,13 @@ export default function CanvasMinimapDestinationPlate({
       <button
         type="button"
         className="canvas-minimap-expanded-menu__plate"
-        aria-label="Move studio space, or click to go to it"
-        onPointerDown={onPlatePointerDown}
+        aria-label="Go to studio space"
+        onClick={onPlateTap}
       >
+        <StudioPlateDragHandle
+          ariaLabel="Move studio space on canvas map"
+          onPointerDown={onHandlePointerDown}
+        />
         <div className="canvas-minimap-expanded-menu__plate-preview">
           <StudioCentreContentPreview />
         </div>

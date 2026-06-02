@@ -1,6 +1,10 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { startHoldRepeat, type HoldRepeatHandle } from '../hooks/holdRepeat'
-import { handleTextFormatShortcutEvent } from './textEditorFormat'
+import { isRichTextEditorEngaged } from './textEditorContent'
+import {
+  handleTextFormatShortcutEvent,
+  isFormatModifierShortcut,
+} from './textEditorFormat'
 import {
   changeEditorFontSize,
   FONT_SIZE_BRACKET_KEY_CODES,
@@ -15,9 +19,10 @@ import {
 /** macOS may defer ] keyup until ⌘ is released; OS key-repeat pulses end sooner. */
 const BRACKET_PULSE_TIMEOUT_MS = 140
 
-/** Capture-phase Cmd/Ctrl shortcuts while a canvas rich-text editor is focused. */
+/** Capture-phase Cmd/Ctrl shortcuts while a canvas rich-text editor is active. */
 export function useTextEditorShortcuts(
   editorRef: RefObject<HTMLElement | null>,
+  isActive: boolean,
   isEditing: boolean,
   defaultFontSize: number,
   onFormatApplied: () => void,
@@ -30,7 +35,7 @@ export function useTextEditorShortcuts(
   const lastBracketPulseRef = useRef(0)
 
   useEffect(() => {
-    if (!isEditing) return
+    if (!isActive) return
 
     function stopFontSizeHold() {
       fontSizeHoldRef.current?.stop()
@@ -77,7 +82,6 @@ export function useTextEditorShortcuts(
     function bracketStillHeld() {
       if (!bracketEngagedRef.current) return false
       if (!modifierStillHeld()) return false
-      // Bracket keyup is often missing while ⌘ is held — stop when key-repeat pulses end.
       return (
         performance.now() - lastBracketPulseRef.current <
         BRACKET_PULSE_TIMEOUT_MS
@@ -105,29 +109,35 @@ export function useTextEditorShortcuts(
       trackKeyDown(event)
 
       const editor = editorRef.current
-      if (!editor?.isContentEditable) return
+      if (!editor) return
 
-      const active = document.activeElement
-      if (
-        active !== editor &&
-        !(active instanceof Node && editor.contains(active))
-      ) {
+      const engaged = isRichTextEditorEngaged(editor, event.target)
+
+      if (isFormatModifierShortcut(event) && engaged) {
+        if (handleTextFormatShortcutEvent(event, editor, onFormatApplied)) {
+          event.stopPropagation()
+        }
         return
       }
 
-      if (isFontSizeShortcut(event)) {
+      if (isFontSizeShortcut(event) && engaged) {
+        event.preventDefault()
         event.stopPropagation()
         pulseBracketShortcut()
 
         if (!event.repeat) {
-          handleFontSizeShortcutEvent(event, editor, defaultFontSize, onFormatApplied)
+          handleFontSizeShortcutEvent(
+            event,
+            editor,
+            defaultFontSize,
+            onFormatApplied,
+          )
 
           stopFontSizeHold()
           const direction = fontSizeDirectionFromKeyboardEvent(event)
           if (direction) {
             modifierLatchRef.current = event.metaKey || event.ctrlKey
             bracketEngagedRef.current = true
-            // Bracket keyup is often missing while ⌘ is held — don't trust keysDown for ].
             for (const code of FONT_SIZE_BRACKET_KEY_CODES) {
               keysDownRef.current.delete(code)
             }
@@ -136,7 +146,7 @@ export function useTextEditorShortcuts(
               () => {
                 const el = editorRef.current
                 const dir = holdDirectionRef.current
-                if (!el?.isContentEditable || !dir) {
+                if (!el || !dir) {
                   stopFontSizeHold()
                   return
                 }
@@ -151,15 +161,14 @@ export function useTextEditorShortcuts(
               { whileActive: bracketStillHeld },
             )
           }
-        } else {
-          if (!bracketStillHeld()) stopFontSizeHold()
+        } else if (!bracketStillHeld()) {
+          stopFontSizeHold()
         }
         return
       }
 
-      if (handleTextFormatShortcutEvent(event, editor, onFormatApplied)) {
-        event.stopPropagation()
-      }
+      if (!isEditing || !editor.isContentEditable) return
+      if (!engaged) return
     }
 
     function onWindowBlur() {
@@ -175,7 +184,9 @@ export function useTextEditorShortcuts(
     }
 
     const editor = editorRef.current
-    editor?.addEventListener('blur', onBlur)
+    if (isEditing) {
+      editor?.addEventListener('blur', onBlur)
+    }
 
     document.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('keyup', onBracketKeyUp, true)
@@ -189,5 +200,5 @@ export function useTextEditorShortcuts(
       window.removeEventListener('keyup', onBracketKeyUp, true)
       window.removeEventListener('blur', onWindowBlur)
     }
-  }, [editorRef, isEditing, defaultFontSize, onFormatApplied])
+  }, [editorRef, isActive, isEditing, defaultFontSize, onFormatApplied])
 }

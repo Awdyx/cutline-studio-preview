@@ -2,7 +2,10 @@ import {
   CANVAS_ORIGINAL_HEIGHT,
   CANVAS_ORIGINAL_WIDTH,
 } from './canvasDimensions'
-import { clientToCanvasFromElement } from './canvasCoords'
+import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
+import { pocketStripBounds } from '../spaces/pocketStripDimensions'
+import { readPocketStripState } from '../spaces/pocketStripStore'
+import { clientToCanvasFromElement, mapLogicalToRawCoords, mapRawToLogicalCoords } from './canvasCoords'
 import type { Stroke } from './types'
 import type { CanvasItemBase } from '../canvasItems/types'
 
@@ -16,6 +19,16 @@ export type Pt = { x: number; y: number }
 
 /** Studio-centre working area as a canvas-space rectangle polygon. */
 export function studioCentrePolygon(): Pt[] {
+  if (useCanvasWorkspaceStore.getState().isInsideSpace()) {
+    const { logicalWidth } = readPocketStripState()
+    const bounds = pocketStripBounds(logicalWidth)
+    return [
+      { x: 0, y: bounds.minY },
+      { x: logicalWidth, y: bounds.minY },
+      { x: logicalWidth, y: bounds.maxY },
+      { x: 0, y: bounds.maxY },
+    ]
+  }
   return [
     { x: 0, y: 0 },
     { x: CANVAS_ORIGINAL_WIDTH, y: 0 },
@@ -80,10 +93,11 @@ export function screenPolyToCanvas(
   if (rect.width <= 0 || rect.height <= 0) return []
   const scaleX = canvasEl.offsetWidth / rect.width
   const scaleY = canvasEl.offsetHeight / rect.height
-  return screenPoly.map((p) => ({
-    x: (p.x - rect.left) * scaleX,
-    y: (p.y - rect.top) * scaleY,
-  }))
+  return screenPoly.map((p) => {
+    const rawX = (p.x - rect.left) * scaleX
+    const rawY = (p.y - rect.top) * scaleY
+    return mapRawToLogicalCoords(rawX, rawY)
+  })
 }
 
 /** Canvas-space bounds for the current lasso selection (optional drag preview offset). */
@@ -238,8 +252,9 @@ export function strokesScreenBounds(
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const stroke of strokes) {
     for (const pt of stroke.points) {
-      const sx = rect.left + visualDrawTargetCoord(pt.x) * scaleX
-      const sy = rect.top + visualDrawTargetCoord(pt.y) * scaleY
+      const raw = mapLogicalToRawCoords(pt.x, pt.y)
+      const sx = rect.left + raw.x * scaleX
+      const sy = rect.top + raw.y * scaleY
       if (sx < minX) minX = sx
       if (sy < minY) minY = sy
       if (sx > maxX) maxX = sx
@@ -262,10 +277,12 @@ export function itemsScreenBounds(
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const item of items) {
-    const sx = rect.left + visualDrawTargetCoord(item.x) * scaleX
-    const sy = rect.top + visualDrawTargetCoord(item.y) * scaleY
-    const ex = rect.left + visualDrawTargetCoord(item.x + item.width) * scaleX
-    const ey = rect.top + visualDrawTargetCoord(item.y + item.height) * scaleY
+    const topLeft = mapLogicalToRawCoords(item.x, item.y)
+    const bottomRight = mapLogicalToRawCoords(item.x + item.width, item.y + item.height)
+    const sx = rect.left + topLeft.x * scaleX
+    const sy = rect.top + topLeft.y * scaleY
+    const ex = rect.left + bottomRight.x * scaleX
+    const ey = rect.top + bottomRight.y * scaleY
     if (sx < minX) minX = sx
     if (sy < minY) minY = sy
     if (ex > maxX) maxX = ex

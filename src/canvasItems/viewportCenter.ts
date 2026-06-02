@@ -1,6 +1,8 @@
 import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { clientToCanvas, clientToFullCanvas } from '../drawing/canvasCoords'
+import { readActiveCanvasLogicalWidth } from '../spaces/activeCanvasLayout'
+import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { PHONE_HEADER_BLOCK_HEIGHT } from '../styles/phoneChrome'
 import { readEditablePlacementRect } from '../platform/viewportSize'
 
@@ -44,7 +46,15 @@ export function viewportPointCanvas(
     rect.top + rect.height * clampedVertical,
     transformRef,
     canvasEl,
-  )
+  ) ?? pocketSpawnFallback()
+}
+
+function pocketSpawnFallback(): { x: number; y: number } | null {
+  if (!useCanvasWorkspaceStore.getState().isInsideSpace()) return null
+  return {
+    x: readActiveCanvasLogicalWidth() / 2,
+    y: 0,
+  }
 }
 
 export function viewportCenterCanvas(
@@ -109,6 +119,7 @@ export function viewportBalancedSpawnCanvas(
   const screenY = rect.top + topInset + bandHeight / 2
 
   return clientToCanvas(screenX, screenY, transformRef, canvasEl ?? null)
+    ?? pocketSpawnFallback()
 }
 
 /** Default spawn point — balanced on touch, centered (or editable) on desktop. */
@@ -164,4 +175,5 @@ export function viewportEditableSpawnCanvas(
   const screenY = itemTop + itemHeight / 2
 
   return clientToCanvas(screenX, screenY, transformRef, canvasEl ?? null)
+    ?? pocketSpawnFallback()
 }

@@ -1,6 +1,6 @@
 import { useRef, useEffect, type RefObject } from 'react'
 import { pushUndoSnapshot } from '../canvasHistory/canvasHistory'
-import { lassoMoveKeepsStudioCentre } from '../canvas/studioCentre'
+import { lassoMoveKeepsActiveCanvas } from '../spaces/activeCanvasLayout'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { isImageInSticky } from '../canvasItems/types'
 import { playSound } from '../sound/playSound'
@@ -102,7 +102,7 @@ export function useLassoSelectionDrag(canvasRef: RefObject<HTMLDivElement | null
 
     endLassoDragSound(
       moved &&
-        lassoMoveKeepsStudioCentre(
+        lassoMoveKeepsActiveCanvas(
           selectedStrokeIds,
           selectedItemIds,
           totalCanvasDelta.current.dx,
@@ -118,7 +118,7 @@ export function useLassoSelectionDrag(canvasRef: RefObject<HTMLDivElement | null
     }
 
     const { dx, dy } = totalCanvasDelta.current
-    if (!lassoMoveKeepsStudioCentre(selectedStrokeIds, selectedItemIds, dx, dy)) {
+    if (!lassoMoveKeepsActiveCanvas(selectedStrokeIds, selectedItemIds, dx, dy)) {
       animateLassoDragRebound(selectedStrokeIds)
       return
     }

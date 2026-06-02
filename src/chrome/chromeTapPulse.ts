@@ -7,6 +7,7 @@ export const CHROME_TAP_SQUEEZE_TRIGGERS = [
   '[data-panel-trigger]',
   '[data-fab-trigger]',
   '[data-pen-fab-trigger]',
+  '[data-space-back-trigger]',
   '.canvas-search-island',
 ].join(',')
 

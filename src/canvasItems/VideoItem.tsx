@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react'
+import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import {
   MediaBlobFrame,
@@ -18,7 +18,6 @@ export default function VideoItem({
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
   onItemResizeStateChange?: (resizing: boolean) => void
 }) {
-  const [hovered, setHovered] = useState(false)
   const { url, status } = useMediaBlobUrl(item.mediaId, item.id)
 
   return (
@@ -35,9 +34,6 @@ export default function VideoItem({
             muted
             loop
             playsInline
-            controls={hovered}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
             className="media-item-surface"
             style={{
               width: '100%',

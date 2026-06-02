@@ -1,3 +1,4 @@
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { playSubmenuHover, playSubmenuTap } from '../../sound/submenuSound'
 import { SubmenuSoundScope } from '../SubmenuSoundScope'
 
@@ -50,6 +51,8 @@ export default function StudyHubPracticePicker({
   value: StudyPracticeSelection
   onChange: (next: StudyPracticeSelection) => void
 }) {
+  const reduceMotion = useReducedMotion()
+
   function selectMode(mode: StudyPracticeMode) {
     onChange({ ...value, mode })
   }
@@ -77,40 +80,55 @@ export default function StudyHubPracticePicker({
           ))}
         </div>
 
-        {value.mode === 'exam' && (
-          <div className="study-hub-exam-menu">
-            <div className="study-hub-exam-row">
-              <span className="study-hub-exam-label">Timing</span>
-              <div className="study-hub-segment-group">
-                <SegmentOption
-                  label="Timed"
-                  active={value.examTiming === 'timed'}
-                  onClick={() => onChange({ ...value, examTiming: 'timed' })}
-                />
-                <SegmentOption
-                  label="Untimed"
-                  active={value.examTiming === 'untimed'}
-                  onClick={() => onChange({ ...value, examTiming: 'untimed' })}
-                />
+        <AnimatePresence initial={false}>
+          {value.mode === 'exam' && (
+            <motion.div
+              key="exam-menu"
+              className="study-hub-exam-menu"
+              initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={reduceMotion ? undefined : { opacity: 0, height: 0 }}
+              transition={{
+                duration: reduceMotion ? 0.01 : 0.34,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div className="study-hub-exam-menu__inner">
+                <div className="study-hub-exam-row">
+                  <span className="study-hub-exam-label">Timing</span>
+                  <div className="study-hub-segment-group">
+                    <SegmentOption
+                      label="Timed"
+                      active={value.examTiming === 'timed'}
+                      onClick={() => onChange({ ...value, examTiming: 'timed' })}
+                    />
+                    <SegmentOption
+                      label="Untimed"
+                      active={value.examTiming === 'untimed'}
+                      onClick={() => onChange({ ...value, examTiming: 'untimed' })}
+                    />
+                  </div>
+                </div>
+                <div className="study-hub-exam-row">
+                  <span className="study-hub-exam-label">Style</span>
+                  <div className="study-hub-segment-group">
+                    <SegmentOption
+                      label="Otago"
+                      active={value.examStyle === 'otago'}
+                      onClick={() => onChange({ ...value, examStyle: 'otago' })}
+                    />
+                    <SegmentOption
+                      label="Minimal"
+                      active={value.examStyle === 'minimal'}
+                      onClick={() => onChange({ ...value, examStyle: 'minimal' })}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="study-hub-exam-row">
-              <span className="study-hub-exam-label">Style</span>
-              <div className="study-hub-segment-group">
-                <SegmentOption
-                  label="Otago"
-                  active={value.examStyle === 'otago'}
-                  onClick={() => onChange({ ...value, examStyle: 'otago' })}
-                />
-                <SegmentOption
-                  label="Minimal"
-                  active={value.examStyle === 'minimal'}
-                  onClick={() => onChange({ ...value, examStyle: 'minimal' })}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </SubmenuSoundScope>
   )

@@ -1,7 +1,10 @@
 import { isPhoneLayout } from '../platform/layoutProfile'
 
 /** Visual size of handle glyphs. */
-export const HANDLE_VISUAL_SIZE = 20
+export const HANDLE_VISUAL_SIZE = 22
+
+/** Drag grip icon — slightly smaller than the handle visual box. */
+export const DRAG_GRIP_VISUAL_SIZE = 18
 
 /** Invisible tap/drag target (phone / coarse pointer). */
 export const HANDLE_HIT_SIZE = 120

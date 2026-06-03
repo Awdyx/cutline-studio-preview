@@ -15,12 +15,26 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.6.2", features = [] }
+tauri-build = { version = "2.6", features = [] }
 
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.2", features = [] }
+# Match wrymium's tauri-runtime-wry fork (2.10.1); 2.11.x keeps stock WebKit runtime.
+tauri = { version = "=2.10.0", features = ["devtools"] }
+# Cargo otherwise resolves tauri-runtime 2.11.x, which breaks wrymium's 2.10.1 runtime fork.
+tauri-runtime = "=2.10.1"
 tauri-plugin-log = "2"
-tauri-plugin-macos-fps = "0.1"
+# Required for CEF subprocess bootstrap in main.rs (is_cef_subprocess / run_cef_subprocess).
+wry = "0.54"
+
+[patch.crates-io]
+# Vendored fork: upstream wrymium requires Send on ipc handlers; tauri-runtime-wry does not provide it.
+wry = { path = "../vendor/wrymium/wrymium" }
+tauri-runtime-wry = { path = "../vendor/wrymium/tauri-runtime-wry" }
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1

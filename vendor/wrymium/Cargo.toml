@@ -1,0 +1,9 @@
+[workspace]
+members = ["wrymium", "examples/basic", "examples/feishu", "examples/cdp-test", "examples/bench", "examples/webview-control", "examples/claude-desktop", "xtask", "cargo-wrymium"]
+exclude = ["examples/tauri-app/src-tauri"]
+resolver = "2"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1

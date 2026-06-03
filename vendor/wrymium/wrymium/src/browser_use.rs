@@ -1,0 +1,1495 @@
+//! Browser Use primitives for wrymium.
+//!
+//! High-level browser automation API built on top of the CDP Bridge (Phase 1)
+//! and CEF's native input APIs. All methods are synchronous and must be called
+//! on the CEF UI thread. Phase 3 Tauri commands wrap these with async dispatch.
+
+use std::os::raw::c_int;
+use std::time::Duration;
+
+use cef::*;
+
+use crate::cdp::{CdpError, CdpResult};
+use crate::webview::WebView;
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/// Default timeout for CDP operations.
+const CDP_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Short timeout for quick operations (evaluate, DOM query).
+const CDP_TIMEOUT_SHORT: Duration = Duration::from_secs(10);
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+/// Options for taking a screenshot.
+#[derive(Debug, Clone, Default)]
+pub struct ScreenshotOptions {
+    /// Image format: "png" (default) or "jpeg".
+    pub format: Option<String>,
+    /// JPEG quality (0-100). Only used when format is "jpeg".
+    pub quality: Option<u32>,
+    /// Clip region. If None, captures the full visible viewport.
+    pub clip: Option<ClipRect>,
+}
+
+/// A rectangular clip region for screenshots.
+#[derive(Debug, Clone)]
+pub struct ClipRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// A page element found by CSS selector.
+#[derive(Debug, Clone)]
+pub struct Element {
+    /// CDP node ID (valid for the current DOM session).
+    pub node_id: i64,
+    /// Bounding box in viewport coordinates (CSS pixels).
+    pub bounds: Option<ElementBounds>,
+    /// The CSS selector used to find this element.
+    pub selector: String,
+}
+
+/// Bounding box of an element in viewport coordinates (CSS pixels).
+#[derive(Debug, Clone)]
+pub struct ElementBounds {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// Information about a frame in the page.
+#[derive(Debug, Clone)]
+pub struct FrameInfo {
+    pub id: String,
+    pub url: String,
+    pub name: String,
+    pub is_main: bool,
+}
+
+/// An annotated screenshot with element labels.
+#[derive(Debug)]
+pub struct AnnotatedScreenshot {
+    /// PNG image bytes (with overlay annotations baked in).
+    pub image: Vec<u8>,
+    /// List of annotated interactive elements.
+    pub elements: Vec<AnnotatedElement>,
+}
+
+/// An interactive element found during annotation.
+#[derive(Debug, Clone)]
+pub struct AnnotatedElement {
+    /// Numeric label shown on the screenshot (1, 2, 3...).
+    pub label: u32,
+    /// Accessibility role (e.g. "button", "link", "textbox").
+    pub role: String,
+    /// Accessible name / visible text.
+    pub name: String,
+    /// CSS selector to target this element.
+    pub selector: String,
+    /// Bounding box in viewport coordinates.
+    pub bounds: ElementBounds,
+}
+
+/// Keyboard keys for press_key / key_combo.
+#[derive(Debug, Clone, Copy)]
+pub enum Key {
+    Enter,
+    Tab,
+    Escape,
+    Backspace,
+    Delete,
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Space,
+    /// A specific character key (ASCII only for native key events).
+    Char(char),
+}
+
+impl Key {
+    /// Windows virtual key code for this key.
+    pub(crate) fn windows_key_code(self) -> c_int {
+        match self {
+            Key::Enter => 0x0D,
+            Key::Tab => 0x09,
+            Key::Escape => 0x1B,
+            Key::Backspace => 0x08,
+            Key::Delete => 0x2E,
+            Key::ArrowUp => 0x26,
+            Key::ArrowDown => 0x28,
+            Key::ArrowLeft => 0x25,
+            Key::ArrowRight => 0x27,
+            Key::Home => 0x24,
+            Key::End => 0x23,
+            Key::PageUp => 0x21,
+            Key::PageDown => 0x22,
+            Key::Space => 0x20,
+            Key::Char(c) => {
+                // For ASCII letters, use uppercase VK code
+                if c.is_ascii_alphabetic() {
+                    c.to_ascii_uppercase() as c_int
+                } else {
+                    c as c_int
+                }
+            }
+        }
+    }
+
+    /// Character value for CHAR key events (0 for non-printable keys).
+    pub(crate) fn char_value(self) -> u16 {
+        match self {
+            Key::Enter => '\r' as u16,
+            Key::Tab => '\t' as u16,
+            Key::Backspace => 0x08,
+            Key::Space => ' ' as u16,
+            Key::Char(c) => c as u16,
+            _ => 0,
+        }
+    }
+}
+
+/// Keyboard modifier flags.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Modifiers {
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub meta: bool, // Cmd on macOS, Win on Windows
+}
+
+impl Modifiers {
+    /// Convert to CEF modifier bit flags (from cef_event_flags_t).
+    pub(crate) fn to_cef_flags(self) -> u32 {
+        let mut flags = 0u32;
+        if self.shift {
+            flags |= 1 << 1; // EVENTFLAG_SHIFT_DOWN = 2
+        }
+        if self.ctrl {
+            flags |= 1 << 2; // EVENTFLAG_CONTROL_DOWN = 4
+        }
+        if self.alt {
+            flags |= 1 << 3; // EVENTFLAG_ALT_DOWN = 8
+        }
+        if self.meta {
+            flags |= 1 << 7; // EVENTFLAG_COMMAND_DOWN = 128
+        }
+        flags
+    }
+}
+
+/// An interactive/actionable element on the page.
+#[derive(Debug, Clone)]
+pub struct InteractiveElement {
+    /// 1-based index (for LLM reference: "click element [3]").
+    pub index: u32,
+    /// Role: "button", "link", "textbox", "combobox", "checkbox", etc.
+    pub role: String,
+    /// Accessible name or visible text.
+    pub name: String,
+    /// CSS selector to target this element.
+    pub selector: String,
+    /// Current value (for inputs/selects) or checked state.
+    pub value: Option<String>,
+    /// Bounding box in viewport coordinates.
+    pub bounds: ElementBounds,
+}
+
+impl std::fmt::Display for InteractiveElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {} \"{}\"", self.index, self.role, self.name)?;
+        if let Some(ref v) = self.value {
+            write!(f, " value=\"{v}\"")?;
+        }
+        write!(f, "  {}", self.selector)
+    }
+}
+
+/// A cookie for get/set operations.
+#[derive(Debug, Clone)]
+pub struct BrowserCookie {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    pub secure: bool,
+    pub http_only: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Helper: CDP call with default timeout
+// ---------------------------------------------------------------------------
+
+impl WebView {
+    /// Internal helper: CDP send with default timeout.
+    fn cdp(&self, method: &str, params: serde_json::Value) -> CdpResult<serde_json::Value> {
+        self.cdp_send_blocking(method, params, CDP_TIMEOUT)
+    }
+
+    /// Internal helper: CDP send with short timeout.
+    fn cdp_quick(&self, method: &str, params: serde_json::Value) -> CdpResult<serde_json::Value> {
+        self.cdp_send_blocking(method, params, CDP_TIMEOUT_SHORT)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Navigation
+// ---------------------------------------------------------------------------
+
+impl WebView {
+    /// Navigate to a URL. If `wait` is true, waits for the page load event.
+    ///
+    /// When `wait` is true, subscribes to CDP events **before** dispatching
+    /// the navigation to avoid the race where `Page.loadEventFired` fires
+    /// before the subscription is active.
+    pub fn navigate(&self, url: &str, wait: bool) -> CdpResult<()> {
+        // Subscribe BEFORE navigating to avoid missing loadEventFired
+        let rx = if wait {
+            Some(self.cdp_subscribe().ok_or(CdpError::NotReady)?)
+        } else {
+            None
+        };
+
+        self.cdp("Page.navigate", serde_json::json!({ "url": url }))?;
+
+        if let Some(rx) = rx {
+            let deadline = std::time::Instant::now() + CDP_TIMEOUT;
+            loop {
+                match rx.try_recv() {
+                    Ok(event) if event.method == "Page.loadEventFired" => return Ok(()),
+                    Ok(_) => {}
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        return Err(CdpError::ChannelClosed);
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {
+                        if std::time::Instant::now() > deadline {
+                            return Err(CdpError::Timeout);
+                        }
+                        cef::do_message_loop_work();
+                        std::thread::yield_now();
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Page perception: screenshot, A11y tree, evaluate
+// ---------------------------------------------------------------------------
+
+impl WebView {
+    /// Take a fast screenshot optimized for LLM observation.
+    ///
+    /// Uses JPEG quality 50 + `optimizeForSpeed` flag + `captureBeyondViewport: false`.
+    /// These CDP parameters skip expensive compositing and encoding steps.
+    pub fn screenshot_fast(&self) -> CdpResult<Vec<u8>> {
+        let result = self.cdp(
+            "Page.captureScreenshot",
+            serde_json::json!({
+                "format": "jpeg",
+                "quality": 50,
+                "optimizeForSpeed": true,
+                "captureBeyondViewport": false,
+            }),
+        )?;
+        let data_b64 = result["data"]
+            .as_str()
+            .ok_or_else(|| CdpError::Json("missing 'data'".into()))?;
+        base64_decode(data_b64)
+    }
+
+    /// Take a screenshot. Returns PNG (or JPEG) image bytes.
+    pub fn screenshot(&self, opts: &ScreenshotOptions) -> CdpResult<Vec<u8>> {
+        let mut params = serde_json::json!({});
+
+        if let Some(ref fmt) = opts.format {
+            params["format"] = serde_json::json!(fmt);
+        }
+        if let Some(q) = opts.quality {
+            params["quality"] = serde_json::json!(q);
+        }
+        if let Some(ref clip) = opts.clip {
+            params["clip"] = serde_json::json!({
+                "x": clip.x,
+                "y": clip.y,
+                "width": clip.width,
+                "height": clip.height,
+                "scale": 1.0,
+            });
+        }
+
+        let result = self.cdp("Page.captureScreenshot", params)?;
+
+        // Result contains base64-encoded image data
+        let data_b64 = result["data"]
+            .as_str()
+            .ok_or_else(|| CdpError::Json("missing 'data' in screenshot response".into()))?;
+
+        // Decode base64
+        base64_decode(data_b64)
+    }
+
+    /// Get the raw accessibility tree (full CDP JSON).
+    pub fn accessibility_tree(&self) -> CdpResult<serde_json::Value> {
+        self.cdp("Accessibility.getFullAXTree", serde_json::json!({}))
+    }
+
+    /// Get the accessibility tree as compact LLM-friendly text.
+    ///
+    /// Converts the raw CDP A11y tree into an indented text format that uses
+    /// **5-20x fewer tokens** than the raw JSON. Filters out ignored nodes,
+    /// flattens role/name, and includes relevant properties (value, checked,
+    /// level, expanded, etc.).
+    ///
+    /// Example output:
+    /// ```text
+    /// [document] "Basic Test Page"
+    ///   [navigation] "Main"
+    ///     [link] "Home"
+    ///     [link] "About"
+    ///   [main]
+    ///     [heading] "Welcome" level=1
+    ///     [textbox] "Email" value="" placeholder="Type here"
+    ///     [button] "Submit"
+    /// ```
+    pub fn accessibility_tree_compact(&self) -> CdpResult<String> {
+        let tree = self.accessibility_tree()?;
+        let nodes = tree["nodes"]
+            .as_array()
+            .ok_or_else(|| CdpError::Json("missing nodes array".into()))?;
+
+        let formatted = a11y::format_tree(nodes);
+        Ok(formatted)
+    }
+
+    /// Get the accessibility tree as compact text via a **single JS evaluate**.
+    ///
+    /// Bypasses the CDP `Accessibility.getFullAXTree` domain entirely.
+    /// Walks the DOM in JavaScript, extracting ARIA roles/names/properties
+    /// and building the indented text format directly. Returns the result
+    /// in one CDP roundtrip (~53µs) instead of Accessibility domain (~428µs).
+    ///
+    /// This is the recommended method for Agent observe loops where latency matters.
+    pub fn accessibility_tree_fast(&self) -> CdpResult<String> {
+        let result = self.evaluate(A11Y_TREE_JS)?;
+        result
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| CdpError::Json("a11y_tree_fast JS returned non-string".into()))
+    }
+
+    /// Get only interactive/actionable elements from the page.
+    ///
+    /// Returns a compact list of elements the agent can act on (buttons, links,
+    /// inputs, selects, textareas) with their role, name, current value, and
+    /// a CSS selector for targeting.
+    ///
+    /// Much more token-efficient than the full A11y tree when the agent only
+    /// needs to decide what to click/type.
+    pub fn interactive_elements(&self) -> CdpResult<Vec<InteractiveElement>> {
+        // Use JS to collect interactive elements with all needed info in one CDP call.
+        // This is faster than A11y tree + DOM queries for each element.
+        let js = r#"(() => {
+            const selectors = 'a[href], button, input, select, textarea, [role="button"], [role="link"], [role="checkbox"], [role="tab"], [role="menuitem"], [contenteditable="true"]';
+            const els = document.querySelectorAll(selectors);
+            const results = [];
+            els.forEach((el, idx) => {
+                const rect = el.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) return;
+                const style = window.getComputedStyle(el);
+                if (style.visibility === 'hidden' || style.display === 'none') return;
+
+                const tag = el.tagName.toLowerCase();
+                let role = el.getAttribute('role') || tag;
+                if (tag === 'a') role = 'link';
+                if (tag === 'input') {
+                    const t = el.type || 'text';
+                    if (t === 'checkbox' || t === 'radio') role = t;
+                    else if (t === 'submit' || t === 'button') role = 'button';
+                    else role = 'textbox';
+                }
+                if (tag === 'textarea') role = 'textbox';
+                if (tag === 'select') role = 'combobox';
+                if (el.contentEditable === 'true') role = 'textbox';
+
+                let value = null;
+                if ('value' in el && (role === 'textbox' || role === 'combobox')) {
+                    value = el.value;
+                }
+                if (role === 'checkbox' || role === 'radio') {
+                    value = el.checked ? 'true' : 'false';
+                }
+
+                // Build a unique selector
+                let selector;
+                if (el.id) {
+                    selector = '#' + CSS.escape(el.id);
+                } else {
+                    selector = tag;
+                    if (el.name) selector += '[name="' + el.name + '"]';
+                    else if (el.className && typeof el.className === 'string' && el.className.trim()) {
+                        selector += '.' + el.className.trim().split(/\s+/).map(c => CSS.escape(c)).join('.');
+                    }
+                    // Disambiguate with nth-of-type if needed
+                    const siblings = el.parentElement?.querySelectorAll(':scope > ' + selector);
+                    if (siblings && siblings.length > 1) {
+                        const index = Array.from(siblings).indexOf(el) + 1;
+                        selector += ':nth-of-type(' + index + ')';
+                    }
+                }
+
+                results.push({
+                    role,
+                    name: el.getAttribute('aria-label') || el.innerText?.trim().slice(0, 80) || el.placeholder || el.title || '',
+                    selector,
+                    value,
+                    bounds: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+                });
+            });
+            return JSON.stringify(results);
+        })()"#;
+
+        let result = self.evaluate(js)?;
+        let json_str = result
+            .as_str()
+            .ok_or_else(|| CdpError::Json("interactive_elements JS returned non-string".into()))?;
+        let raw: Vec<serde_json::Value> =
+            serde_json::from_str(json_str).map_err(|e| CdpError::Json(e.to_string()))?;
+
+        Ok(raw
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, e)| {
+                Some(InteractiveElement {
+                    index: i as u32 + 1,
+                    role: e["role"].as_str()?.to_string(),
+                    name: e["name"].as_str().unwrap_or("").to_string(),
+                    selector: e["selector"].as_str()?.to_string(),
+                    value: e["value"].as_str().map(|s| s.to_string()),
+                    bounds: ElementBounds {
+                        x: e["bounds"]["x"].as_f64()?,
+                        y: e["bounds"]["y"].as_f64()?,
+                        width: e["bounds"]["width"].as_f64()?,
+                        height: e["bounds"]["height"].as_f64()?,
+                    },
+                })
+            })
+            .collect())
+    }
+
+    /// Execute JavaScript and return the result via CDP `Runtime.evaluate`.
+    /// Unlike `WebView::evaluate_script`, this returns the evaluated value.
+    pub fn evaluate(&self, expression: &str) -> CdpResult<serde_json::Value> {
+        let result = self.cdp_quick(
+            "Runtime.evaluate",
+            serde_json::json!({
+                "expression": expression,
+                "returnByValue": true,
+                "awaitPromise": true,
+            }),
+        )?;
+
+        // Check for exceptions
+        if result.get("exceptionDetails").is_some() {
+            return Err(CdpError::MethodFailed(result));
+        }
+
+        // Return the value from result.result.value
+        Ok(result
+            .get("result")
+            .and_then(|r| r.get("value"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Null))
+    }
+
+    /// Execute JavaScript in a specific frame (by frame ID from `list_frames()`).
+    pub fn evaluate_in_frame(
+        &self,
+        frame_id: &str,
+        expression: &str,
+    ) -> CdpResult<serde_json::Value> {
+        // Get the execution context for this frame
+        let context_id = self.get_frame_context_id(frame_id)?;
+
+        let result = self.cdp_quick(
+            "Runtime.evaluate",
+            serde_json::json!({
+                "expression": expression,
+                "contextId": context_id,
+                "returnByValue": true,
+                "awaitPromise": true,
+            }),
+        )?;
+
+        if result.get("exceptionDetails").is_some() {
+            return Err(CdpError::MethodFailed(result));
+        }
+
+        Ok(result
+            .get("result")
+            .and_then(|r| r.get("value"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Null))
+    }
+
+    /// Find an element within a specific iframe.
+    pub fn find_element_in_frame(
+        &self,
+        frame_id: &str,
+        selector: &str,
+    ) -> CdpResult<Element> {
+        let js = format!(
+            r#"(() => {{
+                const el = document.querySelector({sel});
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return JSON.stringify({{x:r.x, y:r.y, w:r.width, h:r.height}});
+            }})()"#,
+            sel = serde_json::to_string(selector).unwrap_or_else(|_| "\"\"".into()),
+        );
+        let result = self.evaluate_in_frame(frame_id, &js)?;
+        if result.is_null() {
+            return Err(CdpError::Json(format!(
+                "no element matches '{selector}' in frame '{frame_id}'"
+            )));
+        }
+        let json_str = result
+            .as_str()
+            .ok_or_else(|| CdpError::Json("non-string".into()))?;
+        let v: serde_json::Value =
+            serde_json::from_str(json_str).map_err(|e| CdpError::Json(e.to_string()))?;
+
+        Ok(Element {
+            node_id: 0,
+            bounds: Some(ElementBounds {
+                x: v["x"].as_f64().unwrap_or(0.0),
+                y: v["y"].as_f64().unwrap_or(0.0),
+                width: v["w"].as_f64().unwrap_or(0.0),
+                height: v["h"].as_f64().unwrap_or(0.0),
+            }),
+            selector: selector.to_string(),
+        })
+    }
+
+    /// Get the JS execution context ID for a given frame.
+    fn get_frame_context_id(&self, frame_id: &str) -> CdpResult<i64> {
+        // Enable Runtime domain to get executionContextCreated events
+        // Then query for the frame's context
+        let _result = self.cdp_quick(
+            "Runtime.evaluate",
+            serde_json::json!({
+                "expression": "0",
+                "returnByValue": true,
+            }),
+        )?;
+
+        // Use Page.createIsolatedWorld to get a context for the frame
+        let world = self.cdp_quick(
+            "Page.createIsolatedWorld",
+            serde_json::json!({
+                "frameId": frame_id,
+                "grantUniveralAccess": true,
+            }),
+        )?;
+
+        world["executionContextId"]
+            .as_i64()
+            .ok_or_else(|| CdpError::Json(format!("no context for frame '{frame_id}'")))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Element location
+// ---------------------------------------------------------------------------
+
+impl WebView {
+    /// Find a single element by CSS selector.
+    ///
+    /// Uses a single JS evaluate (1 CDP roundtrip) instead of
+    /// DOM.getDocument + DOM.querySelector + DOM.getBoxModel (3 roundtrips).
+    pub fn find_element(&self, selector: &str) -> CdpResult<Element> {
+        let js = format!(
+            r#"(() => {{
+                const el = document.querySelector({sel});
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return JSON.stringify({{x:r.x, y:r.y, w:r.width, h:r.height}});
+            }})()"#,
+            sel = serde_json::to_string(selector).unwrap_or_else(|_| "\"\"".into()),
+        );
+        let result = self.evaluate(&js)?;
+        if result.is_null() {
+            return Err(CdpError::Json(format!("no element matches '{selector}'")));
+        }
+        let json_str = result.as_str()
+            .ok_or_else(|| CdpError::Json("find_element JS returned non-string".into()))?;
+        let v: serde_json::Value = serde_json::from_str(json_str)
+            .map_err(|e| CdpError::Json(e.to_string()))?;
+
+        Ok(Element {
+            node_id: 0, // not used in JS-based approach
+            bounds: Some(ElementBounds {
+                x: v["x"].as_f64().unwrap_or(0.0),
+                y: v["y"].as_f64().unwrap_or(0.0),
+                width: v["w"].as_f64().unwrap_or(0.0),
+                height: v["h"].as_f64().unwrap_or(0.0),
+            }),
+            selector: selector.to_string(),
+        })
+    }
+
+    /// Find all elements matching a CSS selector.
+    ///
+    /// Single JS evaluate (1 CDP roundtrip).
+    pub fn find_elements(&self, selector: &str) -> CdpResult<Vec<Element>> {
+        let js = format!(
+            r#"(() => {{
+                const els = document.querySelectorAll({sel});
+                const results = [];
+                els.forEach(el => {{
+                    const r = el.getBoundingClientRect();
+                    results.push({{x:r.x, y:r.y, w:r.width, h:r.height}});
+                }});
+                return JSON.stringify(results);
+            }})()"#,
+            sel = serde_json::to_string(selector).unwrap_or_else(|_| "\"\"".into()),
+        );
+        let result = self.evaluate(&js)?;
+        let json_str = result.as_str()
+            .ok_or_else(|| CdpError::Json("find_elements JS returned non-string".into()))?;
+        let arr: Vec<serde_json::Value> = serde_json::from_str(json_str)
+            .map_err(|e| CdpError::Json(e.to_string()))?;
+
+        Ok(arr.into_iter().map(|v| Element {
+            node_id: 0,
+            bounds: Some(ElementBounds {
+                x: v["x"].as_f64().unwrap_or(0.0),
+                y: v["y"].as_f64().unwrap_or(0.0),
+                width: v["w"].as_f64().unwrap_or(0.0),
+                height: v["h"].as_f64().unwrap_or(0.0),
+            }),
+            selector: selector.to_string(),
+        }).collect())
+    }
+
+    /// List all frames in the page.
+    pub fn list_frames(&self) -> CdpResult<Vec<FrameInfo>> {
+        let result = self.cdp_quick("Page.getFrameTree", serde_json::json!({}))?;
+        let mut frames = Vec::new();
+        collect_frames(&result["frameTree"], &mut frames);
+        Ok(frames)
+    }
+}
+
+/// Recursively collect FrameInfo from a Page.getFrameTree response.
+fn collect_frames(tree: &serde_json::Value, out: &mut Vec<FrameInfo>) {
+    if let Some(frame) = tree.get("frame") {
+        out.push(FrameInfo {
+            id: frame["id"].as_str().unwrap_or("").to_string(),
+            url: frame["url"].as_str().unwrap_or("").to_string(),
+            name: frame["name"].as_str().unwrap_or("").to_string(),
+            is_main: frame["parentId"].is_null(),
+        });
+    }
+    if let Some(children) = tree.get("childFrames").and_then(|c| c.as_array()) {
+        for child in children {
+            collect_frames(child, out);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Input: click, type, key, scroll
+// ---------------------------------------------------------------------------
+
+impl WebView {
+    /// Low-level click at viewport coordinates (CSS pixels).
+    pub fn click(&self, x: i32, y: i32) -> crate::Result<()> {
+        let guard = self.browser.lock().unwrap();
+        let browser = guard.as_ref().ok_or(crate::Error::CefError("browser not ready".into()))?;
+        let host = ImplBrowser::host(browser)
+            .ok_or(crate::Error::CefError("host not available".into()))?;
+
+        let mouse_event = MouseEvent { x, y, modifiers: 0 };
+
+        // mousedown
+        ImplBrowserHost::send_mouse_click_event(
+            &host,
+            Some(&mouse_event),
+            MouseButtonType::LEFT,
+            0, // mouse_up = false (press)
+            1, // click_count
+        );
+        // mouseup
+        ImplBrowserHost::send_mouse_click_event(
+            &host,
+            Some(&mouse_event),
+            MouseButtonType::LEFT,
+            1, // mouse_up = true (release)
+            1,
+        );
+
+        Ok(())
+    }
+
+    /// High-level click on an element by CSS selector.
+    ///
+    /// Single JS evaluate to get viewport center coords + native click.
+    /// Total: 1 CDP roundtrip + 1 native call (previously 4 CDP roundtrips).
+    pub fn click_element(&self, selector: &str) -> CdpResult<()> {
+        let js = format!(
+            r#"(() => {{
+                const el = document.querySelector({sel});
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return JSON.stringify({{x: r.x + r.width/2, y: r.y + r.height/2}});
+            }})()"#,
+            sel = serde_json::to_string(selector).unwrap_or_else(|_| "\"\"".into()),
+        );
+        let result = self.evaluate(&js)?;
+        if result.is_null() {
+            return Err(CdpError::Json(format!("click_element: no element matches '{selector}'")));
+        }
+        let json_str = result.as_str()
+            .ok_or_else(|| CdpError::Json("click_element JS returned non-string".into()))?;
+        let v: serde_json::Value = serde_json::from_str(json_str)
+            .map_err(|e| CdpError::Json(e.to_string()))?;
+
+        let x = v["x"].as_f64().ok_or_else(|| CdpError::Json("no x".into()))? as i32;
+        let y = v["y"].as_f64().ok_or_else(|| CdpError::Json("no y".into()))? as i32;
+
+        self.click(x, y)
+            .map_err(|e| CdpError::Json(format!("click failed: {e}")))
+    }
+
+    /// Type text into the currently focused element.
+    ///
+    /// Uses JS `el.value` + `dispatchEvent` for text input (supports all characters
+    /// including CJK and emoji). Falls back to native key events if `native_keys` is true.
+    pub fn type_text(&self, text: &str) -> CdpResult<()> {
+        // Detect element type and set value via JS
+        let js = format!(
+            r#"(() => {{
+                const el = document.activeElement;
+                if (!el) return 'no_focus';
+                if (el.isContentEditable) {{
+                    document.execCommand('insertText', false, {text});
+                    return 'contenteditable';
+                }}
+                if ('value' in el) {{
+                    el.value = {text};
+                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    return 'value';
+                }}
+                return 'unknown';
+            }})()"#,
+            text = serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_string()),
+        );
+
+        let result = self.evaluate(&js)?;
+        let result_type = result.as_str().unwrap_or("unknown");
+
+        if result_type == "no_focus" {
+            return Err(CdpError::Json(
+                "type_text: no element is focused (click an input first)".into(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Press a special key (Enter, Tab, Escape, arrows, etc.).
+    pub fn press_key(&self, key: Key) -> crate::Result<()> {
+        let guard = self.browser.lock().unwrap();
+        let browser = guard.as_ref().ok_or(crate::Error::CefError("browser not ready".into()))?;
+        let host = ImplBrowser::host(browser)
+            .ok_or(crate::Error::CefError("host not available".into()))?;
+
+        send_key_to_host(&host, key, Modifiers::default());
+        Ok(())
+    }
+
+    /// Press a key combination (e.g., Ctrl+A, Ctrl+C).
+    pub fn key_combo(&self, modifiers: Modifiers, key: Key) -> crate::Result<()> {
+        let guard = self.browser.lock().unwrap();
+        let browser = guard.as_ref().ok_or(crate::Error::CefError("browser not ready".into()))?;
+        let host = ImplBrowser::host(browser)
+            .ok_or(crate::Error::CefError("host not available".into()))?;
+
+        send_key_to_host(&host, key, modifiers);
+        Ok(())
+    }
+
+    /// Scroll at the given viewport position.
+    ///
+    /// Uses CDP `Input.dispatchMouseEvent` (type=mouseWheel) which works reliably
+    /// in windowed mode. Native `send_mouse_wheel_event` requires window focus
+    /// which may not be available in test/automation contexts.
+    pub fn scroll(&self, x: i32, y: i32, delta_x: i32, delta_y: i32) -> CdpResult<()> {
+        self.cdp_quick(
+            "Input.dispatchMouseEvent",
+            serde_json::json!({
+                "type": "mouseWheel",
+                "x": x,
+                "y": y,
+                "deltaX": delta_x,
+                "deltaY": delta_y,
+            }),
+        )?;
+        Ok(())
+    }
+}
+
+/// Send a key event sequence (RAWKEYDOWN → CHAR → KEYUP) to a BrowserHost.
+fn send_key_to_host(host: &BrowserHost, key: Key, modifiers: Modifiers) {
+    let flags = modifiers.to_cef_flags();
+    let vk = key.windows_key_code();
+    let char_val = key.char_value();
+
+    // RAWKEYDOWN
+    let event_down = KeyEvent {
+        type_: KeyEventType::RAWKEYDOWN,
+        modifiers: flags,
+        windows_key_code: vk,
+        character: char_val,
+        unmodified_character: char_val,
+        ..Default::default()
+    };
+    ImplBrowserHost::send_key_event(host, Some(&event_down));
+
+    // CHAR (only for printable characters)
+    if char_val != 0 {
+        let event_char = KeyEvent {
+            type_: KeyEventType::CHAR,
+            modifiers: flags,
+            windows_key_code: char_val as c_int,
+            character: char_val,
+            unmodified_character: char_val,
+            ..Default::default()
+        };
+        ImplBrowserHost::send_key_event(host, Some(&event_char));
+    }
+
+    // KEYUP
+    let event_up = KeyEvent {
+        type_: KeyEventType::KEYUP,
+        modifiers: flags,
+        windows_key_code: vk,
+        character: char_val,
+        unmodified_character: char_val,
+        ..Default::default()
+    };
+    ImplBrowserHost::send_key_event(host, Some(&event_up));
+}
+
+// ---------------------------------------------------------------------------
+// Wait primitives
+// ---------------------------------------------------------------------------
+
+impl WebView {
+    /// Wait for a navigation to complete (Page.loadEventFired).
+    pub fn wait_for_navigation(&self, timeout: Duration) -> CdpResult<()> {
+        let rx = self
+            .cdp_subscribe()
+            .ok_or(CdpError::NotReady)?;
+
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            match rx.try_recv() {
+                Ok(event) if event.method == "Page.loadEventFired" => return Ok(()),
+                Ok(_) => {} // other event, keep waiting
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    return Err(CdpError::ChannelClosed);
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    if std::time::Instant::now() > deadline {
+                        return Err(CdpError::Timeout);
+                    }
+                    cef::do_message_loop_work();
+                    std::thread::yield_now();
+                }
+            }
+        }
+    }
+
+    /// Wait for an element matching `selector` to appear in the DOM.
+    pub fn wait_for_selector(&self, selector: &str, timeout: Duration) -> CdpResult<Element> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            match self.find_element(selector) {
+                Ok(el) => return Ok(el),
+                Err(_) => {
+                    if std::time::Instant::now() > deadline {
+                        return Err(CdpError::Timeout);
+                    }
+                    cef::do_message_loop_work();
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            }
+        }
+    }
+
+    /// Wait for network to become idle (no in-flight requests for `idle_ms`).
+    pub fn wait_for_network_idle(&self, idle_ms: u64, timeout: Duration) -> CdpResult<()> {
+        // Use a JS-based approach: inject a PerformanceObserver that tracks
+        // in-flight fetches. Simpler and more reliable than tracking CDP
+        // Network events for this use case.
+        let js = format!(
+            r#"new Promise((resolve) => {{
+                let timer = null;
+                const reset = () => {{
+                    clearTimeout(timer);
+                    timer = setTimeout(resolve, {idle_ms});
+                }};
+                const observer = new PerformanceObserver((list) => reset());
+                observer.observe({{ type: 'resource', buffered: false }});
+                reset();
+            }})"#,
+        );
+
+        // evaluate with awaitPromise = true
+        let result = self.cdp_send_blocking(
+            "Runtime.evaluate",
+            serde_json::json!({
+                "expression": js,
+                "awaitPromise": true,
+                "returnByValue": true,
+            }),
+            timeout,
+        )?;
+
+        if result.get("exceptionDetails").is_some() {
+            return Err(CdpError::MethodFailed(result));
+        }
+        Ok(())
+    }
+
+    /// Wait for DOM to stabilize (no mutations for `stable_ms`).
+    pub fn wait_for_dom_stable(&self, stable_ms: u64, timeout: Duration) -> CdpResult<()> {
+        let js = format!(
+            r#"new Promise((resolve) => {{
+                let timer = null;
+                const reset = () => {{
+                    clearTimeout(timer);
+                    timer = setTimeout(resolve, {stable_ms});
+                }};
+                const observer = new MutationObserver(() => reset());
+                observer.observe(document.body, {{
+                    childList: true, subtree: true,
+                    attributes: true, characterData: true,
+                }});
+                reset();
+            }})"#,
+        );
+
+        let result = self.cdp_send_blocking(
+            "Runtime.evaluate",
+            serde_json::json!({
+                "expression": js,
+                "awaitPromise": true,
+                "returnByValue": true,
+            }),
+            timeout,
+        )?;
+
+        if result.get("exceptionDetails").is_some() {
+            return Err(CdpError::MethodFailed(result));
+        }
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cookies
+// ---------------------------------------------------------------------------
+
+impl WebView {
+    /// Get cookies, optionally filtered by URLs.
+    pub fn get_cookies(&self, urls: Option<&[&str]>) -> CdpResult<Vec<BrowserCookie>> {
+        let mut params = serde_json::json!({});
+        if let Some(urls) = urls {
+            params["urls"] = serde_json::json!(urls);
+        }
+
+        let result = self.cdp("Network.getCookies", params)?;
+
+        let cookies = result["cookies"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .map(|c| BrowserCookie {
+                        name: c["name"].as_str().unwrap_or("").to_string(),
+                        value: c["value"].as_str().unwrap_or("").to_string(),
+                        domain: c["domain"].as_str().unwrap_or("").to_string(),
+                        path: c["path"].as_str().unwrap_or("/").to_string(),
+                        secure: c["secure"].as_bool().unwrap_or(false),
+                        http_only: c["httpOnly"].as_bool().unwrap_or(false),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(cookies)
+    }
+
+    /// Set a cookie via CDP.
+    pub fn cdp_set_cookie(&self, cookie: &BrowserCookie) -> CdpResult<()> {
+        self.cdp(
+            "Network.setCookie",
+            serde_json::json!({
+                "name": cookie.name,
+                "value": cookie.value,
+                "domain": cookie.domain,
+                "path": cookie.path,
+                "secure": cookie.secure,
+                "httpOnly": cookie.http_only,
+            }),
+        )?;
+        Ok(())
+    }
+
+    /// Clear all browser cookies.
+    pub fn clear_cookies(&self) -> CdpResult<()> {
+        self.cdp("Network.clearBrowserCookies", serde_json::json!({}))?;
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Annotated screenshot
+// ---------------------------------------------------------------------------
+
+/// JavaScript to inject annotation overlays on interactive elements.
+const ANNOTATE_JS: &str = r#"(() => {
+    const selectors = 'a, button, input, select, textarea, [role="button"], [role="link"], [onclick], [tabindex]';
+    const els = document.querySelectorAll(selectors);
+    const results = [];
+    let label = 1;
+
+    els.forEach(el => {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        if (window.getComputedStyle(el).visibility === 'hidden') return;
+
+        // Create overlay div
+        const overlay = document.createElement('div');
+        overlay.className = '__wrymium_annotate__';
+        overlay.style.cssText = `
+            position: fixed; z-index: 2147483647;
+            left: ${rect.left}px; top: ${rect.top}px;
+            width: ${rect.width}px; height: ${rect.height}px;
+            border: 2px solid red; background: rgba(255,0,0,0.1);
+            pointer-events: none; box-sizing: border-box;
+        `;
+        // Label badge
+        const badge = document.createElement('span');
+        badge.style.cssText = `
+            position: absolute; top: -10px; left: -10px;
+            background: red; color: white; font-size: 11px;
+            padding: 1px 4px; border-radius: 8px;
+            font-family: monospace; font-weight: bold;
+        `;
+        badge.textContent = label;
+        overlay.appendChild(badge);
+        document.body.appendChild(overlay);
+
+        results.push({
+            label: label,
+            role: el.getAttribute('role') || el.tagName.toLowerCase(),
+            name: el.getAttribute('aria-label') || el.innerText?.slice(0, 50) || '',
+            selector: buildSelector(el),
+            bounds: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+        });
+        label++;
+    });
+
+    function buildSelector(el) {
+        if (el.id) return '#' + el.id;
+        let sel = el.tagName.toLowerCase();
+        if (el.className && typeof el.className === 'string') {
+            sel += '.' + el.className.trim().split(/\s+/).join('.');
+        }
+        return sel;
+    }
+
+    return JSON.stringify(results);
+})()"#;
+
+/// JavaScript to remove all annotation overlays.
+const ANNOTATE_CLEANUP_JS: &str =
+    "document.querySelectorAll('.__wrymium_annotate__').forEach(el => el.remove())";
+
+impl WebView {
+    /// Take an annotated screenshot: overlay interactive elements with labels,
+    /// capture, then clean up.
+    pub fn annotate_screenshot(&self) -> CdpResult<AnnotatedScreenshot> {
+        // 1. Inject overlays and collect element info
+        let elements_json = self.evaluate(ANNOTATE_JS)?;
+        let elements_str = elements_json
+            .as_str()
+            .ok_or_else(|| CdpError::Json("annotate JS returned non-string".into()))?;
+
+        let raw_elements: Vec<serde_json::Value> =
+            serde_json::from_str(elements_str).map_err(|e| CdpError::Json(e.to_string()))?;
+
+        // 2. Take screenshot (with overlays visible)
+        let image = self.screenshot(&ScreenshotOptions::default())?;
+
+        // 3. Clean up overlays
+        let _ = self.evaluate(ANNOTATE_CLEANUP_JS);
+
+        // 4. Parse elements
+        let elements = raw_elements
+            .into_iter()
+            .filter_map(|e| {
+                Some(AnnotatedElement {
+                    label: e["label"].as_u64()? as u32,
+                    role: e["role"].as_str()?.to_string(),
+                    name: e["name"].as_str().unwrap_or("").to_string(),
+                    selector: e["selector"].as_str()?.to_string(),
+                    bounds: ElementBounds {
+                        x: e["bounds"]["x"].as_f64()?,
+                        y: e["bounds"]["y"].as_f64()?,
+                        width: e["bounds"]["width"].as_f64()?,
+                        height: e["bounds"]["height"].as_f64()?,
+                    },
+                })
+            })
+            .collect();
+
+        Ok(AnnotatedScreenshot { image, elements })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+/// Simple base64 decoder (avoids adding a base64 crate dependency).
+/// Supports standard base64 alphabet (A-Z, a-z, 0-9, +, /) with = padding.
+fn base64_decode(input: &str) -> CdpResult<Vec<u8>> {
+    fn decode_char(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+
+    let input = input.as_bytes();
+    let mut output = Vec::with_capacity(input.len() * 3 / 4);
+    let mut buf = 0u32;
+    let mut bits = 0u32;
+
+    for &byte in input {
+        if byte == b'=' || byte == b'\n' || byte == b'\r' {
+            continue;
+        }
+        let val = decode_char(byte)
+            .ok_or_else(|| CdpError::Json(format!("invalid base64 char: {}", byte as char)))?;
+        buf = (buf << 6) | val as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            output.push((buf >> bits) as u8);
+            buf &= (1 << bits) - 1;
+        }
+    }
+
+    Ok(output)
+}
+
+/// JavaScript that builds a compact A11y tree by walking the DOM.
+/// Single evaluate call — avoids the Accessibility CDP domain entirely.
+const A11Y_TREE_JS: &str = r#"(() => {
+    function getRole(el) {
+        const explicit = el.getAttribute('role');
+        if (explicit) return explicit;
+        const tag = el.tagName.toLowerCase();
+        const map = {
+            a: el.href ? 'link' : null, button: 'button', input: inputRole(el),
+            select: 'combobox', textarea: 'textbox', h1: 'heading', h2: 'heading',
+            h3: 'heading', h4: 'heading', h5: 'heading', h6: 'heading',
+            nav: 'navigation', main: 'main', header: 'banner', footer: 'contentinfo',
+            aside: 'complementary', article: 'article', section: 'region',
+            form: 'form', table: 'table', ul: 'list', ol: 'list', li: 'listitem',
+            img: 'img', dialog: 'dialog',
+        };
+        return map[tag] || null;
+    }
+    function inputRole(el) {
+        const t = (el.type || 'text').toLowerCase();
+        if (t === 'checkbox') return 'checkbox';
+        if (t === 'radio') return 'radio';
+        if (t === 'submit' || t === 'button' || t === 'reset') return 'button';
+        if (t === 'range') return 'slider';
+        if (t === 'search') return 'searchbox';
+        return 'textbox';
+    }
+    function getName(el) {
+        return el.getAttribute('aria-label')
+            || el.getAttribute('alt')
+            || el.getAttribute('title')
+            || el.getAttribute('placeholder')
+            || (el.labels && el.labels[0]?.textContent?.trim())
+            || '';
+    }
+    function getProps(el) {
+        const parts = [];
+        const tag = el.tagName.toLowerCase();
+        if (/^h[1-6]$/.test(tag)) parts.push('level=' + tag[1]);
+        const checked = el.getAttribute('aria-checked') ?? (el.checked !== undefined ? String(el.checked) : null);
+        if (checked && checked !== 'false') parts.push('checked=' + checked);
+        const expanded = el.getAttribute('aria-expanded');
+        if (expanded) parts.push('expanded=' + expanded);
+        if (el.disabled) parts.push('disabled');
+        if (el.required) parts.push('required');
+        if (el.readOnly) parts.push('readonly');
+        if ('value' in el && (tag === 'input' || tag === 'textarea' || tag === 'select')) {
+            parts.push('value="' + String(el.value).slice(0, 50) + '"');
+        }
+        if (el.placeholder && !el.getAttribute('aria-label')) parts.push('placeholder="' + el.placeholder + '"');
+        return parts.length ? ' ' + parts.join(' ') : '';
+    }
+    function walk(node, depth) {
+        let out = '';
+        for (const child of node.childNodes) {
+            if (child.nodeType === 3) {
+                const text = child.textContent.trim();
+                if (text && !child.parentElement?.closest('[aria-label]')?.getAttribute('aria-label')) {
+                    // Only show text nodes that aren't already captured by a parent's name
+                    const parentRole = getRole(child.parentElement);
+                    if (!parentRole) {
+                        // Bare text in a generic container — include it
+                        if (text.length > 0 && text.length < 200) {
+                            out += '  '.repeat(depth) + '"' + text.slice(0, 80) + '"\n';
+                        }
+                    }
+                }
+                continue;
+            }
+            if (child.nodeType !== 1) continue;
+            const el = child;
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') continue;
+            if (el.getAttribute('aria-hidden') === 'true') continue;
+
+            const role = getRole(el);
+            if (role) {
+                const name = getName(el) || el.textContent?.trim().slice(0, 60) || '';
+                const indent = '  '.repeat(depth);
+                const props = getProps(el);
+                const nameStr = name ? ' "' + name.replace(/\n/g, ' ').slice(0, 80) + '"' : '';
+                out += indent + '[' + role + ']' + nameStr + props + '\n';
+                out += walk(el, depth + 1);
+            } else {
+                // Generic container — recurse without adding a line
+                out += walk(el, depth);
+            }
+        }
+        return out;
+    }
+    const title = document.title ? '[document] "' + document.title + '"\n' : '';
+    return title + walk(document.body, 1);
+})()"#;
+
+// ---------------------------------------------------------------------------
+// A11y tree compact formatter (CDP-based, for accessibility_tree_compact)
+// ---------------------------------------------------------------------------
+
+mod a11y {
+    use std::collections::HashMap;
+    use std::fmt::Write;
+
+    /// Format CDP Accessibility.getFullAXTree nodes into compact indented text.
+    ///
+    /// Filters ignored nodes, flattens role/name wrappers, includes relevant
+    /// properties (value, checked, level, expanded, placeholder, etc.).
+    pub(super) fn format_tree(nodes: &[serde_json::Value]) -> String {
+        if nodes.is_empty() {
+            return String::new();
+        }
+
+        // Build parent→children map from nodeId/childIds
+        let mut children_map: HashMap<&str, Vec<&str>> = HashMap::new();
+        let mut node_map: HashMap<&str, &serde_json::Value> = HashMap::new();
+        let mut root_id: Option<&str> = None;
+
+        for node in nodes {
+            let id = node["nodeId"].as_str().unwrap_or("");
+            if id.is_empty() {
+                continue;
+            }
+            node_map.insert(id, node);
+
+            if root_id.is_none() {
+                root_id = Some(id);
+            }
+
+            if let Some(child_ids) = node["childIds"].as_array() {
+                let ids: Vec<&str> = child_ids
+                    .iter()
+                    .filter_map(|c| c.as_str())
+                    .collect();
+                children_map.insert(id, ids);
+            }
+        }
+
+        let mut output = String::with_capacity(nodes.len() * 40);
+        if let Some(root) = root_id {
+            format_node(root, &node_map, &children_map, 0, &mut output);
+        }
+        output
+    }
+
+    fn format_node(
+        id: &str,
+        nodes: &HashMap<&str, &serde_json::Value>,
+        children: &HashMap<&str, Vec<&str>>,
+        depth: usize,
+        out: &mut String,
+    ) {
+        let Some(node) = nodes.get(id) else { return };
+
+        // Skip ignored nodes
+        if node["ignored"].as_bool() == Some(true) {
+            // But still recurse into children (they may not be ignored)
+            if let Some(kids) = children.get(id) {
+                for kid in kids {
+                    format_node(kid, nodes, children, depth, out);
+                }
+            }
+            return;
+        }
+
+        let role = extract_value(&node["role"]);
+        let name = extract_value(&node["name"]);
+
+        // Skip generic/none roles with no name (noise)
+        if (role == "none" || role == "generic" || role == "GenericContainer") && name.is_empty() {
+            if let Some(kids) = children.get(id) {
+                for kid in kids {
+                    format_node(kid, nodes, children, depth, out);
+                }
+            }
+            return;
+        }
+
+        // Skip StaticText if it just repeats parent's name (Chromium quirk)
+        if role == "StaticText" || role == "InlineTextBox" {
+            if let Some(kids) = children.get(id) {
+                for kid in kids {
+                    format_node(kid, nodes, children, depth, out);
+                }
+            }
+            return;
+        }
+
+        // Write indentation
+        let indent = "  ".repeat(depth);
+        let _ = write!(out, "{indent}[{role}]");
+
+        // Write name
+        if !name.is_empty() {
+            let _ = write!(out, " \"{}\"", truncate(&name, 80));
+        }
+
+        // Write relevant properties
+        if let Some(props) = node["properties"].as_array() {
+            for prop in props {
+                let pname = prop["name"].as_str().unwrap_or("");
+                let pval = extract_value(&prop["value"]);
+                match pname {
+                    "level" | "valuetext" | "placeholder" | "autocomplete" => {
+                        let _ = write!(out, " {pname}={pval}");
+                    }
+                    "checked" if pval != "false" => {
+                        let _ = write!(out, " checked={pval}");
+                    }
+                    "expanded" => {
+                        let _ = write!(out, " expanded={pval}");
+                    }
+                    "selected" if pval == "true" => {
+                        let _ = write!(out, " selected");
+                    }
+                    "disabled" if pval == "true" => {
+                        let _ = write!(out, " disabled");
+                    }
+                    "required" if pval == "true" => {
+                        let _ = write!(out, " required");
+                    }
+                    "readonly" if pval == "true" => {
+                        let _ = write!(out, " readonly");
+                    }
+                    "value" if !pval.is_empty() => {
+                        let _ = write!(out, " value=\"{}\"", truncate(&pval, 50));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        out.push('\n');
+
+        // Recurse children
+        if let Some(kids) = children.get(id) {
+            for kid in kids {
+                format_node(kid, nodes, children, depth + 1, out);
+            }
+        }
+    }
+
+    /// Extract the "value" field from a CDP A11y property object.
+    /// Handles both `{"type":"...","value":"X"}` and plain string.
+    fn extract_value(v: &serde_json::Value) -> String {
+        if let Some(s) = v.as_str() {
+            return s.to_string();
+        }
+        if let Some(val) = v.get("value") {
+            if let Some(s) = val.as_str() {
+                return s.to_string();
+            }
+            if let Some(b) = val.as_bool() {
+                return b.to_string();
+            }
+            if let Some(n) = val.as_i64() {
+                return n.to_string();
+            }
+            if let Some(n) = val.as_f64() {
+                return n.to_string();
+            }
+        }
+        String::new()
+    }
+
+    fn truncate(s: &str, max: usize) -> &str {
+        if s.len() <= max {
+            s
+        } else {
+            let mut end = max;
+            while end > 0 && !s.is_char_boundary(end) {
+                end -= 1;
+            }
+            &s[..end]
+        }
+    }
+}

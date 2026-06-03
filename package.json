@@ -13,7 +13,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "push": "bash scripts/push-all.sh",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "bash scripts/tauri-chromium-dev.sh",
+    "tauri:build": "bash scripts/tauri-chromium-build.sh",
+    "tauri:run": "bash scripts/tauri-chromium-dev.sh",
+    "install:dock": "bash scripts/install-dock-app.sh"
   },
   "dependencies": {
     "culori": "^4.0.2",
@@ -31,7 +35,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@tauri-apps/cli": "^2.11.2",
+    "@tauri-apps/cli": "2.10.0",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

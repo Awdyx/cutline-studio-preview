@@ -5,10 +5,10 @@ import {
   CANVAS_PLATE_VIEWPORT_ZONE_PAD,
   CANVAS_STUDIO_ACOUSTICS_EDGE_PAD,
 } from '../drawing/canvasDimensions'
-import type { CanvasMinimapRect } from './canvasMinimapGeometry'
+import type { CanvasPlateRect } from './studioCentreRect'
 import { useStudioCentrePositionStore } from './studioCentrePositionStore'
 
-export function canvasPlateRectAt(x: number, y: number): CanvasMinimapRect {
+export function canvasPlateRectAt(x: number, y: number): CanvasPlateRect {
   return {
     x,
     y,

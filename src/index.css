@@ -40,15 +40,7 @@ button {
   overflow: visible;
 }
 
-html[data-canvas-overview-hyper] .cutline-draw-target--positioned {
-  left: 0;
-  top: 0;
-  width: var(--canvas-studio-w, 2026px);
-  height: var(--canvas-studio-h, 1520px);
-}
-
-/* Pocket interior — edge-to-edge vertical strip. */
-.cutline-draw-target--pocket {
+/* Pocket interior — edge-to-edge vertical strip. */.cutline-draw-target--pocket {
   position: relative;
   z-index: 1;
   touch-action: none;
@@ -113,13 +105,11 @@ html[data-canvas-overview-hyper] .cutline-draw-target--positioned {
   background-color: var(--canvas-bg);
 }
 
-/* Tauri macOS — overlay title bar: nudge top chrome down without affecting web. */
-html[data-tauri-macos='1'] {
+/* Tauri macOS — overlay title bar: nudge top chrome down without affecting web. */html[data-tauri-macos='1'] {
   --tauri-chrome-top-delta: 16px;
 }
 
-/* Shared desktop chrome insets — top only widens on Tauri macOS for the overlay title bar. */
-html {
+/* Shared desktop chrome insets — top only widens on Tauri macOS for the overlay title bar. */html {
   --chrome-edge-base: 16px;
   --tauri-chrome-top-delta: 0px;
   --chrome-edge-left: var(--chrome-edge-base);
@@ -134,12 +124,7 @@ html[data-tauri-macos='1'] .cutline-top-bar:not(.cutline-top-bar--phone) {
   top: var(--chrome-edge-top) !important;
 }
 
-html[data-studio-centre-dragging] .cutline-draw-target--positioned {
-  will-change: transform;
-}
-
-/* Lift clip while strokes bleed past the studio-centre bounds (session-only ink). */
-html[data-studio-strokes-bleed] .cutline-studio-centre-surface,
+/* Lift clip while strokes bleed past the studio-centre bounds (session-only ink). */html[data-studio-strokes-bleed] .cutline-studio-centre-surface,
 html[data-studio-strokes-bleed] .pocket-strip-surface,
 html[data-studio-strokes-bleed] .studio-centre-content-scale,
 .cutline-draw-target[data-strokes-bleed] .cutline-studio-centre-surface,
@@ -153,8 +138,7 @@ html[data-studio-strokes-bleed] .cutline-draw-target,
   overflow: visible;
 }
 
-/* Working surface — rounded clip; boundary lines sit outside this layer. */
-.cutline-studio-centre-surface {
+/* Working surface — rounded clip; boundary lines sit outside this layer. */.cutline-studio-centre-surface {
   position: absolute;
   inset: 0;
   border-radius: var(--studio-surface-radius, var(--studio-centre-radius, 40px));
@@ -163,8 +147,7 @@ html[data-studio-strokes-bleed] .cutline-draw-target,
   background-color: var(--canvas-bg);
 }
 
-/* Logical 3000×2250 content scaled up inside the visual studio plate. */
-.studio-centre-content-inner {
+/* Logical 3000×2250 content scaled up inside the visual studio plate. */.studio-centre-content-inner {
   position: absolute;
   inset: 0;
 }
@@ -179,20 +162,17 @@ html[data-studio-strokes-bleed] .cutline-draw-target,
   transform-origin: 0 0;
 }
 
-/* CSS variables that need to be animatable must be declared with @property. */
-@property --feature-plate-width {
-  syntax: '<length>';
+/* CSS variables that need to be animatable must be declared with @property. */@property --feature-plate-width {syntax: '<length>';
   inherits: true;
   initial-value: 2250px;
 }
-@property --feature-plate-height {
-  syntax: '<length>';
+
+@property --feature-plate-height {syntax: '<length>';
   inherits: true;
   initial-value: 1406px;
 }
 
-/* Placeholder destination plates on the main canvas void. */
-.canvas-feature-plate {
+/* Placeholder destination plates on the main canvas void. */.canvas-feature-plate {
   position: absolute;
   width: var(--feature-plate-width);
   height: var(--feature-plate-height);
@@ -202,15 +182,7 @@ html[data-studio-strokes-bleed] .cutline-draw-target,
   will-change: transform;
 }
 
-/* Only width/height animate on resize — positions stay put so plates don't jump. */
-html[data-feature-plate-aspect-live]:not([data-feature-plate-dragging]):not([data-app-destination-focus])
-  .canvas-feature-plate {
-  transition:
-    width 320ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 320ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.canvas-feature-plate--leaderboard {
+/* Only width/height animate on resize — positions stay put so plates don't jump. */.canvas-feature-plate--leaderboard {
   left: var(--canvas-plate-leaderboard-x, 1800px);
   top: var(--canvas-plate-leaderboard-y, 6375px);
 }
@@ -230,17 +202,6 @@ html[data-feature-plate-aspect-live]:not([data-feature-plate-dragging]):not([dat
   top: var(--canvas-plate-ucat-y, 2925px);
 }
 
-html[data-feature-plate-dragging='leaderboard'] .canvas-feature-plate--leaderboard,
-html[data-feature-plate-dragging='forum'] .canvas-feature-plate--forum,
-html[data-feature-plate-dragging='groups'] .canvas-feature-plate--groups,
-html[data-feature-plate-dragging='ucat'] .canvas-feature-plate--ucat {
-  will-change: transform;
-}
-
-html[data-fisheye-engaged] .feature-plate-drag-handle-wrapper {
-  pointer-events: auto;
-}
-
 .canvas-feature-plate__focus-hit {
   position: absolute;
   left: calc(-1 * var(--feature-plate-focus-side-pad, 520px));
@@ -256,17 +217,11 @@ html[data-fisheye-engaged] .feature-plate-drag-handle-wrapper {
   z-index: 1;
 }
 
-html[data-feature-plate-dragging] .canvas-feature-plate__focus-hit {
-  pointer-events: none;
-  cursor: default;
-}
-
 html[data-app-destination-focus] .canvas-feature-plate__focus-hit {
   cursor: default;
 }
 
-/* Click into a space — structural focus once camera lands; reveal crossfades visuals. */
-html[data-app-destination-focus] {
+/* Click into a space — structural focus once camera lands; reveal crossfades visuals. */html[data-app-destination-focus] {
   --app-destination-focus-reveal-duration: 2s;
   /* Slow open, long soft landing — matches pocket reveal / camera fly settle. */
   --app-destination-focus-reveal-ease: cubic-bezier(0.14, 1, 0.28, 1);
@@ -274,26 +229,6 @@ html[data-app-destination-focus] {
 
 html[data-app-destination-focus] .cutline-canvas-viewport .react-transform-component {
   overflow: visible !important;
-}
-
-html[data-app-destination-focus] .cutline-canvas-viewport,
-html[data-app-destination-focus] .cutline-canvas-expanded,
-html[data-app-destination-focus] .cutline-canvas-void-grid,
-html[data-app-destination-focus] .cutline-canvas-expanded::after,
-html[data-app-destination-focus] .cutline-draw-target,
-html[data-app-destination-focus] .canvas-feature-plate,
-html[data-app-destination-focus] .canvas-feature-plate__surface,
-html[data-app-destination-focus] .feature-plate-title,
-html[data-app-destination-focus] .feature-plate-drag-handle-wrapper,
-html[data-app-destination-focus] .canvas-plate-bounds,
-html[data-app-destination-focus] .canvas-plate-reposition-btn,
-html[data-app-destination-focus] .canvas-nav-minimap {
-  transition:
-    opacity var(--app-destination-focus-reveal-duration) var(--app-destination-focus-reveal-ease),
-    background-color var(--app-destination-focus-reveal-duration) var(--app-destination-focus-reveal-ease),
-    border-radius var(--app-destination-focus-reveal-duration) var(--app-destination-focus-reveal-ease),
-    border-color var(--app-destination-focus-reveal-duration) var(--app-destination-focus-reveal-ease),
-    box-shadow var(--app-destination-focus-reveal-duration) var(--app-destination-focus-reveal-ease);
 }
 
 html[data-app-destination-focus][data-app-destination-focus-reveal] .cutline-canvas-viewport,
@@ -329,19 +264,6 @@ html[data-app-destination-focus][data-app-destination-focus-reveal] .canvas-feat
   pointer-events: auto;
 }
 
-html[data-app-destination-focus][data-app-destination-focus-reveal] .feature-plate-title,
-html[data-app-destination-focus][data-app-destination-focus-reveal] .feature-plate-drag-handle-wrapper,
-html[data-app-destination-focus][data-app-destination-focus-reveal] .canvas-plate-bounds,
-html[data-app-destination-focus][data-app-destination-focus-reveal] .canvas-plate-reposition-btn {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-html[data-app-destination-focus][data-app-destination-focus-reveal] .canvas-nav-minimap {
-  opacity: 0;
-  pointer-events: none;
-}
-
 .canvas-feature-plate__surface {
   position: absolute;
   inset: 0;
@@ -350,10 +272,6 @@ html[data-app-destination-focus][data-app-destination-focus-reveal] .canvas-nav-
   background-color: color-mix(in srgb, var(--canvas-bg) 88%, var(--canvas-void-bg) 12%);
   border: 1px solid color-mix(in srgb, var(--studio-centre-bound) 22%, transparent);
   box-shadow: inset 0 0 120px color-mix(in srgb, var(--canvas-void-bg) 35%, transparent);
-  pointer-events: none;
-}
-
-html[data-feature-plate-dragging] .canvas-feature-plate__surface {
   pointer-events: none;
 }
 
@@ -380,45 +298,7 @@ html[data-feature-plate-dragging] .canvas-feature-plate__surface {
   will-change: transform;
 }
 
-html[data-feature-plate-dragging='leaderboard'] .canvas-feature-plate--leaderboard > .feature-plate-title,
-html[data-feature-plate-dragging='forum'] .canvas-feature-plate--forum > .feature-plate-title,
-html[data-feature-plate-dragging='groups'] .canvas-feature-plate--groups > .feature-plate-title,
-html[data-feature-plate-dragging='ucat'] .canvas-feature-plate--ucat > .feature-plate-title {
-  color: color-mix(in srgb, var(--studio-centre-bound) 14%, #000 16%);
-  filter: brightness(0.76) saturate(0.9);
-}
-
-html[data-feature-plate-dragging='leaderboard'] .canvas-feature-plate--leaderboard > .feature-plate-title .studio-centre-title__word,
-html[data-feature-plate-dragging='forum'] .canvas-feature-plate--forum > .feature-plate-title .studio-centre-title__word,
-html[data-feature-plate-dragging='groups'] .canvas-feature-plate--groups > .feature-plate-title .studio-centre-title__word,
-html[data-feature-plate-dragging='ucat'] .canvas-feature-plate--ucat > .feature-plate-title .studio-centre-title__word {
-  color: inherit;
-}
-
-html[data-feature-plate-dragging='leaderboard'] .canvas-feature-plate--leaderboard > .feature-plate-title .studio-centre-title__heart,
-html[data-feature-plate-dragging='forum'] .canvas-feature-plate--forum > .feature-plate-title .studio-centre-title__heart,
-html[data-feature-plate-dragging='groups'] .canvas-feature-plate--groups > .feature-plate-title .studio-centre-title__heart,
-html[data-feature-plate-dragging='ucat'] .canvas-feature-plate--ucat > .feature-plate-title .studio-centre-title__heart {
-  color: color-mix(in srgb, var(--studio-centre-bound) 9%, var(--canvas-void-bg));
-}
-
-.canvas-minimap-expanded-menu__plate--feature {
-  background: color-mix(in srgb, var(--canvas-bg) 72%, var(--canvas-void-bg) 28%);
-}
-
-.canvas-minimap-expanded-menu__plate-preview--feature {
-  background: repeating-linear-gradient(
-    -18deg,
-    color-mix(in srgb, var(--studio-centre-bound) 8%, transparent) 0,
-    color-mix(in srgb, var(--studio-centre-bound) 8%, transparent) 8px,
-    transparent 8px,
-    transparent 22px
-  );
-  opacity: 0.65;
-}
-
-/* Soft glow spill below each plate — active in that space viewport zone. */
-.canvas-feature-plate::after,
+/* Soft glow spill below each plate — active in that space viewport zone. */.canvas-feature-plate::after,
 .cutline-draw-target--positioned::after {
   content: '';
   position: absolute;
@@ -451,111 +331,7 @@ html[data-feature-plate-dragging='ucat'] .canvas-feature-plate--ucat > .feature-
   opacity: 0.5;
 }
 
-html[data-fisheye-engaged] .canvas-feature-plate--viewport-active::after,
-html[data-fisheye-engaged]
-  .cutline-draw-target--positioned.cutline-draw-target--viewport-active::after {
-  opacity: 0.72;
-}
-
-/* Massive label above the studio-centre — visible in fisheye overview only. */
-.studio-centre-title {
-  position: absolute;
-  left: 28px;
-  bottom: 100%;
-  margin: 0 0 24px;
-  z-index: 1;
-  transform-origin: left bottom;
-  font-family: var(--font-sans);
-  font-size: 118px;
-  font-weight: 800;
-  line-height: 0.88;
-  letter-spacing: -0.04em;
-  color: color-mix(in srgb, var(--studio-centre-bound) 28%, var(--canvas-void-bg));
-  pointer-events: none;
-  user-select: none;
-  white-space: nowrap;
-  overflow: visible;
-  opacity: 0;
-  transform: translate3d(0, 18px, 0) scale(0.98);
-  transition:
-    opacity var(--overview-chrome-duration, 560ms) var(--overview-chrome-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
-    transform var(--overview-chrome-duration, 560ms) var(--overview-chrome-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
-    color var(--studio-centre-active-duration, 220ms)
-      var(--studio-centre-active-ease, cubic-bezier(0.22, 0.94, 0.28, 1)),
-    filter var(--studio-centre-dim-duration, 560ms) var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-}
-
-.studio-centre-title:not(.studio-centre-title--active) .studio-centre-title__word {
-  color: color-mix(in srgb, var(--studio-centre-bound) 22%, var(--canvas-void-bg));
-}
-
-.studio-centre-title:not(.studio-centre-title--active) .studio-centre-title__heart {
-  color: color-mix(in srgb, var(--studio-centre-bound) 14%, var(--canvas-void-bg));
-}
-
-.studio-centre-title--active .studio-centre-title__word {
-  color: color-mix(in srgb, var(--studio-centre-bound) 94%, var(--canvas-void-bg));
-}
-
-.studio-centre-title--active .studio-centre-title__heart {
-  color: color-mix(in srgb, var(--studio-centre-bound) 52%, var(--canvas-void-bg));
-}
-
-html[data-studio-centre-dragging] .cutline-draw-target--positioned > .studio-centre-title {
-  color: color-mix(in srgb, var(--studio-centre-bound) 14%, #000 16%);
-  filter: brightness(0.76) saturate(0.9);
-}
-
-html[data-studio-centre-dragging] .cutline-draw-target--positioned > .studio-centre-title .studio-centre-title__word {
-  color: inherit;
-}
-
-.studio-centre-title__heart {
-  font-weight: 400;
-  color: color-mix(in srgb, var(--studio-centre-bound) 17%, var(--canvas-void-bg));
-  margin-left: 0.32em;
-  position: relative;
-  overflow: visible;
-  transition: color var(--studio-centre-active-duration, 220ms)
-    var(--studio-centre-active-ease, cubic-bezier(0.22, 0.94, 0.28, 1));
-}
-
-html[data-studio-centre-dragging] .cutline-draw-target--positioned > .studio-centre-title .studio-centre-title__heart {
-  color: color-mix(in srgb, var(--studio-centre-bound) 9%, var(--canvas-void-bg));
-}
-
-.studio-centre-title__word {
-  display: inline-grid;
-  vertical-align: bottom;
-  transition: color var(--studio-centre-active-duration, 220ms)
-    var(--studio-centre-active-ease, cubic-bezier(0.22, 0.94, 0.28, 1));
-}
-
-.studio-centre-title__word-size,
-.studio-centre-title__word-live {
-  grid-area: 1 / 1;
-}
-
-.studio-centre-title__word-size {
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.studio-centre-title__word-live {
-  position: relative;
-  overflow: visible;
-  transition: color var(--studio-centre-dim-duration, 560ms)
-    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-}
-
-.studio-centre-title__glow {
-  display: inline-block;
-  transform-origin: left bottom;
-  overflow: visible;
-}
-
-/* Reload intro — last-space title on a dark veil until the first pan. */
-.reload-space-intro {
+/* Reload intro — last-space title on a dark veil until the first pan. */.reload-space-intro {
   position: fixed;
   inset: 0;
   z-index: 10040;
@@ -647,45 +423,10 @@ html[data-reload-intro] .cutline-app-shell {
   opacity: 1;
 }
 
-html[data-reload-intro] .cutline-top-bar,
-html[data-reload-intro] [data-pen-fab],
-html[data-reload-intro] [data-plus-fab],
-html[data-reload-intro] .cutline-space-back-pill-host,
-html[data-reload-intro] .canvas-nav-minimap {
-  pointer-events: none;
-  transition: opacity 0.88s cubic-bezier(0.22, 0.94, 0.28, 1);
-}
-
-html[data-reload-intro='armed'] .cutline-top-bar,
-html[data-reload-intro='armed'] [data-pen-fab],
-html[data-reload-intro='armed'] [data-plus-fab],
-html[data-reload-intro='armed'] .cutline-space-back-pill-host,
-html[data-reload-intro='armed'] .canvas-nav-minimap {
-  opacity: 0;
-}
-
-html[data-reload-intro='revealing'] .cutline-top-bar,
-html[data-reload-intro='revealing'] [data-pen-fab],
-html[data-reload-intro='revealing'] [data-plus-fab],
-html[data-reload-intro='revealing'] .cutline-space-back-pill-host,
-html[data-reload-intro='revealing'] .canvas-nav-minimap {
-  opacity: 1;
-}
-
 html[data-reload-intro] [data-canvas-item],
 html[data-reload-intro] .cutline-draw-target,
 html[data-reload-intro] .react-transform-wrapper {
   pointer-events: none !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html[data-reload-intro] .cutline-top-bar,
-  html[data-reload-intro] [data-pen-fab],
-  html[data-reload-intro] [data-plus-fab],
-  html[data-reload-intro] .cutline-space-back-pill-host,
-  html[data-reload-intro] .canvas-nav-minimap {
-    transition: opacity 0.18s ease-out;
-  }
 }
 
 html[data-theme='light'] .reload-space-intro__veil {
@@ -720,8 +461,7 @@ html[data-theme='light'] .reload-space-intro__heart {
   color: rgba(14, 16, 20, 0.5);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .reload-space-intro__veil,
+@media (prefers-reduced-motion: reduce) {.reload-space-intro__veil,
   .reload-space-intro__spotlight,
   .reload-space-intro__title,
   .reload-space-intro__brand,
@@ -730,22 +470,15 @@ html[data-theme='light'] .reload-space-intro__heart {
   .reload-space-intro__heart {
     will-change: auto;
   }
+
 }
 
-/* Fisheye overview engaged: lock item interaction (panning still works). */
-html[data-fisheye-engaged] [data-canvas-item],
-html[data-fisheye-engaged] [data-canvas-item] * {
-  pointer-events: none !important;
-}
-
-/* Feature plate menu focus — lock canvas item interaction while framed. */
-html[data-app-destination-focus] [data-canvas-item],
+/* Feature plate menu focus — lock canvas item interaction while framed. */html[data-app-destination-focus] [data-canvas-item],
 html[data-app-destination-focus] [data-canvas-item] * {
   pointer-events: none !important;
 }
 
-/* Studio centre — four fading edges, open corners (light: dark grey, dark: white). */
-.studio-centre-bounds {
+/* Studio centre — four fading edges, open corners (light: dark grey, dark: white). */.studio-centre-bounds {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -762,10 +495,6 @@ html[data-app-destination-focus] [data-canvas-item] * {
 
 .studio-centre-bounds--active .studio-centre-bounds__edge {
   opacity: 0.5;
-}
-
-html[data-fisheye-engaged] .studio-centre-bounds--active .studio-centre-bounds__edge {
-  opacity: 1;
 }
 
 .studio-centre-bounds__edge--top,
@@ -820,1065 +549,7 @@ html[data-fisheye-engaged] .studio-centre-bounds--active .studio-centre-bounds__
   right: 0;
 }
 
-/* Canvas overview navigation: preview + toggle (bottom-left). */
-.canvas-nav-minimap {
-  /* Keep in sync with MINIMAP_WIDTH_PX in CanvasNavigationMinimap.tsx */
-  --canvas-nav-minimap-width: 124px;
-  position: fixed;
-  left: max(16px, env(safe-area-inset-left, 0px));
-  bottom: max(16px, env(safe-area-inset-bottom, 0px));
-  z-index: 12;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: var(--canvas-nav-minimap-width);
-  gap: 9px;
-  pointer-events: none;
-}
-
-.canvas-nav-minimap__preview {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  touch-action: manipulation;
-  will-change: transform, opacity, filter;
-  opacity: 0;
-  transform: translate3d(0, 10px, 0) scale(0.9);
-  filter: blur(6px);
-  pointer-events: none;
-  transition:
-    opacity var(--canvas-nav-minimap-motion-duration, 560ms)
-      var(--canvas-nav-minimap-motion-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
-    transform var(--canvas-nav-minimap-motion-duration, 560ms)
-      var(--canvas-nav-minimap-motion-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
-    filter var(--canvas-nav-minimap-motion-duration, 560ms)
-      var(--canvas-nav-minimap-motion-exit-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-}
-
-html[data-fisheye-engaged]:not([data-canvas-overview-exiting]):not([data-canvas-minimap-expanded])
-  .canvas-nav-minimap__preview {
-  opacity: 1;
-  transform: translate3d(0, 0, 0) scale(1);
-  filter: blur(0);
-  pointer-events: auto;
-  transition-timing-function: var(
-      --canvas-nav-minimap-motion-enter-ease,
-      cubic-bezier(0.18, 1.22, 0.32, 1)
-    ),
-    var(--canvas-nav-minimap-motion-enter-ease, cubic-bezier(0.18, 1.22, 0.32, 1)),
-    var(--canvas-nav-minimap-motion-enter-ease, cubic-bezier(0.18, 1.22, 0.32, 1));
-  transition-delay: 72ms, 72ms, 72ms;
-}
-
-html[data-canvas-overview-exiting] .canvas-nav-minimap__preview {
-  opacity: 0;
-  transform: translate3d(0, 12px, 0) scale(0.88);
-  filter: blur(8px);
-  pointer-events: none;
-  transition-delay: 0ms, 0ms, 0ms;
-}
-
-html[data-canvas-minimap-expanded] .canvas-nav-minimap__preview {
-  opacity: 0;
-  transform: translate3d(0, 8px, 0) scale(0.92);
-  filter: blur(4px);
-  pointer-events: none;
-  transition-duration: 220ms;
-  transition-delay: 0ms, 0ms, 0ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .canvas-nav-minimap__preview {
-    filter: none !important;
-    transition: none !important;
-  }
-
-  html[data-fisheye-engaged]:not([data-canvas-overview-exiting]):not([data-canvas-minimap-expanded])
-    .canvas-nav-minimap__preview {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-html[data-fisheye-engaged]:not([data-canvas-overview-exiting]):not([data-canvas-minimap-expanded])
-  .canvas-nav-minimap__preview:hover,
-html[data-fisheye-engaged]:not([data-canvas-overview-exiting]):not([data-canvas-minimap-expanded])
-  .canvas-nav-minimap__preview:focus-visible {
-  transform: translate3d(0, 0, 0) scale(1.045);
-}
-
-.canvas-nav-minimap__toggle {
-  position: relative;
-  z-index: 1;
-  pointer-events: auto;
-  padding: 3px 11px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--glass-border) 70%, transparent);
-  background: color-mix(in srgb, var(--canvas-bg) 78%, var(--chrome-solid-bg) 22%);
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 color-mix(in srgb, var(--ui-text) 6%, transparent);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
-  text-transform: lowercase;
-  color: color-mix(in srgb, var(--ui-text) 52%, transparent);
-  cursor: pointer;
-  touch-action: manipulation;
-  user-select: none;
-  transition:
-    color 0.24s ease,
-    border-color 0.24s ease,
-    background 0.24s ease;
-}
-
-.canvas-nav-minimap__toggle:hover,
-.canvas-nav-minimap__toggle:focus-visible {
-  color: color-mix(in srgb, var(--studio-centre-bound) 58%, var(--ui-text) 42%);
-  border-color: color-mix(in srgb, var(--studio-centre-bound) 18%, var(--glass-border) 82%);
-}
-
-.canvas-nav-minimap__toggle--active {
-  color: color-mix(in srgb, var(--studio-centre-bound) 72%, var(--ui-text) 28%);
-  border-color: color-mix(in srgb, var(--studio-centre-bound) 28%, var(--glass-border) 72%);
-  background: color-mix(in srgb, var(--canvas-bg) 62%, var(--studio-centre-bound) 8%);
-}
-
-.canvas-nav-minimap__halo {
-  position: absolute;
-  inset: -8px -8px 24px;
-  border-radius: 22px;
-  background:
-    radial-gradient(
-      ellipse 88% 72% at 50% 58%,
-      color-mix(in srgb, var(--studio-centre-bound) 14%, transparent) 0%,
-      transparent 72%
-    );
-  opacity: 0.72;
-  pointer-events: none;
-  transition: opacity 0.28s ease, transform 0.28s ease;
-}
-
-.canvas-nav-minimap__preview:hover .canvas-nav-minimap__halo,
-.canvas-nav-minimap__preview:focus-visible .canvas-nav-minimap__halo {
-  opacity: 1;
-  transform: scale(1.04);
-}
-
-.canvas-nav-minimap__frame {
-  position: relative;
-  border-radius: 17px;
-  border: 1px solid color-mix(in srgb, var(--glass-border) 82%, transparent);
-  --canvas-minimap-void-bg: color-mix(in srgb, var(--canvas-void-bg) 66%, var(--canvas-bg) 34%);
-  overflow: visible;
-  box-shadow:
-    0 10px 32px rgba(0, 0, 0, 0.28),
-    0 0 0 1px color-mix(in srgb, var(--ui-text) 5%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--ui-text) 7%, transparent);
-  transition: box-shadow 0.28s ease, border-color 0.28s ease;
-}
-
-.canvas-nav-minimap__preview:hover .canvas-nav-minimap__frame,
-.canvas-nav-minimap__preview:focus-visible .canvas-nav-minimap__frame {
-  border-color: color-mix(in srgb, var(--studio-centre-bound) 22%, var(--glass-border) 78%);
-  box-shadow:
-    0 14px 40px rgba(0, 0, 0, 0.34),
-    0 0 0 1px color-mix(in srgb, var(--studio-centre-bound) 10%, transparent),
-    0 0 28px color-mix(in srgb, var(--studio-centre-bound) 8%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--ui-text) 9%, transparent);
-}
-
-.canvas-nav-minimap__surface {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.canvas-nav-minimap__void {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(
-      ellipse 72% 64% at 50% 44%,
-      color-mix(in srgb, var(--canvas-bg) 90%, transparent) 0%,
-      color-mix(in srgb, var(--canvas-blend-mid) 48%, transparent) 54%,
-      color-mix(in srgb, var(--canvas-minimap-void-bg) 92%, var(--canvas-bg) 8%) 100%
-    ),
-    var(--canvas-minimap-void-bg);
-}
-
-.canvas-nav-minimap__grid {
-  position: absolute;
-  inset: 0;
-  opacity: 0.32;
-  background-image:
-    linear-gradient(
-      to right,
-      color-mix(in srgb, var(--ui-text) 11%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--ui-text) 11%, transparent) 1px,
-      transparent 1px
-    );
-  background-size: 18px 18px;
-  mask-image: radial-gradient(ellipse 88% 78% at 50% 50%, #000 18%, transparent 100%);
-}
-
-.canvas-nav-minimap__vignette {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 92% 88% at 50% 50%,
-    transparent 42%,
-    color-mix(in srgb, var(--canvas-void-bg) 38%, transparent) 100%
-  );
-  pointer-events: none;
-}
-
-.canvas-nav-minimap__plate {
-  position: absolute;
-  z-index: 0;
-  box-sizing: border-box;
-  border-radius: 2px;
-  border: 1px solid color-mix(in srgb, var(--studio-centre-bound) 10%, transparent);
-  background: color-mix(in srgb, var(--canvas-bg) 50%, transparent);
-  pointer-events: none;
-  transform: scale(1);
-  transform-origin: center center;
-  transition:
-    transform var(--studio-centre-dim-duration, 560ms)
-      var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
-    border-color var(--studio-centre-dim-duration, 560ms)
-      var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-}
-
-.canvas-nav-minimap__plate--selected {
-  transform: scale(1.08);
-  z-index: 1;
-  border-color: color-mix(in srgb, var(--studio-centre-bound) 20%, transparent);
-}
-
-.canvas-nav-minimap__plate-label,
-.canvas-nav-minimap__studio-label {
-  position: absolute;
-  z-index: 1;
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-sans);
-  font-size: 8.5px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  text-transform: lowercase;
-  color: color-mix(in srgb, var(--studio-centre-bound) 58%, var(--ui-text-muted) 42%);
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-  text-shadow:
-    0 0 6px color-mix(in srgb, var(--canvas-bg) 88%, transparent),
-    0 1px 2px color-mix(in srgb, var(--canvas-void-bg) 72%, transparent);
-  transform: translate(-0.5px, -0.5px) scale(1);
-  transform-origin: left top;
-  transition:
-    transform var(--studio-centre-dim-duration, 560ms)
-      var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
-    color var(--studio-centre-dim-duration, 560ms)
-      var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-}
-
-.canvas-nav-minimap__plate-label--selected {
-  transform: translate(-0.5px, -0.5px) scale(1.1);
-  z-index: 2;
-  color: color-mix(in srgb, var(--studio-centre-bound) 88%, var(--ui-text-muted) 12%);
-}
-
-.canvas-nav-minimap__plate-label-word,
-.canvas-nav-minimap__studio-label-word {
-  display: inline-block;
-}
-
-.canvas-nav-minimap__plate-label-suffix,
-.canvas-nav-minimap__studio-label-heart {
-  font-weight: 400;
-  color: color-mix(
-    in srgb,
-    color-mix(in srgb, var(--studio-centre-bound) 58%, var(--ui-text-muted) 42%) 68%,
-    var(--canvas-bg) 32%
-  );
-  display: inline-block;
-  margin-left: 0.32em;
-}
-
-.canvas-nav-minimap__plate-label--selected .canvas-nav-minimap__plate-label-suffix {
-  color: color-mix(
-    in srgb,
-    color-mix(in srgb, var(--studio-centre-bound) 88%, var(--ui-text-muted) 12%) 68%,
-    var(--canvas-bg) 32%
-  );
-}
-
-.canvas-nav-minimap__viewport {
-  position: absolute;
-  box-sizing: border-box;
-  pointer-events: none;
-  z-index: 2;
-  overflow: hidden;
-}
-
-.canvas-nav-minimap__viewport-squish {
-  width: 100%;
-  height: 100%;
-  border-radius: 5px;
-  border: 1px solid color-mix(in srgb, var(--ui-accent) 6%, transparent);
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--ui-accent) 4%, transparent) 0%,
-      transparent 52%,
-      color-mix(in srgb, var(--ui-accent) 2%, transparent) 100%
-    );
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, white 4%, transparent),
-    inset 0 1px 8px color-mix(in srgb, var(--ui-accent) 4%, transparent);
-  will-change: transform;
-}
-
-.canvas-nav-minimap__viewport-corners {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-
-.canvas-nav-minimap__viewport-corners::before,
-.canvas-nav-minimap__viewport-corners::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 3px;
-  pointer-events: none;
-}
-
-.canvas-nav-minimap__viewport-corners::before {
-  border-top: 1px solid color-mix(in srgb, var(--ui-accent) 28%, white);
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-accent) 28%, white);
-  opacity: 0.34;
-  mask-image: linear-gradient(
-    to right,
-    #000 0 7px,
-    transparent 7px calc(100% - 7px),
-    #000 calc(100% - 7px) 100%
-  );
-}
-
-.canvas-nav-minimap__viewport-corners::after {
-  border-left: 1px solid color-mix(in srgb, var(--ui-accent) 28%, white);
-  border-right: 1px solid color-mix(in srgb, var(--ui-accent) 28%, white);
-  opacity: 0.34;
-  mask-image: linear-gradient(
-    to bottom,
-    #000 0 7px,
-    transparent 7px calc(100% - 7px),
-    #000 calc(100% - 7px) 100%
-  );
-}
-
-/* Expanded canvas map — fisheye only. */
-.canvas-minimap-expanded-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 13;
-  border: none;
-  padding: 0;
-  background: color-mix(in srgb, var(--canvas-void-bg) 48%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  cursor: var(--cursor-default);
-}
-
-.canvas-minimap-expanded-menu {
-  position: fixed;
-  inset: 0;
-  z-index: 14;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: var(--cursor-default);
-  padding:
-    max(72px, calc(env(safe-area-inset-top, 0px) + 56px))
-    max(24px, env(safe-area-inset-right, 0px))
-    max(72px, calc(env(safe-area-inset-bottom, 0px) + 48px))
-    max(24px, env(safe-area-inset-left, 0px));
-  pointer-events: none;
-}
-
-.canvas-minimap-expanded-menu__stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  max-width: 100%;
-  transform: translateY(22px);
-  pointer-events: none;
-}
-
-.canvas-minimap-expanded-menu__reposition-hint {
-  margin: 0;
-  max-width: min(92vw, 520px);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.35;
-  text-align: center;
-  color: color-mix(in srgb, var(--ui-text) 58%, transparent);
-  pointer-events: none;
-  user-select: none;
-}
-
-.canvas-minimap-expanded-menu__map-anchor {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.canvas-minimap-expanded-menu__draw-taunt-slot {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 10px);
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  pointer-events: none;
-  user-select: none;
-  z-index: 2;
-}
-
-.canvas-minimap-expanded-menu__draw-taunt {
-  margin: 0;
-  white-space: nowrap;
-  text-align: center;
-  transform-origin: center bottom;
-}
-
-.canvas-minimap-expanded-menu__reposition-hint-em {
-  position: relative;
-  font-weight: 500;
-  pointer-events: auto;
-  cursor: default;
-  border-radius: 10px;
-  padding: 20px 36px;
-  margin: -20px -36px;
-  transition:
-    color 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    font-weight 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    text-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.canvas-minimap-expanded-menu__stack:has(.canvas-minimap-expanded-menu__reposition-hint-em:hover)
-  .canvas-minimap-expanded-menu__reposition-hint-em {
-  font-weight: 700;
-  color: #fff;
-  text-shadow:
-    0 0 8px rgba(255, 255, 255, 0.38),
-    0 0 18px rgba(255, 255, 255, 0.18);
-}
-
-.canvas-minimap-expanded-menu__space .canvas-minimap-expanded-menu__plate-title-word,
-.canvas-minimap-expanded-menu__space .canvas-minimap-expanded-menu__plate-title-heart,
-.canvas-minimap-expanded-menu__space .canvas-minimap-expanded-menu__plate,
-.canvas-minimap-expanded-menu__space .canvas-minimap-expanded-menu__plate-preview {
-  transition:
-    color 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    text-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.canvas-minimap-expanded-menu__space {
-  transform: scale(1);
-  transform-origin: center center;
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.canvas-minimap-expanded-menu__stack:has(.canvas-minimap-expanded-menu__reposition-hint-em:hover)
-  .canvas-minimap-expanded-menu__space {
-  transform: scale(1.045);
-}
-
-.canvas-minimap-expanded-menu__stack:has(.canvas-minimap-expanded-menu__reposition-hint-em:hover)
-  .canvas-minimap-expanded-menu__space
-  .canvas-minimap-expanded-menu__plate-title-word {
-  color: #fff;
-  text-shadow:
-    0 0 8px rgba(255, 255, 255, 0.34),
-    0 0 16px rgba(255, 255, 255, 0.16);
-}
-
-.canvas-minimap-expanded-menu__stack:has(.canvas-minimap-expanded-menu__reposition-hint-em:hover)
-  .canvas-minimap-expanded-menu__space
-  .canvas-minimap-expanded-menu__plate-title-heart {
-  opacity: 1;
-  color: #fff;
-  text-shadow:
-    0 0 6px rgba(255, 255, 255, 0.28),
-    0 0 12px rgba(255, 255, 255, 0.14);
-}
-
-.canvas-minimap-expanded-menu__stack:has(.canvas-minimap-expanded-menu__reposition-hint-em:hover)
-  .canvas-minimap-expanded-menu__space
-  .canvas-minimap-expanded-menu__plate {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, white 58%, transparent),
-    0 0 0 3px color-mix(in srgb, white 16%, transparent),
-    0 0 18px rgba(255, 255, 255, 0.16),
-    0 0 32px rgba(255, 255, 255, 0.07),
-    0 8px 20px rgba(0, 0, 0, 0.22);
-}
-
-.canvas-minimap-expanded-menu__stack:has(.canvas-minimap-expanded-menu__reposition-hint-em:hover)
-  .canvas-minimap-expanded-menu__space
-  .canvas-minimap-expanded-menu__plate-preview {
-  filter: brightness(1.08);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .canvas-minimap-expanded-menu__reposition-hint-em,
-  .canvas-minimap-expanded-menu__space,
-  .canvas-minimap-expanded-menu__space .canvas-minimap-expanded-menu__plate-title-word,
-  .canvas-minimap-expanded-menu__space .canvas-minimap-expanded-menu__plate-title-heart,
-  .canvas-minimap-expanded-menu__space .canvas-minimap-expanded-menu__plate,
-  .canvas-minimap-expanded-menu__space .canvas-minimap-expanded-menu__plate-preview {
-    transition: none;
-  }
-}
-
-.canvas-minimap-expanded-menu__label {
-  padding: 5px 14px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--glass-border) 70%, transparent);
-  background: color-mix(in srgb, var(--canvas-bg) 78%, var(--chrome-solid-bg) 22%);
-  box-shadow:
-    0 3px 10px rgba(0, 0, 0, 0.16),
-    inset 0 1px 0 color-mix(in srgb, var(--ui-text) 6%, transparent);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
-  text-transform: lowercase;
-  color: color-mix(in srgb, var(--ui-text) 62%, transparent);
-  pointer-events: none;
-  user-select: none;
-}
-
-.canvas-minimap-expanded-menu__frame {
-  position: relative;
-  pointer-events: auto;
-  max-width: 100%;
-  --canvas-minimap-void-bg: color-mix(in srgb, var(--canvas-void-bg) 66%, var(--canvas-bg) 34%);
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--glass-border) 78%, transparent);
-  overflow: hidden;
-  box-shadow:
-    0 22px 64px rgba(0, 0, 0, 0.34),
-    0 0 0 1px color-mix(in srgb, var(--ui-text) 5%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--ui-text) 6%, transparent);
-  touch-action: none;
-  will-change: transform, opacity, filter;
-}
-
-.canvas-minimap-expanded-menu__frame-surface {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.canvas-minimap-expanded-menu__void,
-.canvas-minimap-expanded-menu__grid,
-.canvas-minimap-expanded-menu__viewport {
-  pointer-events: none;
-}
-
-.canvas-minimap-expanded-menu__void {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(
-      ellipse 68% 58% at 50% 46%,
-      color-mix(in srgb, var(--canvas-bg) 92%, transparent) 0%,
-      color-mix(in srgb, var(--canvas-blend-mid) 58%, transparent) 52%,
-      color-mix(in srgb, var(--canvas-minimap-void-bg) 88%, var(--canvas-bg) 12%) 100%
-    ),
-    var(--canvas-minimap-void-bg);
-}
-
-.canvas-minimap-expanded-menu__grid {
-  position: absolute;
-  inset: 0;
-  opacity: 0.27;
-  background-image:
-    linear-gradient(
-      to right,
-      color-mix(in srgb, var(--ui-text) 10%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--ui-text) 10%, transparent) 1px,
-      transparent 1px
-    );
-  background-size: 40px 40px;
-  mask-image: radial-gradient(ellipse 80% 72% at 50% 50%, #000 20%, transparent 100%);
-}
-
-.canvas-minimap-expanded-menu__plate-wrap {
-  position: absolute;
-  z-index: 2;
-}
-
-.canvas-minimap-expanded-menu__plate-wrap--selected {
-  z-index: 3;
-}
-
-.canvas-minimap-expanded-menu__plate-wrap--selected .canvas-minimap-expanded-menu__plate {
-  transform: scale(1.06);
-  transform-origin: center center;
-  transition: transform var(--studio-centre-dim-duration, 560ms)
-    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-}
-
-.canvas-minimap-expanded-menu__plate-wrap--selected
-  .canvas-minimap-expanded-menu__plate-title-word {
-  color: color-mix(in srgb, var(--studio-centre-bound) 88%, var(--ui-text-muted) 12%);
-}
-
-.canvas-minimap-expanded-menu__plate-wrap--selected
-  .canvas-minimap-expanded-menu__plate-title-heart {
-  color: color-mix(
-    in srgb,
-    color-mix(in srgb, var(--studio-centre-bound) 88%, var(--ui-text-muted) 12%) 68%,
-    var(--canvas-bg) 32%
-  );
-}
-
-.canvas-minimap-expanded-menu__plate-wrap--navigate {
-  animation: canvas-minimap-plate-wrap-navigate 0.72s cubic-bezier(0.37, 0, 0.21, 1);
-}
-
-.canvas-minimap-expanded-menu__plate-wrap--navigate
-  .canvas-minimap-expanded-menu__plate-title-word {
-  animation: canvas-minimap-plate-title-navigate 0.72s cubic-bezier(0.37, 0, 0.21, 1);
-}
-
-.canvas-minimap-expanded-menu__plate-wrap--navigate
-  .canvas-minimap-expanded-menu__plate-title-heart {
-  animation: canvas-minimap-plate-title-heart-navigate 0.72s cubic-bezier(0.37, 0, 0.21, 1);
-}
-
-.canvas-minimap-expanded-menu__plate-wrap--navigate .canvas-minimap-expanded-menu__plate {
-  animation: canvas-minimap-plate-navigate 0.72s cubic-bezier(0.37, 0, 0.21, 1);
-}
-
-@keyframes canvas-minimap-plate-wrap-navigate {
-  0% {
-    transform: scale(1);
-  }
-  32% {
-    transform: scale(1.035);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes canvas-minimap-plate-title-navigate {
-  0% {
-    letter-spacing: -0.04em;
-    opacity: 1;
-  }
-  26% {
-    letter-spacing: 0.08em;
-    opacity: 1;
-  }
-  52% {
-    letter-spacing: 0.02em;
-    opacity: 1;
-  }
-  100% {
-    letter-spacing: -0.04em;
-    opacity: 1;
-  }
-}
-
-@keyframes canvas-minimap-plate-title-heart-navigate {
-  0% {
-    transform: translateY(0);
-  }
-  26% {
-    transform: translateY(-1px);
-  }
-  52% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(0);
-  }
-}
-
-@keyframes canvas-minimap-plate-navigate {
-  0% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--studio-centre-bound) 28%, transparent),
-      0 0 0 2.5px color-mix(in srgb, var(--studio-centre-bound) 6%, transparent),
-      0 8px 20px rgba(0, 0, 0, 0.22);
-  }
-  34% {
-    box-shadow:
-      0 0 0 1.5px color-mix(in srgb, var(--studio-centre-bound) 58%, transparent),
-      0 0 0 7px color-mix(in srgb, var(--studio-centre-bound) 16%, transparent),
-      0 0 28px color-mix(in srgb, var(--studio-centre-bound) 22%, transparent),
-      0 10px 24px rgba(0, 0, 0, 0.28);
-  }
-  100% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--studio-centre-bound) 28%, transparent),
-      0 0 0 2.5px color-mix(in srgb, var(--studio-centre-bound) 6%, transparent),
-      0 8px 20px rgba(0, 0, 0, 0.22);
-  }
-}
-
-.canvas-minimap-expanded-menu__plate-title {
-  position: absolute;
-  top: 0;
-  left: 2px;
-  margin: 0;
-  z-index: 1;
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: color-mix(in srgb, var(--studio-centre-bound) 58%, var(--ui-text-muted) 42%);
-  pointer-events: none;
-  user-select: none;
-  white-space: nowrap;
-  text-transform: lowercase;
-  transition:
-    color var(--studio-centre-dim-duration, 560ms) var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
-    filter var(--studio-centre-dim-duration, 560ms) var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-}
-
-html[data-studio-centre-dragging] .canvas-minimap-expanded-menu__plate-title {
-  color: color-mix(in srgb, var(--studio-centre-bound) 38%, #000 18%);
-  filter: brightness(0.8);
-}
-
-.canvas-minimap-expanded-menu__plate-title-word {
-  display: inline-block;
-}
-
-.canvas-minimap-expanded-menu__plate-title-heart {
-  font-weight: 400;
-  color: color-mix(
-    in srgb,
-    color-mix(in srgb, var(--studio-centre-bound) 58%, var(--ui-text-muted) 42%) 68%,
-    var(--canvas-bg) 32%
-  );
-  display: inline-block;
-  margin-left: 0.32em;
-  transition: color var(--studio-centre-dim-duration, 560ms)
-    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-}
-
-html[data-studio-centre-dragging] .canvas-minimap-expanded-menu__plate-title-heart {
-  color: color-mix(
-    in srgb,
-    color-mix(in srgb, var(--studio-centre-bound) 38%, #000 18%) 44%,
-    var(--canvas-bg) 56%
-  );
-}
-
-.canvas-minimap-expanded-menu__plate {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  top: 24px;
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  cursor: pointer;
-  touch-action: none;
-  overflow: visible;
-  z-index: 0;
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--studio-centre-bound) 14%, transparent),
-    0 0 0 2.5px color-mix(in srgb, var(--studio-centre-bound) 3%, transparent),
-    0 8px 20px rgba(0, 0, 0, 0.22);
-}
-
-.canvas-minimap-expanded-menu__plate-preview {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.canvas-minimap-expanded-menu__viewport {
-  position: absolute;
-  box-sizing: border-box;
-  pointer-events: none;
-  z-index: 3;
-  overflow: hidden;
-}
-
-.canvas-minimap-expanded-menu__viewport-squish {
-  width: 100%;
-  height: 100%;
-  border-radius: 7px;
-  border: 1px solid color-mix(in srgb, var(--ui-accent) 3%, transparent);
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--ui-accent) 2%, transparent) 0%,
-      transparent 48%,
-      color-mix(in srgb, var(--ui-accent) 1%, transparent) 100%
-    );
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, white 3%, transparent),
-    inset 0 1px 20px color-mix(in srgb, var(--ui-accent) 3%, transparent);
-  will-change: transform;
-}
-
-.canvas-minimap-expanded-menu__viewport-corners {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-
-.canvas-minimap-expanded-menu__viewport-corners::before,
-.canvas-minimap-expanded-menu__viewport-corners::after {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border-radius: 4px;
-  pointer-events: none;
-}
-
-.canvas-minimap-expanded-menu__viewport-corners::before {
-  border-top: 1px solid color-mix(in srgb, var(--ui-accent) 22%, white);
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-accent) 22%, white);
-  opacity: 0.18;
-  mask-image: linear-gradient(
-    to right,
-    #000 0 14px,
-    transparent 14px calc(100% - 14px),
-    #000 calc(100% - 14px) 100%
-  );
-}
-
-.canvas-minimap-expanded-menu__viewport-corners::after {
-  border-left: 1px solid color-mix(in srgb, var(--ui-accent) 22%, white);
-  border-right: 1px solid color-mix(in srgb, var(--ui-accent) 22%, white);
-  opacity: 0.18;
-  mask-image: linear-gradient(
-    to bottom,
-    #000 0 14px,
-    transparent 14px calc(100% - 14px),
-    #000 calc(100% - 14px) 100%
-  );
-}
-
-/* Studio-centre drag handle — fisheye overview only. */
-.studio-centre-drag-handle-wrapper,
-.studio-centre-drag-handle {
-  touch-action: none;
-}
-
-.studio-centre-title,
-.studio-centre-drag-handle-wrapper {
-  --overview-chrome-duration: 560ms;
-  --overview-chrome-enter-ease: cubic-bezier(0.22, 0.94, 0.28, 1);
-  --overview-chrome-exit-ease: cubic-bezier(0.42, 0.03, 0.18, 1);
-}
-
-.studio-centre-drag-handle-wrapper {
-  opacity: 0;
-  pointer-events: none;
-  transform: translate3d(-12px, -10px, 0) scale(0.9);
-  transition:
-    opacity var(--overview-chrome-duration) var(--overview-chrome-exit-ease),
-    transform var(--overview-chrome-duration) var(--overview-chrome-exit-ease);
-}
-
-.cutline-draw-target--positioned > .studio-centre-drag-handle-wrapper {
-  z-index: 7000;
-}
-
-.cutline-draw-target--positioned > .studio-centre-drag-handle-wrapper .studio-centre-drag-handle {
-  opacity: var(--studio-centre-handle-opacity, var(--canvas-handle-opacity));
-}
-
-.cutline-draw-target--positioned
-  > .studio-centre-drag-handle-wrapper
-  .studio-centre-drag-handle:hover,
-.cutline-draw-target--positioned
-  > .studio-centre-drag-handle-wrapper
-  .studio-centre-drag-handle:focus-visible {
-  opacity: var(--studio-centre-handle-opacity-hover, var(--canvas-handle-opacity-hover));
-}
-
-.studio-centre-drag-handle-wrapper.overview-chrome--concealed {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-html[data-fisheye-engaged]:not([data-canvas-overview-exiting]) .studio-centre-title {
-  opacity: 1;
-  transform: translate3d(0, 0, 0) scale(1);
-  transition-timing-function: var(--overview-chrome-enter-ease), var(--overview-chrome-enter-ease),
-    var(--studio-centre-active-ease, cubic-bezier(0.22, 0.94, 0.28, 1)),
-    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-  transition-delay: 40ms, 40ms, 0ms, 0ms;
-}
-
-html[data-fisheye-engaged]:not([data-canvas-overview-exiting])
-  .studio-centre-drag-handle-wrapper:not(.overview-chrome--concealed) {
-  opacity: 1;
-  transform: translate3d(0, 0, 0) scale(1);
-  pointer-events: auto;
-  transition-timing-function: var(--overview-chrome-enter-ease), var(--overview-chrome-enter-ease);
-  transition-delay: 88ms, 88ms;
-}
-
-html[data-canvas-overview-exiting] .studio-centre-title {
-  opacity: 0;
-  transform: translate3d(0, 12px, 0) scale(0.98);
-  transition-timing-function: var(--overview-chrome-exit-ease), var(--overview-chrome-exit-ease),
-    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1)),
-    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-  transition-delay: 0ms, 0ms, 0ms, 0ms;
-}
-
-html[data-canvas-overview-exiting] .studio-centre-drag-handle-wrapper {
-  opacity: 0;
-  transform: translate3d(-10px, -8px, 0) scale(0.88);
-  pointer-events: none;
-  transition-delay: 0ms, 0ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .studio-centre-title,
-  .studio-centre-drag-handle-wrapper {
-    transition: none !important;
-  }
-
-  html[data-fisheye-engaged]:not([data-canvas-overview-exiting]) .studio-centre-title,
-  html[data-fisheye-engaged]:not([data-canvas-overview-exiting])
-    .studio-centre-drag-handle-wrapper:not(.overview-chrome--concealed) {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.studio-centre-drag-handle {
-  opacity: var(--canvas-handle-opacity);
-  transition: opacity 160ms ease-out;
-}
-
-.studio-centre-drag-handle:hover,
-.studio-centre-drag-handle:focus-visible {
-  opacity: var(--canvas-handle-opacity-hover, var(--canvas-handle-opacity));
-}
-
-html[data-fisheye-engaged]:not([data-canvas-overview-exiting])
-  .studio-centre-drag-handle-wrapper:not(.overview-chrome--concealed) {
-  pointer-events: auto !important;
-}
-
-html[data-studio-centre-dragging] .studio-centre-drag-handle,
-html[data-studio-centre-dragging] .canvas-minimap-expanded-menu__plate {
-  cursor: grabbing;
-}
-
-html[data-studio-centre-dragging] .canvas-minimap-expanded-menu__plate-wrap {
-  will-change: transform;
-}
-
-html[data-studio-centre-dragging] .studio-centre-drag-handle {
-  opacity: var(--canvas-handle-opacity-hover, var(--canvas-handle-opacity));
-}
-
-html[data-canvas-minimap-expanded]
-  .canvas-minimap-expanded-menu__plate
-  .studio-centre-drag-handle-wrapper {
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
-}
-
-/* Massive placeholder — below each canvas plate in fisheye overview. */
-.canvas-plate-reposition-btn {
-  --studio-centre-reposition-hit-slop-x: 22px;
-  --studio-centre-reposition-hit-slop-bottom: 36px;
-  --studio-centre-reposition-hit-slop-top: 28px;
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 22px);
-  transform: translate3d(-50%, 14px, 0) scale(0.94);
-  z-index: 7000;
-  min-width: min(88%, 360px);
-  padding: 14px 28px;
-  border: 1px solid color-mix(in srgb, var(--studio-centre-bound) 24%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--canvas-bg) 72%, var(--chrome-solid-bg));
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.12),
-    0 0 0 1px color-mix(in srgb, var(--studio-centre-bound) 7%, transparent);
-  font-family: var(--font-sans);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  text-transform: lowercase;
-  color: color-mix(in srgb, var(--studio-centre-bound) 52%, transparent);
-  cursor: pointer;
-  touch-action: none;
-  user-select: none;
-}
-
-.canvas-plate-reposition-btn::before {
-  content: '';
-  position: absolute;
-  inset:
-    calc(-1 * var(--studio-centre-reposition-hit-slop-top))
-    calc(-1 * var(--studio-centre-reposition-hit-slop-x))
-    calc(-1 * var(--studio-centre-reposition-hit-slop-bottom))
-    calc(-1 * var(--studio-centre-reposition-hit-slop-x));
-  border-radius: inherit;
-}
-
-html[data-pause-mesh] [data-mesh-blob] {
+/* Canvas overview navigation: preview + toggle (bottom-left). */html[data-pause-mesh] [data-mesh-blob] {
   animation-play-state: paused !important;
 }
 
@@ -1996,9 +667,7 @@ html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
   overflow: hidden;
 }
 
-/* ─── Phone layout (narrow + coarse pointer; iPad unchanged) ─────────────── */
-
-html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone {
+/* ─── Phone layout (narrow + coarse pointer; iPad unchanged) ─────────────── */html[data-layout='phone'] [data-pen-fab-menu].pen-fab-menu--phone {
   right: 64px !important;
   bottom: 0 !important;
   left: auto !important;
@@ -2044,14 +713,14 @@ html[data-layout='phone'] .cutline-top-bar-search--hidden .canvas-search-island 
   filter: blur(6px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html[data-layout='phone'] .cutline-top-bar-search .canvas-search-island {
+@media (prefers-reduced-motion: reduce) {html[data-layout='phone'] .cutline-top-bar-search .canvas-search-island {
     transition: opacity 0.12s ease-out;
   }
 
-  html[data-layout='phone'] .cutline-top-bar-search--hidden .canvas-search-island {
+html[data-layout='phone'] .cutline-top-bar-search--hidden .canvas-search-island {
     filter: none;
   }
+
 }
 
 html[data-layout='phone'] .phone-chrome-modal-scrim,
@@ -2064,8 +733,7 @@ html[data-theme='dark'][data-layout='phone'] .notification-profile-preview-scrim
   background: rgba(0, 0, 0, 0.28);
 }
 
-/* Phone — hide native scroll indicators (iOS scrollbar preview). */
-html[data-layout='phone'] * {
+/* Phone — hide native scroll indicators (iOS scrollbar preview). */html[data-layout='phone'] * {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -2087,10 +755,10 @@ html[data-layout='phone'] .cutline-space-back-pill-host {
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .space-back-pill-chevron:hover svg {
+@media (hover: hover) and (pointer: fine) {.space-back-pill-chevron:hover svg {
     transform: translateX(-1.5px);
   }
+
 }
 
 .space-back-pill-chevron:active svg {
@@ -2098,19 +766,18 @@ html[data-layout='phone'] .cutline-space-back-pill-host {
   transition-duration: 0.08s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .space-back-pill-chevron svg {
+@media (prefers-reduced-motion: reduce) {.space-back-pill-chevron svg {
     transition: none;
   }
 
-  .space-back-pill-chevron:active svg {
+.space-back-pill-chevron:active svg {
     transform: none;
   }
+
 }
 
 /* Expand the back-arrow hit target beyond its visible 32×32 bounds.
-   Asymmetric inset keeps the right edge close so taps on the name still hit the name. */
-.space-back-pill-chevron::before {
+   Asymmetric inset keeps the right edge close so taps on the name still hit the name. */.space-back-pill-chevron::before {
   content: '';
   position: absolute;
   top: -12px;
@@ -2119,13 +786,13 @@ html[data-layout='phone'] .cutline-space-back-pill-host {
   right: -4px;
 }
 
-@media (pointer: coarse) {
-  .space-back-pill-chevron::before {
+@media (pointer: coarse) {.space-back-pill-chevron::before {
     top: -16px;
     bottom: -16px;
     left: -20px;
     right: -6px;
   }
+
 }
 
 html[data-layout='phone'] [data-plus-fab] {
@@ -2145,14 +812,13 @@ html[data-layout='phone'] [data-pen-fab].pen-fab-host--visible {
   opacity: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html[data-layout='phone'] [data-pen-fab] {
+@media (prefers-reduced-motion: reduce) {html[data-layout='phone'] [data-pen-fab] {
     transition: opacity 0.12s ease-out;
   }
+
 }
 
-/* Prevent iOS Safari focus-zoom on inputs (<16px triggers automatic zoom). */
-html[data-layout='phone'] [data-canvas-search-input] {
+/* Prevent iOS Safari focus-zoom on inputs (<16px triggers automatic zoom). */html[data-layout='phone'] [data-canvas-search-input] {
   font-size: 16px;
 }
 
@@ -2186,39 +852,40 @@ html[data-layout='phone'] .canvas-search-icon {
    anchor. The tap-squeeze keyframe would otherwise commandeer transform for
    220ms (overriding any transition), which makes anchors that are themselves
    the squeeze target — Cutline brand pill, canvas search island — teleport
-   into focus instead of animating. */
-html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
+   into focus instead of animating. */html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   animation: none;
 }
 
-@keyframes chrome-tap-squeeze {
-  0%,
+@keyframes chrome-tap-squeeze {0%,
   100% {
     transform: scale(1);
   }
-  42% {
+
+42% {
     transform: scale(0.986);
   }
+
 }
 
-@keyframes chrome-tap-squeeze-compact {
-  0%,
+@keyframes chrome-tap-squeeze-compact {0%,
   100% {
     transform: scale(1);
   }
-  42% {
+
+42% {
     transform: scale(0.955);
   }
+
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .chrome-tap-squeeze--pulse {
+@media (prefers-reduced-motion: reduce) {.chrome-tap-squeeze--pulse {
     animation-duration: 120ms;
   }
 
-  .chrome-tap-squeeze-target--compact.chrome-tap-squeeze--pulse {
+.chrome-tap-squeeze-target--compact.chrome-tap-squeeze--pulse {
     animation-duration: 120ms;
   }
+
 }
 
 :root {
@@ -2240,7 +907,6 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   --canvas-studio-edge-fade: 920px;
   --canvas-void-grid-size: 900px;
   --canvas-void-grid-opacity: 0.36;
-  --canvas-void-grid-opacity-fisheye: 0.94;
   /* Selection dim + canvas customize backdrop — keep in sync with tokens.ts CANVAS_FOCUS_BACKDROP_BLUR_PX. */
   --canvas-focus-backdrop-blur: 12px;
   --canvas-focus-backdrop-dim-light: rgba(0, 0, 0, 0.06);
@@ -2423,10 +1089,10 @@ html[data-ui-customize='1'] .chrome-tap-squeeze--pulse {
   color: var(--ui-text);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .chrome-menu-toggle-row {
+@media (prefers-reduced-motion: reduce) {.chrome-menu-toggle-row {
     transition-duration: 0.12s;
   }
+
 }
 
 .chrome-menu-toggle {
@@ -2555,8 +1221,7 @@ textarea,
   pointer-events: auto;
 }
 
-/* Study hub menu-focus — below bottom-right FABs (26+) but above canvas (0). */
-.cutline-chrome-overlays {
+/* Study hub menu-focus — below bottom-right FABs (26+) but above canvas (0). */.cutline-chrome-overlays {
   position: fixed;
   inset: 0;
   z-index: 24;
@@ -2564,10 +1229,10 @@ textarea,
   overflow: visible;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .cutline-app-shell {
+@media (prefers-reduced-motion: reduce) {.cutline-app-shell {
     transition: none;
   }
+
 }
 
 input::placeholder {
@@ -2578,8 +1243,7 @@ input::placeholder {
   background-color: var(--canvas-bg);
 }
 
-/* Full pan/zoom surface — base fill; dim overlay on ::after while repositioning plates. */
-.cutline-canvas-expanded {
+/* Full pan/zoom surface — base fill; dim overlay on ::after while repositioning plates. */.cutline-canvas-expanded {
   position: relative;
   background-color: var(--canvas-outer-bg);
   --studio-centre-dim-duration: 560ms;
@@ -2590,15 +1254,13 @@ input::placeholder {
   --studio-centre-glow-ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Overview hyper path — studio plate only inside the composited transform layer. */
-.cutline-canvas-plate-shell {
+/* Overview hyper path — studio plate only inside the composited transform layer. */.cutline-canvas-plate-shell {
   position: relative;
   background: transparent;
   overflow: visible;
 }
 
-/* Dim void + margin while repositioning; studio draw-target stays above (z-index 1). */
-.cutline-canvas-expanded::after {
+/* Dim void + margin while repositioning; studio draw-target stays above (z-index 1). */.cutline-canvas-expanded::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -2609,35 +1271,17 @@ input::placeholder {
   background: color-mix(in srgb, #000 7%, transparent);
 }
 
-html[data-studio-centre-dragging] .cutline-canvas-expanded::after {
-  opacity: 1;
-  will-change: opacity;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html:not([data-studio-centre-parallax-active]) {
+@media (prefers-reduced-motion: reduce) {html:not([data-studio-centre-parallax-active]) {
     transition: none;
   }
 
-  .cutline-canvas-expanded::after,
-  .cutline-canvas-expanded,
-  .studio-centre-title,
-  .studio-centre-title__heart,
-  .canvas-minimap-expanded-menu__plate-title,
-  .canvas-minimap-expanded-menu__plate-title-heart,
-  .cutline-canvas-void-grid {
-    transition: none;
-    animation: none;
-    transform: none;
-  }
-
-  html[data-studio-centre-parallax-active] .cutline-canvas-void-grid {
+html[data-studio-centre-parallax-active] .cutline-canvas-void-grid {
     will-change: auto;
   }
+
 }
 
-/* Massive void grid — same fade-to-edges treatment as the expanded minimap. */
-.cutline-canvas-void-grid {
+/* Massive void grid — same fade-to-edges treatment as the expanded minimap. */.cutline-canvas-void-grid {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -2681,12 +1325,7 @@ html:not([data-studio-centre-parallax-active]) .cutline-canvas-void-grid {
     var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
 }
 
-html[data-fisheye-engaged] .cutline-canvas-void-grid {
-  opacity: var(--canvas-void-grid-opacity-fisheye, 0.94);
-}
-
-/* Pan/zoom layer: fixed full-screen host; wrapper must not shrink-wrap the canvas. */
-.cutline-canvas-viewport {
+/* Pan/zoom layer: fixed full-screen host; wrapper must not shrink-wrap the canvas. */.cutline-canvas-viewport {
   position: fixed;
   inset: 0;
   z-index: 0;
@@ -2719,299 +1358,32 @@ html[data-fisheye-engaged] .cutline-canvas-void-grid {
   z-index: 1;
 }
 
-/* Viewport-fixed void — synced to virtual pan in overview hyper mode. */
-.cutline-canvas-void-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-  background-color: transparent;
-}
-
-.cutline-canvas-void-backdrop__grid {
-  position: absolute;
-  inset: 0;
-  opacity: var(--canvas-void-grid-opacity, 0.36);
-  background-image:
-    linear-gradient(
-      to right,
-      color-mix(in srgb, var(--ui-text) 30%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--ui-text) 30%, transparent) 1px,
-      transparent 1px
-    );
-  background-size: var(--canvas-void-grid-step, 900px) var(--canvas-void-grid-step, 900px);
-  background-position: var(--canvas-void-grid-offset-x, 0px)
-    var(--canvas-void-grid-offset-y, 0px);
-  mask-image: radial-gradient(
-    ellipse 50% 50% at 50% 50%,
-    #000 var(--canvas-void-grid-mask-inner, 32.3%),
-    transparent 100%
-  );
-}
-
-html[data-fisheye-engaged] .cutline-canvas-void-backdrop__grid {
-  opacity: var(--canvas-void-grid-opacity-fisheye, 0.94);
-}
-
-.cutline-canvas-void-backdrop__dim {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--studio-centre-dim-duration, 560ms)
-    var(--studio-centre-dim-ease, cubic-bezier(0.42, 0.03, 0.18, 1));
-  background: color-mix(in srgb, #000 7%, transparent);
-}
-
-html[data-studio-centre-dragging] .cutline-canvas-void-backdrop__dim {
-  opacity: 1;
-}
-
-html[data-selection-blur-active] .cutline-canvas-void-backdrop__grid {
-  -webkit-backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
-  backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
-}
-
-/*
+/* Viewport-fixed void — synced to virtual pan in overview hyper mode. *//*
  * Overview hyper path — defer lighter widgets only. Study hubs and images use
  * nested transforms / raster layers; content-visibility delays their layout
  * until exit settling ends, which reads as a late positional snap.
- */
-html[data-canvas-overview-hyper]:not([data-canvas-overview-transitioning])
-  [data-canvas-item]:not([data-canvas-item='study_hub']):not([data-canvas-item='image']) {
-  contain: strict;
-  content-visibility: auto;
-}
-
-html[data-canvas-overview-transitioning]
-  :is([data-canvas-item='study_hub'], [data-canvas-item='image']),
-html[data-canvas-overview-exit-settling]
-  :is([data-canvas-item='study_hub'], [data-canvas-item='image']),
-html[data-canvas-overview-frost-reveal]
-  :is([data-canvas-item='study_hub'], [data-canvas-item='image']) {
-  content-visibility: visible !important;
-  contain: none !important;
-}
-
-/*
+ *//*
  * Overview void pan — drop expensive paint while the plate layer translates.
  * Scoped to hyper overview + void pan only (not studio plate drag).
- */
-html[data-fisheye-engaged][data-canvas-overview-hyper][data-canvas-panning]:not([data-studio-centre-dragging])
-  [data-canvas-item] {
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-html[data-fisheye-engaged][data-canvas-overview-hyper][data-canvas-panning]:not([data-studio-centre-dragging])
-  :is([data-canvas-item='study_hub'], [data-canvas-item='image']) {
-  contain: paint;
-}
-
-/*
+ *//*
  * Overview exit — keep plate frame + item handles hidden until exit fully completes,
  * then fade them in together (see beginExitSettling → setEngaged(false)).
- */
-html[data-canvas-overview-exiting] .studio-centre-bounds__edge,
-html[data-canvas-overview-exiting] .canvas-item-drag-handle-wrapper,
-html[data-canvas-overview-exiting] .canvas-item-drag-handle,
-html[data-canvas-overview-exiting] .canvas-item-resize-handle {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-/* Avoid dark outer-bg flash while viewport void backdrop still carries the grid. */
-html[data-canvas-overview-exiting] .cutline-canvas-expanded,
-html[data-canvas-overview-chrome-reveal] .cutline-canvas-expanded {
-  background-color: transparent;
-}
-
-html[data-canvas-overview-chrome-reveal]:not([data-canvas-overview-chrome-reveal-active])
-  .studio-centre-bounds__edge,
-html[data-canvas-overview-chrome-reveal]:not([data-canvas-overview-chrome-reveal-active])
-  .canvas-item-drag-handle-wrapper,
-html[data-canvas-overview-chrome-reveal]:not([data-canvas-overview-chrome-reveal-active])
-  .canvas-item-drag-handle,
-html[data-canvas-overview-chrome-reveal]:not([data-canvas-overview-chrome-reveal-active])
-  .canvas-item-resize-handle {
-  opacity: 0;
-}
-
-html[data-canvas-overview-chrome-reveal-active] .studio-centre-bounds__edge,
-html[data-canvas-overview-chrome-reveal-active] .canvas-item-drag-handle-wrapper,
-html[data-canvas-overview-chrome-reveal-active] .canvas-item-drag-handle,
-html[data-canvas-overview-chrome-reveal-active] .canvas-item-resize-handle {
-  transition: opacity 480ms ease-out;
-}
-
-/*
+ *//* Avoid dark outer-bg flash while viewport void backdrop still carries the grid. *//*
  * Frosted canvas items — swap blur for an opaque surface in overview so the
  * void grid does not read through (WebKit also ghosts backdrop-filter on stale
  * compositor layers while zoomed out). Instant snap — not during frost crossfades.
- */
-html[data-fisheye-engaged]:not([data-canvas-overview-frost-conceal])
-  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-html[data-canvas-overview-transitioning]:not([data-canvas-overview-frost-conceal])
-  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-html[data-canvas-overview-hyper]:not([data-canvas-overview-frost-conceal])
-  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-html[data-canvas-overview-exit-settling]
-  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-html[data-fisheye-engaged]:not([data-canvas-overview-frost-conceal])
-  [data-canvas-item='study_hub']
-  .study-hub-widget,
-html[data-canvas-overview-transitioning]:not([data-canvas-overview-frost-conceal])
-  [data-canvas-item='study_hub']
-  .study-hub-widget,
-html[data-canvas-overview-hyper]:not([data-canvas-overview-frost-conceal])
-  [data-canvas-item='study_hub']
-  .study-hub-widget,
-html[data-canvas-overview-exit-settling] [data-canvas-item='study_hub'] .study-hub-widget,
-html[data-fisheye-engaged]:not([data-canvas-overview-frost-conceal]) .ui-space-glass,
-html[data-canvas-overview-transitioning]:not([data-canvas-overview-frost-conceal])
-  .ui-space-glass,
-html[data-canvas-overview-hyper]:not([data-canvas-overview-frost-conceal]) .ui-space-glass,
-html[data-canvas-overview-exit-settling] .ui-space-glass {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  filter: none !important;
-  background: var(--chrome-solid-bg) !important;
-  --study-hub-surface-bg: var(--chrome-solid-bg);
-}
-
-/*
+ *//*
  * Overview enter — ease frosted glass to solid (mirror of exit frost-reveal).
  * Hold frosted on frost-conceal, then frost-conceal-active animates on next frame.
- */
-html[data-canvas-overview-frost-conceal]
-  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-html[data-canvas-overview-frost-conceal] [data-canvas-item='study_hub'] .study-hub-widget,
-html[data-canvas-overview-frost-conceal] .ui-space-glass {
-  transition:
-    backdrop-filter var(--overview-frost-crossfade-duration, 320ms)
-      cubic-bezier(0.4, 0, 0.2, 1),
-    -webkit-backdrop-filter var(--overview-frost-crossfade-duration, 320ms)
-      cubic-bezier(0.4, 0, 0.2, 1),
-    background var(--overview-frost-crossfade-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1),
-    filter var(--overview-frost-crossfade-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-html[data-canvas-overview-frost-conceal] .ui-space-glass {
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
-  filter: saturate(var(--ui-saturate, 1));
-  background: var(--glass-bg) !important;
-}
-
-html[data-canvas-overview-frost-conceal-active]
-  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-html[data-canvas-overview-frost-conceal-active]
-  [data-canvas-item='study_hub']
-  .study-hub-widget,
-html[data-canvas-overview-frost-conceal-active]
-  .ui-space-glass {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  filter: none;
-  background: var(--chrome-solid-bg);
-  --study-hub-surface-bg: var(--chrome-solid-bg);
-}
-
-html[data-canvas-overview-frost-conceal-active] .ui-space-glass {
-  background: var(--chrome-solid-bg) !important;
-}
-
-@media (pointer: coarse) {
-  html[data-canvas-overview-frost-conceal] .ui-space-glass {
-    -webkit-backdrop-filter: blur(8px) saturate(130%);
-    backdrop-filter: blur(8px) saturate(130%);
-  }
-}
-
-/*
+ *//*
  * Exit settle tail — ease solid surfaces back to frosted glass (matches study-hub
  * resize crossfade timing). Hold solid on frost-reveal, then frost-reveal-active
  * animates blur/background on the next frame so the transition has a start state.
- */
-html[data-canvas-overview-frost-reveal]
-  :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-html[data-canvas-overview-frost-reveal] [data-canvas-item='study_hub'] .study-hub-widget,
-html[data-canvas-overview-frost-reveal] .ui-space-glass {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  filter: none;
-  background: var(--chrome-solid-bg);
-  --study-hub-surface-bg: var(--chrome-solid-bg);
-  transition:
-    backdrop-filter var(--overview-frost-crossfade-duration, 320ms)
-      cubic-bezier(0.4, 0, 0.2, 1),
-    -webkit-backdrop-filter var(--overview-frost-crossfade-duration, 320ms)
-      cubic-bezier(0.4, 0, 0.2, 1),
-    background var(--overview-frost-crossfade-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1),
-    filter var(--overview-frost-crossfade-duration, 320ms) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-html[data-canvas-overview-frost-reveal] [data-canvas-item='study_hub'] .study-hub-widget {
-  background: var(--chrome-solid-bg);
-}
-
-html[data-canvas-overview-frost-reveal-active] .ui-space-glass {
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
-  filter: saturate(var(--ui-saturate, 1));
-  background: var(--glass-bg) !important;
-}
-
-@media (pointer: coarse) {
-  html[data-canvas-overview-frost-reveal-active] .ui-space-glass {
-    -webkit-backdrop-filter: blur(8px) saturate(130%);
-    backdrop-filter: blur(8px) saturate(130%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html[data-canvas-overview-frost-reveal]
-    :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-  html[data-canvas-overview-frost-reveal] [data-canvas-item='study_hub'] .study-hub-widget,
-  html[data-canvas-overview-frost-reveal] .ui-space-glass,
-  html[data-canvas-overview-frost-conceal]
-    :is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass,
-  html[data-canvas-overview-frost-conceal] [data-canvas-item='study_hub'] .study-hub-widget,
-  html[data-canvas-overview-frost-conceal] .ui-space-glass {
-    transition-duration: 0ms !important;
-  }
-}
-
-/* Framer layout projection clones read as ghost previews during overview exit. */
-html[data-fisheye-engaged] [data-projection-id],
-html[data-canvas-overview-transitioning] [data-projection-id],
-html[data-canvas-overview-exit-settling] [data-projection-id],
-html[data-canvas-overview-frost-reveal] [data-projection-id],
-html[data-canvas-overview-frost-conceal] [data-projection-id] {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-html[data-fisheye-engaged] [data-canvas-item],
-html[data-canvas-overview-transitioning] [data-canvas-item],
-html[data-canvas-overview-exit-settling] [data-canvas-item],
-html[data-canvas-overview-frost-reveal] [data-canvas-item],
-html[data-canvas-overview-frost-conceal] [data-canvas-item] {
-  transition: none !important;
-}
-
-/* Menu / plate fly-to — snap blur to per-frame velocity (no filter lag). */
-html[data-camera-focus-anim] .cutline-canvas-viewport .react-transform-component {
+ *//* Framer layout projection clones read as ghost previews during overview exit. *//* Menu / plate fly-to — snap blur to per-frame velocity (no filter lag). */html[data-camera-focus-anim] .cutline-canvas-viewport .react-transform-component {
   transition: none;
 }
 
-/* Menu-focus zoom can pan past canvas edges — let the oversized scrim paint outside. */
-html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transform-component {
+/* Menu-focus zoom can pan past canvas edges — let the oversized scrim paint outside. */html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transform-component {
   overflow: visible !important;
 }
 
@@ -3029,8 +1401,7 @@ html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transfor
   background: transparent;
 }
 
-/* Viewport-fixed chrome only — frosted glass over the canvas (not inside pan/zoom). */
-.ui-chrome-glass {
+/* Viewport-fixed chrome only — frosted glass over the canvas (not inside pan/zoom). */.ui-chrome-glass {
   -webkit-backdrop-filter: blur(40px) saturate(180%);
   backdrop-filter: blur(40px) saturate(180%);
   filter: saturate(var(--ui-saturate, 1));
@@ -3066,8 +1437,7 @@ html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transfor
   text-transform: lowercase;
 }
 
-/* Buttons do not inherit text-transform from ancestors (UA default is none). */
-:is(.ui-chrome-glass, .ui-chrome-card, .plus-fab-menu-glass)
+/* Buttons do not inherit text-transform from ancestors (UA default is none). */:is(.ui-chrome-glass, .ui-chrome-card, .plus-fab-menu-glass)
   :where(button, a, label, h1, h2, h3, h4, p, li, dt, dd) {
   text-transform: lowercase;
 }
@@ -3089,8 +1459,7 @@ html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transfor
   opacity: 0.75;
 }
 
-/* Chrome scroll areas — hidden scrollbar + monotone top/bottom fade blur. */
-.chrome-scroll-hidden {
+/* Chrome scroll areas — hidden scrollbar + monotone top/bottom fade blur. */.chrome-scroll-hidden {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -3193,8 +1562,7 @@ html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transfor
   display: none;
 }
 
-/* UI customize tray: category labels are hidden, collapse frimousse header slots */
-[data-ui-customization-tray] .ui-emoji-picker-root {
+/* UI customize tray: category labels are hidden, collapse frimousse header slots */[data-ui-customization-tray] .ui-emoji-picker-root {
   --frimousse-category-header-height: 1px !important;
 }
 
@@ -3207,8 +1575,7 @@ html[data-study-hub-menu-focus-engaged] .cutline-canvas-viewport .react-transfor
   margin-top: -5px;
 }
 
-/* Emoji glyphs — 20% desaturation (matches imported media). */
-[data-ui-customization-tray] .ui-emoji-picker-root button > span[aria-hidden] {
+/* Emoji glyphs — 20% desaturation (matches imported media). */[data-ui-customization-tray] .ui-emoji-picker-root button > span[aria-hidden] {
   filter: saturate(0.8);
 }
 
@@ -3237,12 +1604,12 @@ html[data-tool-mode='lasso'] [data-ui-customization-tray] [data-ui-draw-canvas] 
   text-transform: lowercase;
 }
 
-@media (pointer: coarse) {
-  .chrome-scroll-fade-wrap::before,
+@media (pointer: coarse) {.chrome-scroll-fade-wrap::before,
   .chrome-scroll-fade-wrap::after {
     -webkit-backdrop-filter: blur(5px) saturate(0%);
     backdrop-filter: blur(5px) saturate(0%);
   }
+
 }
 
 .study-hub-widget {
@@ -3380,34 +1747,34 @@ html[data-tool-mode='lasso'] [data-ui-customization-tray] [data-ui-draw-canvas] 
   width: 100%;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .study-hub-menu-focus-frame__hub--fluid .study-hub-widget,
+@media (prefers-reduced-motion: reduce) {.study-hub-menu-focus-frame__hub--fluid .study-hub-widget,
   .study-hub-menu-focus-frame__hub--fluid .study-hub-header,
   .study-hub-menu-focus-frame__hub--fluid .study-hub-practice,
   .study-hub-menu-focus-frame__hub--fluid .study-hub-scroll {
     transition-duration: 0.01ms;
   }
+
 }
 
-@container (max-width: 400px) {
-  .study-hub-menu-focus-frame__hub--fluid .study-hub-widget {
+@container (max-width: 400px) {.study-hub-menu-focus-frame__hub--fluid .study-hub-widget {
     --study-hub-inset: 14px;
   }
+
 }
 
-@container (max-width: 320px) {
-  .study-hub-menu-focus-frame__hub--fluid .study-hub-widget {
+@container (max-width: 320px) {.study-hub-menu-focus-frame__hub--fluid .study-hub-widget {
     --study-hub-inset: 12px;
   }
 
-  .study-hub-menu-focus-frame__hub--fluid .study-hub-header {
+.study-hub-menu-focus-frame__hub--fluid .study-hub-header {
     gap: 10px;
     padding-top: 16px;
   }
 
-  .study-hub-menu-focus-frame__hub--fluid .study-hub-header__progress {
+.study-hub-menu-focus-frame__hub--fluid .study-hub-header__progress {
     width: 72px;
   }
+
 }
 
 .study-hub-menu-focus-frame__controls {
@@ -3455,10 +1822,10 @@ html[data-theme='dark'] .study-hub-scratch-pad {
   background: var(--chrome-solid-bg);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .study-hub-menu-dismiss {
+@media (prefers-reduced-motion: reduce) {.study-hub-menu-dismiss {
     transition-duration: 0.01ms;
   }
+
 }
 
 .study-hub-widget--resizing,
@@ -3475,8 +1842,7 @@ html[data-theme='dark'] .study-hub-scratch-pad {
   contain: layout style;
 }
 
-/* Trackpad / touch pan burst started outside — pass hits through the whole widget subtree. */
-html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'],
+/* Trackpad / touch pan burst started outside — pass hits through the whole widget subtree. */html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'],
 html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'] * {
   pointer-events: none !important;
   touch-action: none !important;
@@ -3487,16 +1853,18 @@ html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'] * {
   animation: study-hub-resize-snap 220ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-@keyframes study-hub-resize-snap {
-  0% {
+@keyframes study-hub-resize-snap {0% {
     transform: scale(1);
   }
-  45% {
+
+45% {
     transform: scale(0.9965);
   }
-  100% {
+
+100% {
     transform: scale(1);
   }
+
 }
 
 .study-subject-menu-row svg {
@@ -3901,14 +2269,15 @@ html[data-theme='dark'] .study-hub-mode-tab--active {
   animation-delay: 0.7s;
 }
 
-@keyframes widget-chat-dot {
-  0%,
+@keyframes widget-chat-dot {0%,
   100% {
     opacity: 0.22;
   }
-  50% {
+
+50% {
     opacity: 0.65;
   }
+
 }
 
 .widget-chat-typing-overlay {
@@ -3948,8 +2317,7 @@ html[data-theme='dark'] .study-hub-mode-tab--active {
   width: 100%;
 }
 
-/* + FAB menu — deeper frost, specular rim, no layout morph on view change. */
-.plus-fab-menu-glass {
+/* + FAB menu — deeper frost, specular rim, no layout morph on view change. */.plus-fab-menu-glass {
   -webkit-backdrop-filter: blur(64px) saturate(240%);
   backdrop-filter: blur(64px) saturate(240%);
   text-transform: lowercase;
@@ -3968,15 +2336,13 @@ html[data-theme='dark'] .plus-fab-menu-glass {
 
 /*
  * Menu-focus portal — solid surface (study hubs never use frosted glass).
- */
-.study-hub-menu-focus-portal .study-hub-canvas-shell.plus-fab-menu-glass {
+ */.study-hub-menu-focus-portal .study-hub-canvas-shell.plus-fab-menu-glass {
   background: var(--chrome-solid-bg);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 
-/* Study hub canvas widget — solid surface, no frosted backdrop-filter. */
-:is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass {
+/* Study hub canvas widget — solid surface, no frosted backdrop-filter. */:is(.study-hub-canvas-shell, .study-hub-widget).plus-fab-menu-glass {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   filter: none;
@@ -3987,8 +2353,7 @@ html[data-theme='dark'] .plus-fab-menu-glass {
     box-shadow 320ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Lift drop shadow lives on the rounded shell (CanvasItemShell); keep inset rim only here. */
-[data-canvas-item='study_hub'][data-active] .study-hub-canvas-shell.plus-fab-menu-glass {
+/* Lift drop shadow lives on the rounded shell (CanvasItemShell); keep inset rim only here. */[data-canvas-item='study_hub'][data-active] .study-hub-canvas-shell.plus-fab-menu-glass {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1px 0 rgba(255, 255, 255, 0.12);
@@ -4000,31 +2365,30 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-c
     inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .study-hub-widget.plus-fab-menu-glass {
+@media (prefers-reduced-motion: reduce) {.study-hub-widget.plus-fab-menu-glass {
     transition-duration: 0ms;
   }
+
 }
 
-@media (pointer: coarse) {
-  .plus-fab-menu-glass:not(.study-hub-canvas-shell) {
+@media (pointer: coarse) {.plus-fab-menu-glass:not(.study-hub-canvas-shell) {
     -webkit-backdrop-filter: blur(36px) saturate(210%);
     backdrop-filter: blur(36px) saturate(210%);
   }
 
-  .ui-chrome-glass {
+.ui-chrome-glass {
     -webkit-backdrop-filter: blur(20px) saturate(170%);
     backdrop-filter: blur(20px) saturate(170%);
   }
 
-  .ui-chrome-card {
+.ui-chrome-card {
     -webkit-backdrop-filter: blur(28px) saturate(185%);
     backdrop-filter: blur(28px) saturate(185%);
   }
+
 }
 
-/* Shortcut overlay — fade the glass panel itself (keeps backdrop-filter intact). */
-.study-hub-ephemeral-overlay__panel {
+/* Shortcut overlay — fade the glass panel itself (keeps backdrop-filter intact). */.study-hub-ephemeral-overlay__panel {
   opacity: 0;
   transition: opacity 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -4033,27 +2397,25 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-c
   opacity: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .study-hub-ephemeral-overlay__panel {
+@media (prefers-reduced-motion: reduce) {.study-hub-ephemeral-overlay__panel {
     transition-duration: 0.01ms;
   }
+
 }
 
-/* Light scrim blur for modals — avoid full-canvas backdrop-filter inside pan/zoom. */
-.ui-chrome-scrim {
+/* Light scrim blur for modals — avoid full-canvas backdrop-filter inside pan/zoom. */.ui-chrome-scrim {
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
 
-@media (pointer: coarse) {
-  .ui-chrome-scrim {
+@media (pointer: coarse) {.ui-chrome-scrim {
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
   }
+
 }
 
-/* Space cards on the canvas — frosted glass (do not use full-canvas backdrop-filter). */
-.ui-space-glass {
+/* Space cards on the canvas — frosted glass (do not use full-canvas backdrop-filter). */.ui-space-glass {
   -webkit-backdrop-filter: blur(10px) saturate(140%);
   backdrop-filter: blur(10px) saturate(140%);
   filter: saturate(var(--ui-saturate, 1));
@@ -4062,16 +2424,15 @@ html[data-theme='dark'] [data-canvas-item='study_hub'][data-active] .study-hub-c
     -webkit-backdrop-filter 300ms ease-out;
 }
 
-@media (pointer: coarse) {
-  .ui-space-glass {
+@media (pointer: coarse) {.ui-space-glass {
     -webkit-backdrop-filter: blur(8px) saturate(130%);
     backdrop-filter: blur(8px) saturate(130%);
   }
+
 }
 
 /* Pan-simplification — quickly dissolve expensive blur effects while panning,
-   restore them gently when pan stops. Fast in (120ms), slow out (300ms on base). */
-html[data-canvas-panning] .ui-space-glass {
+   restore them gently when pan stops. Fast in (120ms), slow out (300ms on base). */html[data-canvas-panning] .ui-space-glass {
   -webkit-backdrop-filter: blur(0px) saturate(100%);
   backdrop-filter: blur(0px) saturate(100%);
   transition:
@@ -4087,15 +2448,13 @@ html[data-canvas-panning] .study-hub-widget.plus-fab-menu-glass {
 
 /* Fade out drag/resize handles during pan.
    Single consistent transition duration so the browser never has to reconcile
-   a transition-property change alongside an opacity change (which breaks restore). */
-.canvas-item-drag-handle-wrapper,
+   a transition-property change alongside an opacity change (which breaks restore). */.canvas-item-drag-handle-wrapper,
 .canvas-item-drag-handle,
 .canvas-item-resize-handle {
   transition: opacity 200ms ease-in-out;
 }
 
-/* Sticky embedded-image overflow ghost — fades with selection (not instant mount). */
-[data-sticky-embedded-overflow] {
+/* Sticky embedded-image overflow ghost — fades with selection (not instant mount). */[data-sticky-embedded-overflow] {
   opacity: 0;
   transition:
     opacity var(--sticky-overflow-fade-out, 0.34s)
@@ -4113,23 +2472,10 @@ html[data-canvas-panning] .study-hub-widget.plus-fab-menu-glass {
   transition: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-sticky-embedded-overflow] {
+@media (prefers-reduced-motion: reduce) {[data-sticky-embedded-overflow] {
     transition: none;
   }
-}
 
-html[data-canvas-panning] .canvas-item-drag-handle-wrapper,
-html[data-canvas-panning] .canvas-item-drag-handle,
-html[data-canvas-panning] .canvas-item-resize-handle,
-html[data-canvas-item-dragging] .canvas-item-drag-handle-wrapper,
-html[data-canvas-item-dragging] .canvas-item-drag-handle,
-html[data-canvas-item-dragging] .canvas-item-resize-handle,
-html[data-fisheye-engaged] .canvas-item-drag-handle-wrapper,
-html[data-fisheye-engaged] .canvas-item-drag-handle,
-html[data-fisheye-engaged] .canvas-item-resize-handle {
-  opacity: 0 !important;
-  pointer-events: none !important;
 }
 
 html[data-selection-blur-active] .cutline-studio-centre-surface,
@@ -4148,8 +2494,7 @@ html[data-selection-blur-active] .pocket-strip-surface {
   isolation: auto;
 }
 
-/* Blur + dim canvas behind selection — matches canvas customize backdrop. */
-.ui-selection-depth {
+/* Blur + dim canvas behind selection — matches canvas customize backdrop. */.ui-selection-depth {
   background: var(--canvas-focus-backdrop-dim-light);
   -webkit-backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
   backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
@@ -4167,34 +2512,38 @@ html[data-theme='dark'] .ui-selection-depth {
   transition: filter 220ms ease-out;
 }
 
-@keyframes canvas-item-z-pulse-front {
-  0% {
+@keyframes canvas-item-z-pulse-front {0% {
     filter: brightness(1);
     transform: scale(1);
   }
-  42% {
+
+42% {
     filter: brightness(1.07);
     transform: scale(1.018);
   }
-  100% {
+
+100% {
     filter: brightness(1);
     transform: scale(1);
   }
+
 }
 
-@keyframes canvas-item-z-pulse-back {
-  0% {
+@keyframes canvas-item-z-pulse-back {0% {
     filter: brightness(1);
     transform: scale(1);
   }
-  42% {
+
+42% {
     filter: brightness(0.93);
     transform: scale(0.982);
   }
-  100% {
+
+100% {
     filter: brightness(1);
     transform: scale(1);
   }
+
 }
 
 .canvas-item-z-pulse-front {
@@ -4243,39 +2592,42 @@ html[data-theme='dark'] .ui-selection-depth {
     );
 }
 
-@keyframes space-preview-drop-hover {
-  0%,
+@keyframes space-preview-drop-hover {0%,
   100% {
     box-shadow:
       inset 0 0 0 1.5px color-mix(in srgb, var(--ui-accent, #5b8def) 42%, transparent),
       inset 0 0 18px color-mix(in srgb, var(--ui-accent, #5b8def) 12%, transparent);
   }
-  50% {
+
+50% {
     box-shadow:
       inset 0 0 0 2px color-mix(in srgb, var(--ui-accent, #5b8def) 58%, transparent),
       inset 0 0 28px color-mix(in srgb, var(--ui-accent, #5b8def) 18%, transparent);
   }
+
 }
 
-@keyframes space-preview-drop-confirm {
-  0% {
+@keyframes space-preview-drop-confirm {0% {
     transform: scale(1);
     box-shadow:
       inset 0 0 0 1px var(--glass-border),
       inset 0 0 0 0 transparent;
   }
-  35% {
+
+35% {
     transform: scale(1.015);
     box-shadow:
       inset 0 0 0 2.5px color-mix(in srgb, var(--ui-accent, #5b8def) 72%, white),
       inset 0 0 36px color-mix(in srgb, var(--ui-accent, #5b8def) 28%, transparent);
   }
-  100% {
+
+100% {
     transform: scale(1);
     box-shadow:
       inset 0 0 0 1px var(--glass-border),
       inset 0 0 0 0 transparent;
   }
+
 }
 
 .space-preview-drop-hover {
@@ -4286,16 +2638,12 @@ html[data-theme='dark'] .ui-selection-depth {
   animation: space-preview-drop-confirm 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* --- Pencil-hold tool pill (portaled; solid — no backdrop-filter on motion layer) --- */
-
-.pen-tool-pill-settings {
+/* --- Pencil-hold tool pill (portaled; solid — no backdrop-filter on motion layer) --- */.pen-tool-pill-settings {
   border-radius: 16px;
   isolation: isolate;
 }
 
-/* ─── Lasso target picker (pill + pen FAB) ─────────────────────────────────── */
-
-.lasso-target-settings--pill {
+/* ─── Lasso target picker (pill + pen FAB) ─────────────────────────────────── */.lasso-target-settings--pill {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4439,8 +2787,7 @@ html[data-theme='dark'] .ui-selection-depth {
 }
 
 /* Suppress the browser default focus outline globally on buttons —
-   the chrome already conveys hover/press state via background + scale. */
-button:focus,
+   the chrome already conveys hover/press state via background + scale. */button:focus,
 button:focus-visible {
   outline: none;
 }
@@ -4459,12 +2806,12 @@ button:focus-visible {
   width: 100%;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .tool-settings-switch {
+@media (prefers-reduced-motion: reduce) {.tool-settings-switch {
     filter: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
+
 }
 
 html.canvas-item-drag-active {
@@ -4495,8 +2842,7 @@ html[data-multi-touch] .canvas-item-resize-handle {
   color: var(--canvas-resize-handle-color-hover);
 }
 
-/* Plain canvas text — drag/resize handles on hover or while selected */
-[data-canvas-item='text'] {
+/* Plain canvas text — drag/resize handles on hover or while selected */[data-canvas-item='text'] {
   outline: none;
 }
 
@@ -4570,40 +2916,48 @@ html[data-multi-touch] .canvas-item-resize-handle {
   text-decoration: underline;
 }
 
-@keyframes chrome-icon-attention {
-  0%,
+@keyframes chrome-icon-attention {0%,
   80%,
   100% {
     transform: rotate(0deg) scale(1);
   }
-  81.5% {
+
+81.5% {
     transform: rotate(-15deg) scale(1.07);
   }
-  84% {
+
+84% {
     transform: rotate(15deg) scale(1.07);
   }
-  86.5% {
+
+86.5% {
     transform: rotate(-9deg) scale(1);
   }
-  89% {
+
+89% {
     transform: rotate(9deg) scale(1);
   }
-  91% {
+
+91% {
     transform: rotate(-3deg) scale(1);
   }
-  92.5% {
+
+92.5% {
     transform: rotate(0deg) scale(1);
   }
-  /* aftershock */
-  94% {
+
+/* aftershock */94% {
     transform: rotate(-6deg) scale(1);
   }
-  95.5% {
+
+95.5% {
     transform: rotate(6deg) scale(1);
   }
-  97.5% {
+
+97.5% {
     transform: rotate(0deg) scale(1);
   }
+
 }
 
 .chrome-icon-attention {
@@ -4611,25 +2965,28 @@ html[data-multi-touch] .canvas-item-resize-handle {
   animation: chrome-icon-attention 3s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .chrome-icon-attention {
+@media (prefers-reduced-motion: reduce) {.chrome-icon-attention {
     animation: none;
   }
+
 }
 
-@keyframes theme-change-pulse {
-  0% {
+@keyframes theme-change-pulse {0% {
     opacity: 0;
   }
-  18% {
+
+18% {
     opacity: 1;
   }
-  42% {
+
+42% {
     opacity: 1;
   }
-  100% {
+
+100% {
     opacity: 0;
   }
+
 }
 
 .theme-change-pulse {
@@ -4648,15 +3005,13 @@ html[data-multi-touch] .canvas-item-resize-handle {
   background: rgba(6, 8, 14, 0.39);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .theme-change-pulse {
+@media (prefers-reduced-motion: reduce) {.theme-change-pulse {
     animation-duration: 180ms;
   }
+
 }
 
-/* ─── UI customization (Edit UI) ─────────────────────────────────────────── */
-
-/*
+/* ─── UI customization (Edit UI) ─────────────────────────────────────────── *//*
  * Anchor transform model (only active inside edit mode)
  * -----------------------------------------------------
  * Each chrome anchor composes its focus visual from CSS variables. The rule
@@ -4673,29 +3028,27 @@ html[data-multi-touch] .canvas-item-resize-handle {
  * Breath + hover scales are registered with `@property` so they interpolate
  * smoothly when transitioned/keyframed; the consuming `transform` recomputes
  * each frame from the multiplied vars.
- */
-@property --ui-focus-tx {
-  syntax: '<length>';
+ */@property --ui-focus-tx {syntax: '<length>';
   inherits: false;
   initial-value: 0px;
 }
-@property --ui-focus-ty {
-  syntax: '<length>';
+
+@property --ui-focus-ty {syntax: '<length>';
   inherits: false;
   initial-value: 0px;
 }
-@property --ui-focus-scale {
-  syntax: '<number>';
+
+@property --ui-focus-scale {syntax: '<number>';
   inherits: false;
   initial-value: 1;
 }
-@property --ui-droptarget-scale {
-  syntax: '<number>';
+
+@property --ui-droptarget-scale {syntax: '<number>';
   inherits: false;
   initial-value: 1;
 }
-@property --ui-breath-scale {
-  syntax: '<number>';
+
+@property --ui-breath-scale {syntax: '<number>';
   inherits: false;
   initial-value: 1;
 }
@@ -4731,9 +3084,7 @@ html[data-ui-customize='1'] [data-ui-anchor]:not([data-ui-canvas-item-customize-
     opacity 240ms ease;
 }
 
-
-/* Canvas customize lift — fixed viewport placement; transform via JS + CSS transition. */
-html[data-ui-customize='1'] [data-ui-canvas-item-customize-lift] {
+/* Canvas customize lift — fixed viewport placement; transform via JS + CSS transition. */html[data-ui-customize='1'] [data-ui-canvas-item-customize-lift] {
   z-index: 53 !important;
   transform-origin: top left;
 }
@@ -4743,8 +3094,7 @@ html[data-ui-customize='1']
   animation: ui-anchor-motion-blur 380ms cubic-bezier(0.32, 1.2, 0.55, 1) both;
 }
 
-/* Sticky embeds sit outside the motion surface — blur only the note chrome. */
-html[data-ui-customize='1']
+/* Sticky embeds sit outside the motion surface — blur only the note chrome. */html[data-ui-customize='1']
   [data-ui-canvas-item-customize-lift]
   [data-ui-customize-motion-surface][data-ui-anchor-motion='1'] {
   animation: ui-anchor-motion-blur 380ms cubic-bezier(0.32, 1.2, 0.55, 1) both;
@@ -4757,8 +3107,7 @@ html[data-ui-customize='1']
   animation: none;
 }
 
-/* Focused chrome anchor sits above the dim backdrop (not canvas-item widgets). */
-html[data-ui-customize='1']
+/* Focused chrome anchor sits above the dim backdrop (not canvas-item widgets). */html[data-ui-customize='1']
   [data-ui-anchor][data-ui-anchor-focused='1']:not([data-ui-anchor^='canvas-item:']) {
   z-index: 80 !important;
 }
@@ -4767,15 +3116,15 @@ html[data-ui-customize='1']
    exhales over 3.2s, ease-in-out, with a per-anchor peak read from
    `--ui-breath-peak`. Auto-stops as soon as anything gets focused (rule no
    longer matches → variable falls back to 1, transform transition smooths
-   the landing). */
-@keyframes ui-anchor-breath {
-  0%,
+   the landing). */@keyframes ui-anchor-breath {0%,
   100% {
     --ui-breath-scale: 1;
   }
-  50% {
+
+50% {
     --ui-breath-scale: var(--ui-breath-peak, 1.018);
   }
+
 }
 
 /* The breath always starts at keyframe 0% (`--ui-breath-scale: 1`), which
@@ -4783,30 +3132,25 @@ html[data-ui-customize='1']
    re-engage seamless: as soon as the cooldown attribute clears, the animation
    begins inhaling from 1 → 1.018 → 1 instead of snapping to a mid-cycle
    value. The previous staggered negative `animation-delay` was the source
-   of that snap (e.g. search bar resumed at ~1.005 not 1). */
-/* Canvas widgets on the board (`data-ui-anchor="canvas-item:…"`) are excluded
-   from chrome breath / glow rules so the board stays visually stable. */
-html[data-ui-customize='1']:not([data-ui-focused='1'])
+   of that snap (e.g. search bar resumed at ~1.005 not 1). *//* Canvas widgets on the board (`data-ui-anchor="canvas-item:…"`) are excluded
+   from chrome breath / glow rules so the board stays visually stable. */html[data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   animation: ui-anchor-breath 3.2s ease-in-out infinite;
 }
 
 /* Search bar's wide pill amplifies any scale visually — keep its breath
-   subtle so it doesn't read as a wobble. */
-html[data-ui-customize='1'] [data-ui-anchor='search-bar'] {
+   subtle so it doesn't read as a wobble. */html[data-ui-customize='1'] [data-ui-anchor='search-bar'] {
   --ui-breath-peak: 1.014;
 }
 
 /* News + notifications icons read as small, so they need a bigger inhale to
-   feel alive. */
-html[data-ui-customize='1'] [data-ui-anchor='news'],
+   feel alive. */html[data-ui-customize='1'] [data-ui-anchor='news'],
 html[data-ui-customize='1'] [data-ui-anchor='notifications'] {
   --ui-breath-peak: 1.085;
 }
 
 /* Bottom-right FABs (pen + plus) — bumped a touch beyond default so the
-   floating action affordance doesn't get lost against the canvas. */
-html[data-ui-customize='1'] [data-ui-anchor='pen-fab'],
+   floating action affordance doesn't get lost against the canvas. */html[data-ui-customize='1'] [data-ui-anchor='pen-fab'],
 html[data-ui-customize='1'] [data-ui-anchor='plus-fab'] {
   --ui-breath-peak: 1.06;
 }
@@ -4821,8 +3165,7 @@ html[data-ui-canvas-item-customize-focused='1'] [data-ui-pin-toolbar] {
   z-index: 102 !important;
 }
 
-/* Customize backdrop — canvas-item tone still uses fill + backdrop-active. */
-[data-ui-customization-backdrop] [data-ui-customize-backdrop-fill] {
+/* Customize backdrop — canvas-item tone still uses fill + backdrop-active. */[data-ui-customization-backdrop] [data-ui-customize-backdrop-fill] {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0);
@@ -4855,8 +3198,7 @@ html[data-ui-customize-backdrop-active='1']
 
 /* Ambient 40%-strength glow on all anchors while the customisation menu is
    open (selection mode, nothing focused). Keeps the chrome feeling alive
-   without competing with the full-brightness hover glow below. */
-html[data-ui-customize='1']:not([data-ui-focused='1'])
+   without competing with the full-brightness hover glow below. */html[data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor] {
   filter: brightness(1.0374)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.1188))
@@ -4864,8 +3206,7 @@ html[data-ui-customize='1']:not([data-ui-focused='1'])
 }
 
 /* FABs: ambient glow boosted 30% — they sit in the corner against the canvas
-   so they need a little more pop to read clearly. */
-html[data-ui-customize='1']:not([data-ui-focused='1'])
+   so they need a little more pop to read clearly. */html[data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor='pen-fab'],
 html[data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor='plus-fab'] {
@@ -4875,8 +3216,7 @@ html[data-ui-customize='1']:not([data-ui-focused='1'])
 }
 
 /* News + notifications: ambient glow boosted 30% — small icons need more
-   contrast to register against the blurred backdrop. */
-html[data-ui-customize='1']:not([data-ui-focused='1'])
+   contrast to register against the blurred backdrop. */html[data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor='news'],
 html[data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor='notifications'] {
@@ -4885,8 +3225,7 @@ html[data-ui-customize='1']:not([data-ui-focused='1'])
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.19448));
 }
 
-/* Dark mode: softer ambient anchor glow (brightness lift + shadow opacity). */
-html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
+/* Dark mode: softer ambient anchor glow (brightness lift + shadow opacity). */html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   filter: brightness(1.024)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.076))
@@ -4907,24 +3246,21 @@ html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
 }
 
 /* Hover affordance in the "select an element" state — full-strength glow,
-   no geometry change. Overrides the ambient glow above via :hover specificity. */
-html[data-ui-customize='1']:not([data-ui-focused='1'])
+   no geometry change. Overrides the ambient glow above via :hover specificity. */html[data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']):hover {
   filter: brightness(1.0935)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.297))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.374));
 }
 
-/* Dark mode: −30% anchor hover glow (brightness lift + shadow opacity). */
-html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
+/* Dark mode: −30% anchor hover glow (brightness lift + shadow opacity). */html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
   [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']):hover {
   filter: brightness(1.0524)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.1664))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.2096));
 }
 
-/* Search bar (dark mode): brighten placeholder with the hover glow. */
-html[data-theme='dark'][data-ui-customize='1']
+/* Search bar (dark mode): brighten placeholder with the hover glow. */html[data-theme='dark'][data-ui-customize='1']
   [data-ui-anchor='search-bar']
   [data-canvas-search-input]::placeholder {
   transition:
@@ -4940,36 +3276,36 @@ html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
 }
 
 /* "tap a menu element" select-prompt pill — breathes the same hover glow
-   continuously so it reads as interactive without being distracting. */
-@keyframes ui-select-prompt-glow {
-  0%, 100% {
+   continuously so it reads as interactive without being distracting. */@keyframes ui-select-prompt-glow {0%, 100% {
     filter: brightness(1.04)
       drop-shadow(0 0 8px rgba(255, 255, 255, 0.18))
       drop-shadow(0 0 3px rgba(255, 255, 255, 0.22));
   }
-  50% {
+
+50% {
     filter: brightness(1.09)
       drop-shadow(0 0 22px rgba(255, 255, 255, 0.32))
       drop-shadow(0 0 7px rgba(255, 255, 255, 0.38));
   }
+
 }
 
 html[data-ui-customize='1']:not([data-ui-focused='1']) [data-ui-select-prompt] {
   animation: ui-select-prompt-glow 3.2s ease-in-out infinite;
 }
 
-/* Dark mode: softer halo — white drop-shadows read harsh on dark chrome. */
-@keyframes ui-select-prompt-glow-dark {
-  0%, 100% {
+/* Dark mode: softer halo — white drop-shadows read harsh on dark chrome. */@keyframes ui-select-prompt-glow-dark {0%, 100% {
     filter: brightness(1.013)
       drop-shadow(0 0 5px rgba(255, 255, 255, 0.045))
       drop-shadow(0 0 2px rgba(255, 255, 255, 0.058));
   }
-  50% {
+
+50% {
     filter: brightness(1.032)
       drop-shadow(0 0 10px rgba(255, 255, 255, 0.077))
       drop-shadow(0 0 4px rgba(255, 255, 255, 0.09));
   }
+
 }
 
 html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
@@ -4978,21 +3314,24 @@ html[data-theme='dark'][data-ui-customize='1']:not([data-ui-focused='1'])
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.38) !important;
 }
 
-/* ── Prompt click: anchors nudge subtly into the screen ────────────────── */
-@keyframes ui-anchor-nudge-in {
-  0%   { scale: 1; }
-  38%  { scale: 0.975; }
-  100% { scale: 1; }
+/* ── Prompt click: anchors nudge subtly into the screen ────────────────── */@keyframes ui-anchor-nudge-in {0%   { scale: 1; }
+
+38%  { scale: 0.975; }
+
+100% { scale: 1; }
+
 }
 
 html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   animation: ui-anchor-nudge-in 500ms cubic-bezier(0.32, 1.28, 0.48, 1) both;
 }
 
-@keyframes ui-anchor-nudge-in-subtle {
-  0%   { scale: 1; }
-  38%  { scale: 0.990; }
-  100% { scale: 1; }
+@keyframes ui-anchor-nudge-in-subtle {0%   { scale: 1; }
+
+38%  { scale: 0.990; }
+
+100% { scale: 1; }
+
 }
 
 html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor='brand-pill'],
@@ -5000,32 +3339,28 @@ html[data-ui-customize='1'][data-ui-prompt-nudge] [data-ui-anchor='search-bar'] 
   animation: ui-anchor-nudge-in-subtle 500ms cubic-bezier(0.32, 1.28, 0.48, 1) both;
 }
 
-/* ── Prompt hover: all anchors glow + backdrop darkens ─────────────────── */
-html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
+/* ── Prompt hover: all anchors glow + backdrop darkens ─────────────────── */html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
   [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   filter: brightness(1.058)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.184))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.232));
 }
 
-/* Brand pill: −10% prompt-hover glow. */
-html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
+/* Brand pill: −10% prompt-hover glow. */html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
   [data-ui-anchor='brand-pill'] {
   filter: brightness(1.052)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.166))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.209));
 }
 
-/* Search bar: −20% prompt-hover glow (wide pill amplifies scale visually). */
-html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
+/* Search bar: −20% prompt-hover glow (wide pill amplifies scale visually). */html[data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
   [data-ui-anchor='search-bar'] {
   filter: brightness(1.046)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.147))
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.186));
 }
 
-/* Dark mode prompt-hover anchor glow. */
-html[data-theme='dark'][data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
+/* Dark mode prompt-hover anchor glow. */html[data-theme='dark'][data-ui-customize='1'][data-ui-prompt-hover]:not([data-ui-focused='1'])
   [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
   filter: brightness(1.046)
     drop-shadow(0 0 20px rgba(255, 255, 255, 0.147))
@@ -5046,8 +3381,7 @@ html[data-theme='dark'][data-ui-customize='1'][data-ui-prompt-hover]:not([data-u
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.148));
 }
 
-/* Extra dim layer on the backdrop when hovering the prompt pill */
-html[data-ui-customize='1'] [data-ui-customization-backdrop]::after {
+/* Extra dim layer on the backdrop when hovering the prompt pill */html[data-ui-customize='1'] [data-ui-customization-backdrop]::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -5056,26 +3390,27 @@ html[data-ui-customize='1'] [data-ui-customization-backdrop]::after {
   transition: opacity 260ms ease;
   pointer-events: none;
 }
+
 html[data-ui-customize='1'][data-ui-prompt-hover] [data-ui-customization-backdrop]::after {
   opacity: 1;
 }
-
 
 /* Motion blur pulse — fires on every focus *change* (gain or release) so the
    chrome streaks slightly while it's traversing the viewport, then resolves
    crisp. Duration matches the transform transition.
    Declared *after* the breath rules so its `animation` shorthand wins on the
-   release path (breath rule and motion-blur rule have equal specificity). */
-@keyframes ui-anchor-motion-blur {
-  0% {
+   release path (breath rule and motion-blur rule have equal specificity). */@keyframes ui-anchor-motion-blur {0% {
     filter: blur(0);
   }
-  35% {
+
+35% {
     filter: blur(3.5px);
   }
-  100% {
+
+100% {
     filter: blur(0);
   }
+
 }
 
 html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1']:not(
@@ -5085,8 +3420,7 @@ html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1']:not(
 }
 
 /* While editing, lift the entire chrome above the dim backdrop so all
-   anchors stay tappable. */
-html[data-ui-customize='1'] .cutline-top-bar,
+   anchors stay tappable. */html[data-ui-customize='1'] .cutline-top-bar,
 html[data-ui-customize='1'] [data-pen-fab],
 html[data-ui-customize='1'] [data-plus-fab] {
   z-index: 60 !important;
@@ -5094,8 +3428,7 @@ html[data-ui-customize='1'] [data-plus-fab] {
 
 /* While a chrome anchor is focused, fade the *other* anchors so the focused one
    reads as the active surface. Canvas-item customize keeps chrome at full
-   strength — only the board blurs. */
-html[data-ui-customize='1'][data-ui-focused='1']:not([data-ui-canvas-item-customize-focused='1'])
+   strength — only the board blurs. */html[data-ui-customize='1'][data-ui-focused='1']:not([data-ui-canvas-item-customize-focused='1'])
   [data-ui-anchor]:not([data-ui-anchor-focused='1']):not([data-ui-anchor^='canvas-item:']) {
   opacity: 0.32;
 }
@@ -5106,16 +3439,14 @@ html[data-ui-canvas-item-customize-focused='1']
   cursor: default;
 }
 
-/* Edit mode default cursor: chrome buttons act as selectable cards. */
-html[data-ui-customize='1']:not([data-ui-canvas-item-customize-focused='1'])
+/* Edit mode default cursor: chrome buttons act as selectable cards. */html[data-ui-customize='1']:not([data-ui-canvas-item-customize-focused='1'])
   [data-ui-anchor]:not([data-ui-canvas-item-customize-lift]):not([data-ui-anchor^='canvas-item:']) {
   cursor: pointer;
 }
 
 /* Pin pointer events: inert while editing unfocused anchors; interactive on
    the focused anchor in edit mode and always interactive in live (normal) mode
-   so placed pins can receive hover. */
-[data-ui-pin] {
+   so placed pins can receive hover. */[data-ui-pin] {
   pointer-events: none;
 }
 
@@ -5136,16 +3467,14 @@ html[data-ui-pin-dragging='1'] [data-ui-canvas-item-customize-lift] [data-ui-pin
   transition: none !important;
 }
 
-/* Sticky customize portal remounts pins — avoid filter transition flash on handoff. */
-html[data-ui-canvas-item-customize-focused='1']
+/* Sticky customize portal remounts pins — avoid filter transition flash on handoff. */html[data-ui-canvas-item-customize-focused='1']
   [data-ui-canvas-item-customize-lift]
   [data-ui-pin] {
   transition: filter 0ms ease-out;
 }
 
 /* Exit handoff: keep sticky ink/text/embed layering and opacity stable while the
-   on-canvas copy is revealed (pre-mounted during exit — no portal remount flash). */
-[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='lifting']
+   on-canvas copy is revealed (pre-mounted during exit — no portal remount flash). */[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='lifting']
   [data-canvas-item='sticky']
   [data-canvas-item='image']
   .media-item-surface,
@@ -5161,8 +3490,7 @@ html[data-ui-canvas-item-customize-handoff] [data-canvas-item='sticky'] [data-ui
   z-index: 0 !important;
 }
 
-/* Enter lift: portal content lands once — keep ink under embedded images/text. */
-[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='lifting']
+/* Enter lift: portal content lands once — keep ink under embedded images/text. */[data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='lifting']
   [data-ui-customize-motion-surface],
 [data-ui-canvas-item-customize-lift][data-canvas-item-customize-enter-phase='live']
   [data-ui-customize-motion-surface] {
@@ -5201,25 +3529,26 @@ html[data-ui-pin-dragging='1']
 
 /* Placed pins — idle breath + hover lift on the asset layer so enter/exit
    and body rotation stay intact. Emojis use a brightness pulse instead of scale
-   — scaling color-font glyphs re-rasterizes every frame and jitters. */
-@keyframes ui-pin-idle-breathe {
-  0%,
+   — scaling color-font glyphs re-rasterizes every frame and jitters. */@keyframes ui-pin-idle-breathe {0%,
   100% {
     transform: scale(1);
   }
-  50% {
+
+50% {
     transform: scale(var(--ui-pin-breath-peak, 1.05));
   }
+
 }
 
-@keyframes ui-pin-emoji-idle-breathe {
-  0%,
+@keyframes ui-pin-emoji-idle-breathe {0%,
   100% {
     filter: saturate(0.8) brightness(1);
   }
-  50% {
+
+50% {
     filter: saturate(0.8) brightness(1.07);
   }
+
 }
 
 [data-ui-pin-anim]:not([data-ui-pin-enter='1']):not([data-ui-pin-exit='1'])
@@ -5264,8 +3593,7 @@ html:not([data-ui-customize='1']) [data-ui-pin]:hover {
 
 /* Pin hover lift — emojis read as a pop because the glyph is inset; images,
    gifs, and drawings fill the box so they need the same explicit scale +
-   shadow on the asset layer to match. */
-html[data-ui-customize='1'] [data-ui-anchor-focused='1'] [data-ui-pin] {
+   shadow on the asset layer to match. */html[data-ui-customize='1'] [data-ui-anchor-focused='1'] [data-ui-pin] {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
   transition: filter 160ms ease;
 }
@@ -5302,13 +3630,14 @@ html[data-ui-customize='1']
   filter: saturate(0.8);
 }
 
-@keyframes ui-customize-spin {
-  from {
+@keyframes ui-customize-spin {from {
     transform: rotate(0deg);
   }
-  to {
+
+to {
     transform: rotate(360deg);
   }
+
 }
 
 .ui-customize-spin {
@@ -5316,8 +3645,7 @@ html[data-ui-customize='1']
 }
 
 /* Pin spawn / delete animations — composed on a wrapper div so the body's
-   `transform: rotate(...)` is preserved during enter/exit. */
-[data-ui-pin-anim][data-ui-pin-enter='1'] {
+   `transform: rotate(...)` is preserved during enter/exit. */[data-ui-pin-anim][data-ui-pin-enter='1'] {
   animation: ui-pin-enter 200ms cubic-bezier(0.22, 1.6, 0.4, 1) both;
 }
 
@@ -5325,84 +3653,92 @@ html[data-ui-customize='1']
   animation: ui-pin-exit 180ms cubic-bezier(0.4, 0, 0.6, 1) both;
 }
 
-@keyframes ui-pin-enter {
-  0% {
+@keyframes ui-pin-enter {0% {
     opacity: 0;
     transform: scale(0.86) translateY(-5px);
   }
-  55% {
+
+55% {
     opacity: 1;
     transform: scale(1.03) translateY(1px);
   }
-  78% {
+
+78% {
     transform: scale(0.985) translateY(0px);
   }
-  100% {
+
+100% {
     opacity: 1;
     transform: scale(1) translateY(0px);
   }
+
 }
 
-@keyframes ui-pin-exit {
-  0% {
+@keyframes ui-pin-exit {0% {
     opacity: 1;
     transform: scale(1) translateY(0);
     filter: blur(0);
   }
-  100% {
+
+100% {
     opacity: 0;
     transform: scale(0.55) translateY(6px);
     filter: blur(4px);
   }
+
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-ui-pin-anim][data-ui-pin-enter='1'],
+@media (prefers-reduced-motion: reduce) {[data-ui-pin-anim][data-ui-pin-enter='1'],
   [data-ui-pin-anim][data-ui-pin-exit='1'] {
     animation-duration: 90ms;
   }
 
-  [data-ui-pin-anim]:not([data-ui-pin-enter='1']):not([data-ui-pin-exit='1'])
+[data-ui-pin-anim]:not([data-ui-pin-enter='1']):not([data-ui-pin-exit='1'])
     [data-ui-pin-asset] {
     animation: none;
   }
 
-  [data-ui-pin]:hover [data-ui-pin-asset] {
+[data-ui-pin]:hover [data-ui-pin-asset] {
     animation-play-state: paused;
     transform: scale(1.1);
   }
+
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html[data-ui-customize='1'] [data-ui-anchor]:not([data-ui-canvas-item-customize-lift]):not([data-ui-anchor^='canvas-item:']) {
+@media (prefers-reduced-motion: reduce) {html[data-ui-customize='1'] [data-ui-anchor]:not([data-ui-canvas-item-customize-lift]):not([data-ui-anchor^='canvas-item:']) {
     transition-duration: 0ms;
   }
-  html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1']:not(
+
+html[data-ui-customize='1'] [data-ui-anchor][data-ui-anchor-motion='1']:not(
       [data-ui-canvas-item-customize-lift]
     ) {
     animation: none;
   }
-  html[data-ui-customize='1']:not([data-ui-focused='1'])
+
+html[data-ui-customize='1']:not([data-ui-focused='1'])
     [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']) {
     animation: none;
   }
-  html[data-ui-customize='1']:not([data-ui-focused='1'])
+
+html[data-ui-customize='1']:not([data-ui-focused='1'])
     [data-ui-anchor]:not([data-ui-anchor^='canvas-item:']):hover {
     --ui-hover-scale: 1;
   }
-  html[data-ui-customize='1']
+
+html[data-ui-customize='1']
     [data-ui-anchor-focused='1']
     [data-ui-pin-asset] {
     transition-duration: 0ms;
   }
+
 }
 
-/* ─── Drag-drop anchor hover animation ────────────────────────────────────── */
+/* ─── Drag-drop anchor hover animation ────────────────────────────────────── */@keyframes ui-anchor-drag-pulse {0%   { box-shadow: 0 0 0 0 rgba(20, 30, 50, 0.14); }
 
-@keyframes ui-anchor-drag-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(20, 30, 50, 0.14); }
-  50%  { box-shadow: 0 0 0 8px rgba(20, 30, 50, 0.0); }
-  100% { box-shadow: 0 0 0 0 rgba(20, 30, 50, 0.0); }
+50%  { box-shadow: 0 0 0 8px rgba(20, 30, 50, 0.0); }
+
+100% { box-shadow: 0 0 0 0 rgba(20, 30, 50, 0.0); }
+
 }
 
 html[data-ui-customize='1']
@@ -5412,9 +3748,7 @@ html[data-ui-customize='1']
   animation: ui-anchor-drag-pulse 0.8s ease-out infinite;
 }
 
-/* ─── Pin drag ghost ───────────────────────────────────────────────────────── */
-
-[data-ui-customization-drag-ghost] {
+/* ─── Pin drag ghost ───────────────────────────────────────────────────────── */[data-ui-customization-drag-ghost] {
   /* Prevent the ghost from triggering hover states on things below it */
   pointer-events: none;
   will-change: transform;
@@ -5423,9 +3757,7 @@ html[data-ui-customize='1']
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
 
-/* ─── Pin selection toolbar ───────────────────────────────────────────────── */
-
-[data-ui-pin-toolbar] {
+/* ─── Pin selection toolbar ───────────────────────────────────────────────── */[data-ui-pin-toolbar] {
   /* Above focused anchors (z-index 80) and customize portal. */
   z-index: 90;
   isolation: isolate;
@@ -5443,24 +3775,24 @@ html[data-ui-customize='1']
   background: rgba(20, 30, 50, 0.04);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-ui-anchor-focused='1'][data-ui-anchor-drag-hover='1'] {
+@media (prefers-reduced-motion: reduce) {[data-ui-anchor-focused='1'][data-ui-anchor-drag-hover='1'] {
     animation: none;
   }
 
-  .cutline-stroke-erasing {
+.cutline-stroke-erasing {
     animation-duration: 0.01ms;
   }
+
 }
 
-/* Eraser — brief opacity fade before stroke is removed from state. */
-@keyframes cutline-stroke-erase-fade {
-  from {
+/* Eraser — brief opacity fade before stroke is removed from state. */@keyframes cutline-stroke-erase-fade {from {
     opacity: 1;
   }
-  to {
+
+to {
     opacity: 0;
   }
+
 }
 
 .cutline-stroke-erasing {
@@ -5471,9 +3803,7 @@ textarea::-webkit-resizer {
   opacity: 0.5;
 }
 
-/* ─── Profile pinned track — now-playing preview ──────────────────────────── */
-
-.profile-track-preview__art-wrap {
+/* ─── Profile pinned track — now-playing preview ──────────────────────────── */.profile-track-preview__art-wrap {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
@@ -5507,49 +3837,53 @@ textarea::-webkit-resizer {
   transform-origin: left center;
 }
 
-@keyframes profile-track-art-breathe {
-  0%,
+@keyframes profile-track-art-breathe {0%,
   100% {
     transform: scale(1);
   }
-  50% {
+
+50% {
     transform: scale(1.08);
   }
+
 }
 
-@keyframes profile-track-art-halo {
-  0%,
+@keyframes profile-track-art-halo {0%,
   100% {
     box-shadow: 0 0 0 0 rgba(90, 110, 160, 0);
   }
-  50% {
+
+50% {
     box-shadow:
       0 0 0 1.5px rgba(90, 110, 160, 0.2),
       0 0 8px rgba(90, 110, 160, 0.12);
   }
+
 }
 
-@keyframes profile-track-title-pulse {
-  0%,
+@keyframes profile-track-title-pulse {0%,
   100% {
     opacity: 0.78;
   }
-  50% {
+
+50% {
     opacity: 1;
   }
+
 }
 
-@keyframes profile-track-title-marquee {
-  0%,
+@keyframes profile-track-title-marquee {0%,
   14%,
   86%,
   100% {
     transform: translateX(0);
   }
-  42%,
+
+42%,
   58% {
     transform: translateX(calc(-1 * var(--profile-track-title-overflow, 0px)));
   }
+
 }
 
 .profile-track-preview[data-profile-track-playing] .profile-track-preview__art-wrap {
@@ -5576,22 +3910,23 @@ html[data-theme='dark'] .profile-track-preview[data-profile-track-playing]
   animation: profile-track-art-halo-dark 2.6s ease-in-out infinite;
 }
 
-@keyframes profile-track-art-halo-dark {
-  0%,
+@keyframes profile-track-art-halo-dark {0%,
   100% {
     box-shadow: 0 0 0 0 rgba(180, 195, 230, 0);
   }
-  50% {
+
+50% {
     box-shadow:
       0 0 0 1.5px rgba(180, 195, 230, 0.24),
       0 0 10px rgba(140, 165, 220, 0.16);
   }
+
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .profile-track-preview[data-profile-track-playing] .profile-track-preview__art-wrap,
+@media (prefers-reduced-motion: reduce) {.profile-track-preview[data-profile-track-playing] .profile-track-preview__art-wrap,
   .profile-track-preview[data-profile-track-playing] .profile-track-preview__art,
   .profile-track-preview[data-profile-track-playing] .profile-track-preview__title {
     animation: none;
   }
+
 }

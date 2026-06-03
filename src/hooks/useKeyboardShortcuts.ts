@@ -11,14 +11,6 @@ import { useStrokesStore } from '../drawing/strokesStore'
 import { useLassoStore } from '../drawing/useLassoStore'
 import { dismissCanvasSelection } from '../canvas/canvasSelectionDismiss'
 import { canvasEditingAllowed } from '../canvasEdit/layer'
-import {
-  closeCanvasMinimap,
-  dismissMinimapMode,
-  toggleCanvasMinimap,
-} from '../canvas/canvasMinimapOpen'
-import { runCanvasOverviewExit, toggleCanvasOverview } from '../canvas/canvasOverviewCamera'
-import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
-import { useCanvasMinimapStore } from '../canvas/canvasMinimapStore'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { SHORTCUTS_BY_ID } from '../shortcuts/shortcutDefs'
@@ -138,16 +130,6 @@ function handleEscape(
     return true
   }
 
-  if (useCanvasMinimapStore.getState().expandedOpen) {
-    dismissMinimapMode(transformRef)
-    return true
-  }
-
-  if (useCanvasOverviewStore.getState().engaged) {
-    runCanvasOverviewExit(transformRef.current, null)
-    return true
-  }
-
   const itemsStore = useCanvasItemsStore.getState()
 
   if (ui.toolPalette?.isColorPopoverOpen()) {
@@ -235,7 +217,7 @@ export function useKeyboardShortcuts(
 
       // ── Select all (studio centre) ────────────────────────────────────────
       if (matchesShortcut(e, 'select-all')) {
-        if (!canvasEditingAllowed() || useCanvasOverviewStore.getState().engaged) return
+        if (!canvasEditingAllowed()) return
         e.preventDefault()
         if (useLassoStore.getState().selectAllInStudioCentre()) {
           fireToast('select-all')
@@ -306,23 +288,6 @@ export function useKeyboardShortcuts(
       if (matchesShortcut(e, 'find')) {
         e.preventDefault()
         useShortcutUiStore.getState().canvasSearch?.focus()
-        return
-      }
-
-      // ── Canvas overview ────────────────────────────────────────────────────
-      if (matchesShortcut(e, 'open-canvas-overview')) {
-        e.preventDefault()
-        if (useCanvasOverviewStore.getState().engaged) {
-          closeCanvasMinimap()
-        }
-        toggleCanvasOverview(transformRef.current, null)
-        return
-      }
-
-      // ── Canvas map ─────────────────────────────────────────────────────────
-      if (matchesShortcut(e, 'open-canvas-map')) {
-        e.preventDefault()
-        toggleCanvasMinimap(transformRef)
         return
       }
 

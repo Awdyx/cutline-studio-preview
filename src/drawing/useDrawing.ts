@@ -25,8 +25,6 @@ import { keepActiveLassoSelectionForPointer } from './lassoPointerGuard'
 import { isPointerOnCanvasItem } from '../canvas/canvasSelectionDismiss'
 import { isPointerOverOpenStudyHubScratchPad } from '../canvasItems/studyHubMenuFocus'
 import { isUiDrawCanvasTarget } from './penToolMenuLayout'
-import { shouldBlockCanvasDrawAt } from '../canvas/canvasMinimapDrawBlock'
-
 const captureOpts = { capture: true } as const
 const capturePassiveOpts = { capture: true, passive: false } as const
 const ERASE_THROTTLE_MS = 16
@@ -262,15 +260,6 @@ export function useDrawing(
       ) {
         return
       }
-      if (
-        shouldBlockCanvasDrawAt(
-          lastPointerPos.clientX,
-          lastPointerPos.clientY,
-        )
-      ) {
-        return
-      }
-
       e.preventDefault()
       setSpaceDrawHeld(true)
       document.documentElement.setAttribute('data-space-draw', '')
@@ -385,15 +374,6 @@ export function useDrawing(
     }
 
     function onPointerDown(event: PointerEvent) {
-      if (
-        shouldBlockCanvasDrawAt(
-          event.clientX,
-          event.clientY,
-          event.target,
-        )
-      ) {
-        return
-      }
       if (!isCanvasEventTarget(event.target)) return
       if (isHandleTarget(event.target)) return
       if (isLassoSelectionChromeTarget(event.target)) return
@@ -466,8 +446,7 @@ export function useDrawing(
 
       if (isSpaceDrawHeld() && event.pointerType === 'mouse') {
         if (
-          !isPointerOverOpenStudyHubScratchPad(event.clientX, event.clientY) &&
-          !shouldBlockCanvasDrawAt(event.clientX, event.clientY, event.target)
+          !isPointerOverOpenStudyHubScratchPad(event.clientX, event.clientY)
         ) {
           penMenu()?.moveSpaceHold(event.clientX, event.clientY)
           if (!penMenu()?.isMenuOpen()) {
@@ -504,15 +483,6 @@ export function useDrawing(
 
       if (menu?.onPointerMove(event)) return
       if (!pointerPenActive || event.pointerId !== activePointerId) return
-      if (
-        shouldBlockCanvasDrawAt(
-          event.clientX,
-          event.clientY,
-          event.target,
-        )
-      ) {
-        return
-      }
 
       const mode = useToolStore.getState().mode
 

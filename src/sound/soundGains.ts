@@ -18,8 +18,6 @@ export const SOUND_LEVELS: Record<SoundId, number> = {
   profileClose: 1.3,
   itemGrab: 0.38,
   itemDrop: 0.09,
-  studioCentreGrab: 0.56,
-  studioCentreDrop: 0.2,
   spawn: 0.95,
   lock: 0.09,
   unlock: 0.1,
@@ -34,11 +32,6 @@ export const SOUND_LEVELS: Record<SoundId, number> = {
   zOrderFront: 0.53,
   zOrderBack: 0.56,
   aspectSnap: 0.88,
-  minimapOpen: 1.02,
-  minimapClose: 0.98,
-  /** Overview zoom — quiet lens pull / release. */
-  overviewEnter: 0.42,
-  overviewExit: 0.44,
   textCommit: 0.9,
   /** Brand pill area lock-in — whisper loader (very quiet). */
   plateFocus: 0.48,
@@ -53,9 +46,6 @@ export const CONTINUOUS_SFX_LEVEL = 0.50
 
 /** Resize handle bed — soft, dark tonal hum that tracks item size. */
 export const RESIZE_SFX_LEVEL = 0.216
-
-/** Studio centre drag bed — dark sub mass hum; separate from item noise scrape. */
-export const STUDIO_CENTRE_DRAG_SFX_LEVEL = 0.92
 
 /** Canvas pan whoosh — airy/bright bed, kept subtle since panning is frequent. */
 export const PAN_SFX_LEVEL = 2.08

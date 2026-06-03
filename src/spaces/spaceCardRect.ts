@@ -1,5 +1,4 @@
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
-import { isOverviewHyperPanActive } from '../canvas/canvasVirtualPan'
 import { useStudioCentrePositionStore } from '../canvas/studioCentrePositionStore'
 import type { SpaceCanvasItem } from '../canvasItems/types'
 import { useCanvasWorkspaceStore } from './canvasWorkspaceStore'
@@ -16,10 +15,6 @@ export type CanvasItemRect = Pick<
  */
 export function canvasItemTransformRect(item: CanvasItemRect): CanvasItemRect {
   if (useCanvasWorkspaceStore.getState().isInsideSpace()) {
-    return item
-  }
-
-  if (isOverviewHyperPanActive()) {
     return item
   }
 

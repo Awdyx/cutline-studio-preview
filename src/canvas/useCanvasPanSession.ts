@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { clampToLibraryBounds } from './canvasCamera'
-import { isOverviewHyperPanActive } from './canvasVirtualPan'
 import { CANVAS_PAN_SESSION_GAP_MS } from './studyHubPanScroll'
 import { usePanMotionStore } from '../panMotionStore'
 
@@ -21,8 +20,7 @@ export function useCanvasPanSession() {
       posInitRef.current = false
       usePanMotionStore.getState().clearPanVelocity()
       usePanMotionStore.getState().setCanvasPanActive(false)
-      // Hyper overview pan uses library coords on ref.state — bounds come from TransformWrapper props.
-      if (clamp && !isOverviewHyperPanActive()) {
+      if (clamp) {
         clampToLibraryBounds(ref)
       }
     },

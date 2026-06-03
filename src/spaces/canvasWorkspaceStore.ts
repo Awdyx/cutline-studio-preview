@@ -18,8 +18,6 @@ import {
 import { backfillCanvasItemsImportDimensions } from '../media/mediaImportDimensions'
 import { putSnapshotFromDataUrl } from '../media/mediaBlobStore'
 import { normalizeLoadedWorkspace } from './normalizeWorkspace'
-import { resetCanvasMinimapUiState } from '../canvas/canvasMinimapOpen'
-import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
 import {
   applyCameraWhenTransformLayoutReady,
   applyCameraToRef,
@@ -641,8 +639,6 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     } else {
       applyCameraToRef(transformRef, cached)
     }
-    useCanvasOverviewStore.getState().setEngaged(false)
-    resetCanvasMinimapUiState()
     const synced = readCameraFromRef(transformRef)
     if (synced) mainCameraCache = synced
     mainCameraApplied = true

@@ -75,19 +75,15 @@ import {
   CANVAS_MAX_SCALE,
   CANVAS_ZOOM_EDGE_PADDING,
   CANVAS_ZOOM_MIN_EDGE_PADDING,
-  canvasDomHeight,
-  canvasDomWidth,
   canvasLayoutHeight,
   canvasLayoutWidth,
   getCanvasHardMinScale,
-  getCanvasOverviewScale,
 } from './drawing/canvasDimensions'
 import {
   CANVAS_WHEEL_ZOOM_STEP,
   clampToLibraryBounds,
   releaseZoomBounds,
 } from './canvas/canvasCamera'
-import { closeCanvasMinimap } from './canvas/canvasMinimapOpen'
 import { useBlockPagePinchZoom } from './canvas/useBlockPagePinchZoom'
 import { useCanvasCursorWheelZoom } from './canvas/useCanvasCursorWheelZoom'
 import { useCanvasViewport } from './canvas/useCanvasViewport'
@@ -100,32 +96,14 @@ import ReloadSpaceIntro from './canvas/ReloadSpaceIntro'
 import { resolveReloadIntroCopy } from './canvas/reloadIntroCopy'
 import { useReloadIntroStore } from './canvas/reloadIntroStore'
 import CanvasPlateBoundsOverlay from './canvas/CanvasPlateBoundsOverlay'
-import StudioCentreTitle from './canvas/StudioCentreTitle'
-import StudioCentreDragHandle from './canvas/StudioCentreDragHandle'
-import CanvasNavigationMinimap from './canvas/CanvasNavigationMinimap'
-import { useCanvasMinimapTrackpadPan } from './canvas/useCanvasMinimapTrackpadPan'
-import { useCanvasZMenuTrackpadPan } from './canvas/useCanvasZMenuTrackpadPan'
 import { useCanvasPanSession } from './canvas/useCanvasPanSession'
+import { useCanvasZMenuTrackpadPan } from './canvas/useCanvasZMenuTrackpadPan'
 import { useCanvasPanSound } from './canvas/useCanvasPanSound'
 import { useCanvasSelectionViewportPark } from './canvas/useCanvasSelectionViewportPark'
-import { shouldDeferLayoutCameraApply, useCanvasOverviewStore } from './canvas/canvasOverviewStore'
-import { useCanvasOverviewDocumentAttrs } from './canvas/useCanvasOverviewDocumentAttrs'
-import { useOverviewHyperLayoutHandoff } from './canvas/useOverviewHyperLayoutHandoff'
-import CanvasVoidBackdrop, {
-  useCanvasVoidBackdropSync,
-} from './canvas/CanvasVoidBackdrop'
 import {
   registerStudioCentreTransformRef,
-  useStudioCentrePositionStore,
 } from './canvas/studioCentrePositionStore'
-import { hyperPanLibraryBoundProps } from './canvas/canvasVirtualPan'
-import { useCanvasOverviewExitGestures } from './canvas/useCanvasOverviewExitGestures'
-import { useCanvasOverviewMinimapOpen } from './canvas/useCanvasOverviewMinimapOpen'
 import { useStudioCentrePositionCssVars } from './canvas/useStudioCentrePositionCssVars'
-import { useStudioCentreHoldDrag } from './canvas/useStudioCentreHoldDrag'
-import { useStudioCentreDragStore } from './canvas/studioCentreDragStore'
-import { registerStudioCentreDrawTarget } from './canvas/studioCentreVisualDrag'
-import { useCanvasMinimapStore } from './canvas/canvasMinimapStore'
 import { blurStrayTextFocus } from './platform/textFocus'
 import { idleAfterFirstPaint, isTouchFirstDevice } from './platform/compositor'
 import { useLayoutProfile } from './hooks/useLayoutProfile'
@@ -308,10 +286,6 @@ function App() {
     () => getCanvasHardMinScale(viewportSize.width, viewportSize.height),
     [viewportSize.width, viewportSize.height],
   )
-  const overviewScale = useMemo(
-    () => getCanvasOverviewScale(viewportSize.width, viewportSize.height),
-    [viewportSize.width, viewportSize.height],
-  )
   const panExcluded = useMemo(() => canvasPanExcludedClasses(), [])
   const trackpadPanExcluded = useMemo(() => canvasTrackpadPanExcludedClasses(), [])
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -340,35 +314,8 @@ function App() {
   const activeSpaceId = useCanvasWorkspaceStore((s) =>
     s.activeCanvasId === 'main' ? null : s.activeCanvasId,
   )
-  const overviewEngaged = useCanvasOverviewStore((s) => s.engaged)
-  const overviewHyperOptimized = useCanvasOverviewStore((s) => s.hyperOptimized)
-  const overviewExitHandoff = useCanvasOverviewStore(
-    (s) => s.layoutHandoff?.mode === 'exit',
-  )
-  const overviewHyperActive = overviewHyperOptimized && !isInsideSpace
-  /** Keep plate-sized compositor through exit handoff — avoid 7000+plate-local hybrid. */
-  const plateCompositorActive = overviewHyperActive || overviewExitHandoff
-  /** Plate-local draw-target until exit handoff applies the full-canvas camera. */
-  const drawTargetPlateLocal = plateCompositorActive
-  /** Viewport-fixed void grid through exit settle — inner grid mounts only after disengage. */
-  const showViewportVoidBackdrop =
-    !isInsideSpace && (plateCompositorActive || overviewEngaged)
-  const studioX = useStudioCentrePositionStore((s) => s.x)
-  const studioY = useStudioCentrePositionStore((s) => s.y)
-  const hyperPanBounds = useMemo(
-    () =>
-      overviewHyperActive
-        ? hyperPanLibraryBoundProps(
-            viewportSize.width,
-            viewportSize.height,
-            studioX,
-            studioY,
-          )
-        : null,
-    [overviewHyperActive, viewportSize.width, viewportSize.height, studioX, studioY],
-  )
-  const activeLayoutWidth = canvasLayoutWidth(plateCompositorActive)
-  const activeLayoutHeight = canvasLayoutHeight(plateCompositorActive)
+  const activeLayoutWidth = canvasLayoutWidth()
+  const activeLayoutHeight = canvasLayoutHeight()
   const canvasSwapMode = useCanvasWorkspaceStore((s) => s.canvasSwapMode)
   const canvasSwapPhase = useCanvasWorkspaceStore((s) => s.canvasSwapPhase)
   const canvasFadeOpacity = useCanvasWorkspaceStore((s) => s.canvasFadeOpacity)
@@ -397,11 +344,10 @@ function App() {
 
   useLayoutEffect(() => {
     if (!appHydrated) return
-    if (shouldDeferLayoutCameraApply()) return
 
     let cancelled = false
     const id = requestAnimationFrame(() => {
-      if (cancelled || shouldDeferLayoutCameraApply()) return
+      if (cancelled) return
       const ref = transformRef.current
       if (!ref) return
       useCanvasWorkspaceStore.getState().applyCameraForActiveCanvas(ref)
@@ -416,21 +362,6 @@ function App() {
     registerStudioCentreTransformRef(transformRef)
     return () => registerStudioCentreTransformRef(null)
   }, [transformRef])
-
-  useCanvasVoidBackdropSync(transformRef, showViewportVoidBackdrop)
-  useCanvasOverviewDocumentAttrs()
-  useOverviewHyperLayoutHandoff(transformRef)
-
-  useEffect(() => {
-    if (!isInsideSpace) return
-    useCanvasOverviewStore.getState().setEngaged(false)
-    useCanvasOverviewStore.getState().setHyperOptimized(false)
-    closeCanvasMinimap()
-  }, [isInsideSpace])
-
-  useEffect(() => {
-    registerStudioCentreDrawTarget(isInsideSpace ? null : canvasRef.current)
-  }, [isInsideSpace, canvasMount])
 
   useCanvasCompositorWarmup(
     canvasRef,
@@ -447,33 +378,11 @@ function App() {
       .exitSpace(transformRef.current, canvasRef.current)
   }
 
-  const overviewTransitioning = useCanvasOverviewStore((s) => s.transitioning)
-  const overviewZoomLocked = overviewEngaged && !overviewTransitioning
-  const transformMinScale = overviewZoomLocked
-    ? overviewScale
-    : overviewEngaged || overviewTransitioning
-      ? Math.min(overviewScale, Math.max(hardMinScale - CANVAS_ZOOM_MIN_EDGE_PADDING, 0.05))
-      : Math.max(hardMinScale - CANVAS_ZOOM_MIN_EDGE_PADDING, 0.05)
-  const transformMaxScale = overviewZoomLocked
-    ? overviewScale
-    : CANVAS_MAX_SCALE + CANVAS_ZOOM_EDGE_PADDING
-  useCanvasOverviewExitGestures(transformRef)
-  useCanvasOverviewMinimapOpen()
-  const studioCentreHoldDrag = useStudioCentreHoldDrag(transformRef)
-  const studioCentrePanSuppressed = useStudioCentreDragStore((s) => s.panSuppressed)
-  const expandedMinimapOpen = useCanvasMinimapStore((s) => s.expandedOpen)
-  // Lock canvas-item interaction (panning still works) while overview is engaged.
-  useEffect(() => {
-    // Entering overview dismisses drawing-tool chrome and any current selection.
-    if (overviewEngaged) {
-      useShortcutUiStore.getState().toolPalette?.close({ silent: true })
-      const lasso = useLassoStore.getState()
-      if (lasso.selectedStrokeIds.length > 0 || lasso.selectedItemIds.length > 0) {
-        lasso.clearSelection()
-      }
-      useCanvasItemsStore.getState().clearSelection({ silent: true })
-    }
-  }, [overviewEngaged])
+  const transformMinScale = Math.max(
+    hardMinScale - CANVAS_ZOOM_MIN_EDGE_PADDING,
+    0.05,
+  )
+  const transformMaxScale = CANVAS_MAX_SCALE + CANVAS_ZOOM_EDGE_PADDING
 
   const itemDragActive = useCanvasItemDragStore((s) => s.activeItemId !== null)
   const lassoDragActive = useLassoStore((s) => s.dragOffset != null)
@@ -528,24 +437,13 @@ function App() {
   })
   const canvasPanSession = useCanvasPanSession()
   const zoomReleaseActive =
-    !isInsideSpace && !overviewEngaged && !studyHubMenuFocusEngaged
-  useCanvasMinimapTrackpadPan({
-    transformRef,
-    disabled:
-      isPenDown ||
-      studyHubMenuFocusEngaged ||
-      lassoDragActive,
-    excluded: trackpadPanExcluded,
-    onPanFrame: canvasPanSession.onPanFrame,
-    onPanStop: (ref) => canvasPanSession.onPanStop(ref, false),
-  })
+    !isInsideSpace && !studyHubMenuFocusEngaged
   useCanvasZMenuTrackpadPan({
     transformRef,
     disabled:
       isPenDown ||
       studyHubMenuFocusEngaged ||
-      lassoDragActive ||
-      expandedMinimapOpen,
+      lassoDragActive,
     onPanFrame: canvasPanSession.onPanFrame,
     onPanStop: (ref) => canvasPanSession.onPanStop(ref, false),
   })
@@ -805,9 +703,6 @@ function App() {
       data-ready={appHydrated || undefined}
     >
       <div ref={viewportRef} className="cutline-canvas-viewport">
-        {!isInsideSpace && (
-          <CanvasVoidBackdrop visible={showViewportVoidBackdrop} />
-        )}
         <div className="canvas-pan-shell" style={{ width: '100%', height: '100%', position: 'relative' }}>
           {isInsideSpace && activeSpaceId ? (
             <PocketStripViewport
@@ -835,10 +730,6 @@ function App() {
             limitToBounds
             disablePadding
             centerZoomedOut={false}
-            {...(hyperPanBounds ?? {})}
-            autoAlignment={
-              overviewHyperActive ? { disabled: true } : undefined
-            }
             onInit={onTransformInit}
             onPanning={(ref) => {
               canvasPanSession.onPanFrame(ref)
@@ -884,8 +775,7 @@ function App() {
               disabled:
                 isPenDown ||
                 studyHubMenuFocusEngaged ||
-                lassoDragActive ||
-                expandedMinimapOpen,
+                lassoDragActive,
               excluded: trackpadPanExcluded,
             }}
             panning={{
@@ -893,16 +783,13 @@ function App() {
               disabled:
                 canvasGestureLocked ||
                 studyHubMenuFocusEngaged ||
-                lassoDragActive ||
-                studioCentrePanSuppressed ||
-                expandedMinimapOpen,
+                lassoDragActive,
               excluded: panExcluded,
             }}
             pinch={{
               disabled:
                 isPenDown ||
-                studyHubMenuFocusActive ||
-                overviewEngaged,
+                studyHubMenuFocusActive,
               excluded: panExcluded,
             }}
             velocityAnimation={{
@@ -926,11 +813,7 @@ function App() {
               }}
             >
               <div
-                className={
-                  overviewHyperActive
-                    ? 'cutline-canvas-bg cutline-canvas-plate-shell'
-                    : 'cutline-canvas-bg cutline-canvas-expanded'
-                }
+                className="cutline-canvas-bg cutline-canvas-expanded"
                 style={{
                   width: activeLayoutWidth,
                   height: activeLayoutHeight,
@@ -940,36 +823,24 @@ function App() {
                   pointerEvents: canvasSwapBusy ? 'none' : undefined,
                 }}
               >
-                {!drawTargetPlateLocal && !overviewEngaged && (
-                  <div
-                    className="cutline-canvas-logical"
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      width: CANVAS_WIDTH,
-                      height: CANVAS_HEIGHT,
-                    }}
-                  >
-                    <div className="cutline-canvas-void-grid" aria-hidden />
-                    <SelectionBlurCanvasBackdrop />
-                  </div>
-                )}
+                <div
+                  className="cutline-canvas-logical"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: CANVAS_WIDTH,
+                    height: CANVAS_HEIGHT,
+                  }}
+                >
+                  <div className="cutline-canvas-void-grid" aria-hidden />
+                  <SelectionBlurCanvasBackdrop />
+                </div>
                 <div
                   ref={(node) => {
                     canvasRef.current = node
                     setCanvasMount(node)
                   }}
                   className="cutline-draw-target cutline-draw-target--positioned draw-target"
-                  style={
-                    drawTargetPlateLocal
-                      ? {
-                          left: 0,
-                          top: 0,
-                          width: canvasDomWidth(),
-                          height: canvasDomHeight(),
-                        }
-                      : undefined
-                  }
                   data-strokes-bleed={strokeBleed ? '' : undefined}
                   onPointerDown={canvasSelectionPointer.onPointerDown}
                   onPointerMove={canvasSelectionPointer.onPointerMove}
@@ -978,16 +849,9 @@ function App() {
                   onContextMenu={canvasContextMenuPointer.onContextMenu}
                   onDoubleClick={canvasContextMenuPointer.onDoubleClick}
                 >
-                  <StudioCentreDragHandle transformRef={transformRef} />
-                  <StudioCentreTitle />
-                  <div
-                    className="cutline-studio-centre-surface"
-                    onPointerDown={studioCentreHoldDrag.onSurfacePointerDown}
-                  >
+                  <div className="cutline-studio-centre-surface">
                     <div className="studio-centre-content-inner">
-                      {!drawTargetPlateLocal && (
-                        <CanvasPlateBoundsOverlay destination="studio" />
-                      )}
+                      <CanvasPlateBoundsOverlay destination="studio" />
                       {pocketCanvasLayers}
                     </div>
                   </div>
@@ -1009,12 +873,6 @@ function App() {
         />
       )}
 
-      {!isInsideSpace && (
-        <CanvasNavigationMinimap
-          transformRef={transformRef}
-          viewportRef={viewportRef}
-        />
-      )}
       <ActionToast />
 
       <TauriWindowDragRegion />

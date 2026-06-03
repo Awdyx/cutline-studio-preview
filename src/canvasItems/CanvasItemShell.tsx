@@ -4,7 +4,6 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { readActiveCanvasLogicalWidth, readActiveCanvasLogicalHeight } from '../spaces/activeCanvasLayout'
-import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
 import { isItemFrozen } from '../canvasLock/layer'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import {
@@ -288,17 +287,9 @@ export default function CanvasItemShell({
       ),
     [item.x, item.y, item.width, item.height, handleHitSize],
   )
-  const overviewLayoutSuspended = useCanvasOverviewStore(
-    (s) =>
-      s.engaged ||
-      s.transitioning ||
-      s.layoutHandoff != null ||
-      s.exitSettling,
-  )
   const studyHubLayout =
     isStudyHub &&
     isResizing &&
-    !overviewLayoutSuspended &&
     !isDragging &&
     !snapBack &&
     !isLassoDragPreview
@@ -307,14 +298,12 @@ export default function CanvasItemShell({
   const textLayout =
     item.type === 'text' &&
     (isResizing || isDragging) &&
-    !overviewLayoutSuspended &&
     !isLassoDragPreview
       ? (true as const)
       : false
   const shrinkSpring = { type: 'spring' as const, stiffness: 320, damping: 28, mass: 0.6 }
   const shellTransition =
     suppressEmbeddedLift ||
-    overviewLayoutSuspended ||
     ((isResizing || snapBack || studyHubAspectSnapAnimating) && isStudyHub)
       ? { duration: 0 }
       : item.type === 'text'

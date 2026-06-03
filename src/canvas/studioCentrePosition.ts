@@ -6,7 +6,7 @@ import {
   CANVAS_ORIGINAL_WIDTH,
   CANVAS_WIDTH,
 } from '../drawing/canvasDimensions'
-import type { CanvasMinimapRect } from './canvasMinimapGeometry'
+import type { CanvasPlateRect } from './studioCentreRect'
 
 export type StudioCentrePosition = {
   x: number
@@ -54,7 +54,7 @@ export function clampStudioCentrePosition(x: number, y: number): StudioCentrePos
   }
 }
 
-export function studioCentreRectAt(x: number, y: number): CanvasMinimapRect {
+export function studioCentreRectAt(x: number, y: number): CanvasPlateRect {
   return {
     x,
     y,

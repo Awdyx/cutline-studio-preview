@@ -1,7 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { readCameraFromRef, writeCameraTransform } from './canvasCamera'
-import { isOverviewHyperPanActive } from './canvasVirtualPan'
 import { isTouchFirstDevice } from '../platform/compositor'
 import { usePanMotionStore } from '../panMotionStore'
 import { holdMeshPauseSync } from './useCanvasMeshPause'
@@ -188,10 +187,8 @@ export function useCanvasGestureCompositor(
     }
 
     const syncPanningAttr = () => {
-      const overviewHyperPan = isOverviewHyperPanActive()
-
       if (isCanvasGesturing()) {
-        if (!overviewHyperPan && !meshPauseReleaseRef.current) {
+        if (!meshPauseReleaseRef.current) {
           meshPauseReleaseRef.current = holdMeshPauseSync()
         }
         if (panningClearRef.current != null) {
@@ -210,9 +207,7 @@ export function useCanvasGestureCompositor(
 
       if (!root.hasAttribute('data-canvas-panning')) return
 
-      if (!overviewHyperPan) {
-        scheduleCanvasTransformLayerFlush(canvasRef.current, transformRef.current)
-      }
+      scheduleCanvasTransformLayerFlush(canvasRef.current, transformRef.current)
       schedulePanningAttrClear()
       scheduleStuckPanningAttrClear()
     }

@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { idleAfterFirstPaint, isTouchFirstDevice } from '../platform/compositor'
-import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { backgroundMusic } from '../sound/backgroundMusic'
@@ -85,10 +84,6 @@ export function useBackgroundMusic() {
     const unsubStudyFocus = useCanvasItemsStore.subscribe(() => {
       syncBackgroundMusicAcoustics()
     })
-    const unsubOverview = useCanvasOverviewStore.subscribe(() => {
-      syncBackgroundMusicAcoustics()
-    })
-
     return () => {
       unsubHydrated?.()
       void idlePreload
@@ -97,7 +92,6 @@ export function useBackgroundMusic() {
       unsubSound()
       unsubWorkspace()
       unsubStudyFocus()
-      unsubOverview()
     }
   }, [])
 }

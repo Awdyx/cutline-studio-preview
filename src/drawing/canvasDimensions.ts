@@ -15,22 +15,13 @@ export function canvasVirtualHeight(): number {
   return CANVAS_VIRTUAL_HEIGHT
 }
 
-/** DOM transform content on the main canvas — studio plate only (overview hyper mode). */
-export function canvasDomWidth(): number {
-  return CANVAS_ORIGINAL_WIDTH
+/** Pan/zoom transform content size on the main canvas. */
+export function canvasLayoutWidth(): number {
+  return CANVAS_VIRTUAL_WIDTH
 }
 
-export function canvasDomHeight(): number {
-  return CANVAS_ORIGINAL_HEIGHT
-}
-
-/** Pan/zoom transform content size — full void normally, studio plate in overview hyper mode. */
-export function canvasLayoutWidth(hyperOptimized = false): number {
-  return hyperOptimized ? canvasDomWidth() : CANVAS_VIRTUAL_WIDTH
-}
-
-export function canvasLayoutHeight(hyperOptimized = false): number {
-  return hyperOptimized ? canvasDomHeight() : CANVAS_VIRTUAL_HEIGHT
+export function canvasLayoutHeight(): number {
+  return CANVAS_VIRTUAL_HEIGHT
 }
 
 export const CANVAS_ASPECT = CANVAS_VIRTUAL_WIDTH / CANVAS_VIRTUAL_HEIGHT
@@ -66,11 +57,8 @@ export const STUDIO_STROKE_BLEED_PAD = Math.round(6000 * 0.75)
 /** Default / reset zoom — comfortable working distance on the studio centre. */
 const CANVAS_WORK_COVER_FACTOR = 2.25
 
-/** Pinch/wheel zoom-out floor — former overview scale (edge-to-edge studio cover). */
+/** Pinch/wheel zoom-out floor — edge-to-edge studio cover. */
 const CANVAS_HARD_MIN_COVER_FACTOR = 1.0
-
-/** Canvas overview / map — zoomed out past the pinch floor. */
-const CANVAS_OVERVIEW_COVER_FACTOR = 0.5
 
 export const CANVAS_MAX_SCALE = 2
 
@@ -97,18 +85,10 @@ export function getCanvasMinScale(
   return studioCoverScale(viewportWidth, viewportHeight) * CANVAS_WORK_COVER_FACTOR
 }
 
-/** Furthest pinch/wheel zoom-out before overview. */
+/** Furthest pinch/wheel zoom-out. */
 export function getCanvasHardMinScale(
   viewportWidth = window.innerWidth,
   viewportHeight = window.innerHeight,
 ): number {
   return studioCoverScale(viewportWidth, viewportHeight) * CANVAS_HARD_MIN_COVER_FACTOR
-}
-
-/** Overview mode scale — beyond the pinch zoom-out floor. */
-export function getCanvasOverviewScale(
-  viewportWidth = window.innerWidth,
-  viewportHeight = window.innerHeight,
-): number {
-  return studioCoverScale(viewportWidth, viewportHeight) * CANVAS_OVERVIEW_COVER_FACTOR
 }

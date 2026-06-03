@@ -12,9 +12,6 @@ const STUDY_SPACE_EXIT_SEC = 0.88
 /** Main-canvas void — softer than pocket entry, still noticeable. */
 const STUDIO_ZONE_DISTANT_ENTER_SEC = 1.5
 const STUDIO_ZONE_DISTANT_EXIT_SEC = 1.5
-/** Canvas overview — slow crossfade in/out of the muffled wash. */
-const OVERVIEW_ACOUSTICS_ENTER_SEC = 2
-const OVERVIEW_ACOUSTICS_EXIT_SEC = 2
 
 /** Fade ambient music out/in around profile / picker song previews. */
 const TRACK_PREVIEW_TRANSITION_SEC = 2
@@ -22,7 +19,6 @@ const TRACK_PREVIEW_TRANSITION_SEC = 2
 export type BackgroundMusicAcousticsMode =
   | 'open'
   | 'distant'
-  | 'overview'
   | 'enclosed'
 
 const ACOUSTICS = {
@@ -37,7 +33,6 @@ const ACOUSTICS = {
     outputGain: 1,
   },
   distant: {
-    /** Softer pocket-like muffling while panning in the outer canvas void. */
     lowpassHz: 6_800,
     lowpassQ: 1.6,
     bassDb: 9.5,
@@ -46,17 +41,6 @@ const ACOUSTICS = {
     reverbDry: 0.72,
     presence: 1.12,
     outputGain: 2.25,
-  },
-  overview: {
-    /** Zoomed-out canvas map — obvious muffled hall (stronger than void/distant). */
-    lowpassHz: 1_650,
-    lowpassQ: 2.6,
-    bassDb: 16,
-    highShelfDb: -26,
-    reverbWet: 0.72,
-    reverbDry: 0.28,
-    presence: 1.35,
-    outputGain: 3.85,
   },
   inside: {
     /** Exaggerated preset — obvious A/B when entering a space canvas. */
@@ -92,8 +76,6 @@ function acousticsPresetForMode(mode: BackgroundMusicAcousticsMode): AcousticsPr
       return ACOUSTICS.inside
     case 'distant':
       return ACOUSTICS.distant
-    case 'overview':
-      return ACOUSTICS.overview
     default:
       return ACOUSTICS.outside
   }
@@ -105,8 +87,6 @@ function acousticsTransitionDuration(
 ): number {
   if (to === 'enclosed') return STUDY_SPACE_ENTER_SEC
   if (from === 'enclosed') return STUDY_SPACE_EXIT_SEC
-  if (to === 'overview') return OVERVIEW_ACOUSTICS_ENTER_SEC
-  if (from === 'overview') return OVERVIEW_ACOUSTICS_EXIT_SEC
   if (to === 'distant') return STUDIO_ZONE_DISTANT_ENTER_SEC
   if (from === 'distant') return STUDIO_ZONE_DISTANT_EXIT_SEC
   return STUDIO_ZONE_DISTANT_ENTER_SEC

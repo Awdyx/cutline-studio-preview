@@ -9,7 +9,6 @@ import {
 } from './canvasDimensions'
 import { useStudioCentrePositionStore } from '../canvas/studioCentrePositionStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
-import { isOverviewHyperPanActive } from '../canvas/canvasVirtualPan'
 import {
   pocketStripBounds,
   pocketStripCenterY,
@@ -214,8 +213,7 @@ export function clientToCanvas(
   const localX = clientX - rect.left
   const localY = clientY - rect.top
   const insideSpace = pocketStripActive()
-  const hyperPan = isOverviewHyperPanActive()
-  const { x: offsetX, y: offsetY } = insideSpace || hyperPan
+  const { x: offsetX, y: offsetY } = insideSpace
     ? { x: 0, y: 0 }
     : useStudioCentrePositionStore.getState()
   const layoutX = (localX - positionX) / scale - offsetX
@@ -269,17 +267,6 @@ export function clientToFullCanvas(
   const localY = clientY - rect.top
   const layoutX = (localX - positionX) / scale
   const layoutY = (localY - positionY) / scale
-
-  if (isOverviewHyperPanActive()) {
-    const { x: studioX, y: studioY } = useStudioCentrePositionStore.getState()
-    const x = studioX + layoutX
-    const y = studioY + layoutY
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null
-    return {
-      x: Math.min(Math.max(0, x), CANVAS_WIDTH),
-      y: Math.min(Math.max(0, y), CANVAS_HEIGHT),
-    }
-  }
 
   const { x, y } = layoutToLogicalMainCanvas(layoutX, layoutY)
 

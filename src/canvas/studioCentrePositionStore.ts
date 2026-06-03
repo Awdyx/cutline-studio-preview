@@ -2,7 +2,6 @@ import type { RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { create } from 'zustand'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
-import { compensateCameraForStudioMove } from './canvasCamera'
 import {
   clampStudioCentrePosition,
   defaultStudioCentrePosition,
@@ -10,7 +9,6 @@ import {
   syncStudioCentreLayoutVars,
   type StudioCentrePosition,
 } from './studioCentrePosition'
-import { registerOverviewHyperTransformRef } from './canvasVirtualPan'
 
 interface StudioCentrePositionState extends StudioCentrePosition {
   setPosition: (x: number, y: number, opts?: { persist?: boolean }) => void
@@ -19,14 +17,10 @@ interface StudioCentrePositionState extends StudioCentrePosition {
   hydrate: (pos: StudioCentrePosition | null | undefined) => void
 }
 
-let transformRefForStudioCompensation: RefObject<ReactZoomPanPinchContentRef | null> | null =
-  null
-
 export function registerStudioCentreTransformRef(
-  ref: RefObject<ReactZoomPanPinchContentRef | null> | null,
+  _ref: RefObject<ReactZoomPanPinchContentRef | null> | null,
 ): void {
-  transformRefForStudioCompensation = ref
-  registerOverviewHyperTransformRef(ref)
+  // Reserved for future camera compensation when the studio centre moves.
 }
 
 export const useStudioCentrePositionStore = create<StudioCentrePositionState>(
@@ -34,16 +28,8 @@ export const useStudioCentrePositionStore = create<StudioCentrePositionState>(
     ...defaultStudioCentrePosition(),
 
     setVisualPosition: (x, y) => {
-      const prev = get()
       const clamped = clampStudioCentrePosition(x, y)
       syncStudioCentreLayoutVars(clamped.x, clamped.y)
-      compensateCameraForStudioMove(
-        transformRefForStudioCompensation?.current ?? null,
-        prev.x,
-        prev.y,
-        clamped.x,
-        clamped.y,
-      )
     },
 
     setPosition: (x, y, opts) => {
@@ -53,13 +39,6 @@ export const useStudioCentrePositionStore = create<StudioCentrePositionState>(
         syncStudioCentreCssVars(clamped.x, clamped.y)
         return
       }
-      compensateCameraForStudioMove(
-        transformRefForStudioCompensation?.current ?? null,
-        prev.x,
-        prev.y,
-        clamped.x,
-        clamped.y,
-      )
       set(clamped)
       syncStudioCentreCssVars(clamped.x, clamped.y)
       if (opts?.persist !== false) {

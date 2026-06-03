@@ -9,17 +9,14 @@ import {
   canvasLayoutWidth,
   getCanvasMinScale,
   getCanvasHardMinScale,
-  getCanvasOverviewScale,
 } from '../drawing/canvasDimensions'
 import type { SpaceCamera } from '../spaces/types'
-import { useCanvasOverviewStore } from './canvasOverviewStore'
 import { logicalMainCanvasPlateToLayoutRect } from '../drawing/canvasCoords'
 import { canvasItemTransformRect } from '../spaces/spaceCardRect'
 import { studyHubDimensionsForWidth, studyHubSpawnDimensions } from '../canvasItems/studyHubBounds'
 import { studyHubOutsideControlsOverflowPx } from '../canvasItems/StudyHubMenuOutsideControls'
 import { STUDY_HUB_ASPECT } from '../canvasItems/types'
 import {
-  isOverviewHyperPanActive,
   libraryCameraFromVirtual,
   virtualCameraFromLibrary,
   virtualPanContentSize,
@@ -549,7 +546,6 @@ function wrapperSize(ref: ReactZoomPanPinchContentRef): {
 
 /** Recalculate pan bounds from the library using the live wrapper DOM size. */
 export function syncLibraryBounds(ref: ReactZoomPanPinchContentRef): void {
-  if (isOverviewHyperPanActive()) return
   ref.instance.update(ref.instance.props)
 }
 
@@ -677,12 +673,9 @@ type PanBounds = {
 
 /** Transform content size in native layout pixels. */
 function activeTransformLayoutSize(): { width: number; height: number } {
-  if (isOverviewHyperPanActive()) {
-    return virtualPanContentSize()
-  }
   return {
-    width: canvasLayoutWidth(false),
-    height: canvasLayoutHeight(false),
+    width: canvasLayoutWidth(),
+    height: canvasLayoutHeight(),
   }
 }
 
@@ -925,28 +918,6 @@ export function settleCanvasBounds(ref: ReactZoomPanPinchContentRef | null): voi
   if (!ref) return
   syncLibraryBounds(ref)
   clampToLibraryBounds(ref)
-}
-
-/** Keep the on-screen view fixed while the studio plate moves in virtual space. */
-export function compensateCameraForStudioMove(
-  ref: ReactZoomPanPinchContentRef | null,
-  prevX: number,
-  prevY: number,
-  nextX: number,
-  nextY: number,
-): void {
-  if (!ref || !isOverviewHyperPanActive()) return
-
-  const scale = ref.state.scale
-  if (!Number.isFinite(scale) || scale <= 0) return
-
-  const dx = (nextX - prevX) * scale
-  const dy = (nextY - prevY) * scale
-  if (dx === 0 && dy === 0) return
-
-  const { positionX, positionY } = ref.state
-  writeLibraryCameraTransform(ref, positionX + dx, positionY + dy, scale, 0)
-  syncLibraryBounds(ref)
 }
 
 /** Read the camera from transform state (virtual void coords on main canvas). */
@@ -1265,11 +1236,6 @@ export function refitCameraAfterResize(
   if (!ref) return null
   const size = wrapperSize(ref)
   if (!size) return null
-
-  if (useCanvasOverviewStore.getState().engaged) {
-    settleCanvasBounds(ref)
-    return getCanvasOverviewScale(size.width, size.height)
-  }
 
   enforceCoverFit(ref)
   return getCanvasMinScale(size.width, size.height)

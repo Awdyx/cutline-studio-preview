@@ -7,7 +7,6 @@ import { playSound } from '../sound/playSound'
 import { isStudyHubMenuFocusActive } from '../canvasItems/studyHubMenuFocus'
 import { isPointerOnCanvasItem } from './canvasSelectionDismiss'
 import { useCanvasContextMenuStore } from './canvasContextMenuStore'
-import { useCanvasOverviewStore } from './canvasOverviewStore'
 
 /** Dimmed backdrop / portal void — not the focused hub panel or scratch pad. */
 function isStudyHubFocusQuickMenuSurface(target: EventTarget | null): boolean {
@@ -28,7 +27,6 @@ export function useCanvasContextMenuPointer(
 ) {
   const tryOpenMenu = useCallback(
     (clientX: number, clientY: number, target: EventTarget | null) => {
-      if (useCanvasOverviewStore.getState().engaged) return
       if (!canvasEditingAllowed()) return
       if (isPointerOnCanvasItem(target)) return
       if (target instanceof Element && target.closest('[data-canvas-context-menu]')) {

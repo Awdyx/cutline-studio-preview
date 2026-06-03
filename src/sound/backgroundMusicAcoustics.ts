@@ -1,6 +1,5 @@
 import { isStudyHubMenuFocusActive } from '../canvasItems/studyHubMenuFocus'
 import { isPointInAnyCanvasPlateAcousticsZone } from '../canvas/canvasPlate'
-import { useCanvasOverviewStore } from '../canvas/canvasOverviewStore'
 import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import {
   backgroundMusic,
@@ -68,29 +67,13 @@ function sampleViewportAcousticsZone(
   }
 }
 
-/** Overview muffling stays on for the zoomed-out map; drops when exit zoom begins. */
-export function isCanvasOverviewMusicAcousticsActive(): boolean {
-  const { engaged } = useCanvasOverviewStore.getState()
-  if (!engaged) return false
-  return !document.documentElement.hasAttribute('data-canvas-overview-exiting')
-}
-
 /** Main canvas — wait for a viewport sample before assuming open acoustics. */
 function shouldDeferMainCanvasAcousticsSync(): boolean {
   const workspace = useCanvasWorkspaceStore.getState()
   if (workspace.canvasSwapMode != null) return false
   if (workspace.isInsideSpace()) return false
   if (isStudyHubMenuFocusActive()) return false
-  if (isCanvasOverviewMusicAcousticsActive()) return false
-  // Leaving overview: engaged can stay true during exit zoom — still sync ramp-off.
-  const overview = useCanvasOverviewStore.getState()
-  if (overview.engaged) return false
-  if (document.documentElement.hasAttribute('data-canvas-overview-exiting')) {
-    return false
-  }
-  if (backgroundMusic.getAcousticsMode() === 'overview') return false
   if (lastViewportInAcousticsZone !== null) return false
-  // Study-hub focus exit can leave enclosed while viewport sampling is still deferred.
   return !(
     backgroundMusic.getAcousticsMode() === 'enclosed' &&
     !workspace.isInsideSpace() &&
@@ -98,7 +81,7 @@ function shouldDeferMainCanvasAcousticsSync(): boolean {
   )
 }
 
-/** Resolve ambient music acoustics from workspace, overview, and viewport position. */
+/** Resolve ambient music acoustics from workspace and viewport position. */
 export function resolveBackgroundMusicAcousticsMode(
   opts?: BackgroundMusicAcousticsSyncOptions,
 ): BackgroundMusicAcousticsMode {
@@ -117,8 +100,6 @@ export function resolveBackgroundMusicAcousticsMode(
   if (workspace.canvasSwapMode === 'enter') return 'enclosed'
   if (workspace.canvasSwapMode === 'exit') return 'open'
   if (workspace.isInsideSpace() || isStudyHubMenuFocusActive()) return 'enclosed'
-
-  if (isCanvasOverviewMusicAcousticsActive()) return 'overview'
 
   if (lastViewportInAcousticsZone === false) return 'distant'
 

@@ -42,18 +42,21 @@ export function resolveStudyHubOutsideControlsPlacement({
   containerLeft,
   containerWidth,
   hubWidth,
+  metricsHubWidth = hubWidth,
   scratchPadOpen,
   viewportTick: _viewportTick = 0,
 }: {
   containerLeft: number
   containerWidth: number
   hubWidth: number
+  /** Hub width for button sizing — keep stable while split-resizing the draw pad. */
+  metricsHubWidth?: number
   scratchPadOpen: boolean
   /** Bumped on resize so placement re-clamps to the viewport. */
   viewportTick?: number
 }): { right: number; top: number } {
   void _viewportTick
-  const metrics = studyHubOutsideButtonMetrics(hubWidth)
+  const metrics = studyHubOutsideButtonMetrics(metricsHubWidth)
   if (scratchPadOpen) {
     return { right: metrics.gap, top: metrics.gap }
   }

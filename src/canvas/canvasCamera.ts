@@ -46,6 +46,8 @@ export type FocusItemOptions = {
   bypassMinScale?: boolean
   /** Allow pan past canvas edges so edge items can center (study-hub menu focus). */
   bypassPanBounds?: boolean
+  /** Fit using menu-focus inset avail + centering (portrait button gutter). */
+  studyHubMenuFocusFit?: boolean
   /** Rect is a main-canvas plate in logical 15k space (not a studio-local item). */
   mainCanvasPlate?: boolean
   /** Per animation frame — screen-space pan delta (px), for motion/sfx hooks. */
@@ -190,6 +192,7 @@ export function studyHubMenuFocusFitOptions(): FocusItemOptions {
   return {
     fit: true,
     curved: true,
+    studyHubMenuFocusFit: true,
     bypassMaxScale: true,
     bypassMinScale: true,
     bypassPanBounds: true,
@@ -211,22 +214,61 @@ function studyHubMenuFocusHorizontalPadding(): {
   return { paddingLeft: padding, paddingRightBase: padding }
 }
 
-/** Avail width/height for menu-focus layout — reserves space for outside X / pen controls. */
+/** Portrait menu-focus: leave room for outside X / pen without shifting landscape centering. */
+function studyHubMenuFocusPortraitAvailW(availW: number, availH: number): number {
+  const hubW = studyHubMenuFocusHubWidthForAvail(availW, availH)
+  return Math.max(1, availW - studyHubOutsideControlsOverflowPx(hubW))
+}
+
+/** Inset size for menu-focus layout and zoom (landscape uses full width; portrait trims right). */
+export function studyHubMenuFocusInsetAvail(
+  viewportW: number,
+  viewportH: number,
+  paddingTop: number,
+  paddingBottom: number,
+): { availW: number; availH: number } {
+  const { availW, availH } = studyHubMenuFocusSplitInsetAvail(
+    viewportW,
+    viewportH,
+    paddingTop,
+    paddingBottom,
+  )
+  if (!isStudyHubMenuFocusPortrait(viewportW, viewportH)) {
+    return { availW, availH }
+  }
+  return {
+    availW: studyHubMenuFocusPortraitAvailW(availW, availH),
+    availH,
+  }
+}
+
+/** Full horizontal avail for hub + scratch split (outside controls sit on the pad). */
+export function studyHubMenuFocusSplitInsetAvail(
+  viewportW: number,
+  viewportH: number,
+  paddingTop: number,
+  paddingBottom: number,
+): { availW: number; availH: number } {
+  const { paddingLeft, paddingRightBase } = studyHubMenuFocusHorizontalPadding()
+  return {
+    availW: Math.max(1, viewportW - paddingLeft - paddingRightBase),
+    availH: Math.max(1, viewportH - paddingTop - paddingBottom),
+  }
+}
+
 function studyHubMenuFocusAvailSize(
   viewportW: number,
   viewportH: number,
   paddingTop: number,
   paddingBottom: number,
 ): { availW: number; availH: number; hubWidth: number } {
-  const { paddingLeft, paddingRightBase } = studyHubMenuFocusHorizontalPadding()
-  let availW = Math.max(1, viewportW - paddingLeft - paddingRightBase)
-  const availH = Math.max(1, viewportH - paddingTop - paddingBottom)
-
-  let hubWidth = studyHubMenuFocusHubWidthForAvail(availW, availH)
-  const controlsReserve = studyHubOutsideControlsOverflowPx(hubWidth)
-  availW = Math.max(1, viewportW - paddingLeft - paddingRightBase - controlsReserve)
-  hubWidth = studyHubMenuFocusHubWidthForAvail(availW, availH)
-
+  const { availW, availH } = studyHubMenuFocusInsetAvail(
+    viewportW,
+    viewportH,
+    paddingTop,
+    paddingBottom,
+  )
+  const hubWidth = studyHubMenuFocusHubWidthForAvail(availW, availH)
   return { availW, availH, hubWidth }
 }
 
@@ -281,6 +323,14 @@ export function studyHubMenuFocusScreenRect(
   const top = wrapperBounds.top + paddingTop + (availH - height) / 2
 
   return new DOMRect(left, top, width, height)
+}
+
+/** True when menu-focus layout should reserve space for outside controls (portrait). */
+export function isStudyHubMenuFocusPortrait(
+  viewportW: number,
+  viewportH: number,
+): boolean {
+  return viewportH > viewportW
 }
 
 /** Base selection blur — keep in sync with `.ui-selection-depth` in index.css. */
@@ -349,20 +399,42 @@ export function computeCameraToFitItem(
     | 'bypassMaxScale'
     | 'bypassMinScale'
     | 'bypassPanBounds'
+    | 'studyHubMenuFocusFit'
   >,
 ): SpaceCamera | null {
   const size = wrapperSize(ref)
   if (!size) return null
 
   const padding = defaultFitPadding()
-  const paddingX = options?.fitPaddingX ?? padding.paddingX
   const paddingTop = options?.fitPaddingTop ?? padding.paddingTop
   const paddingBottom = options?.fitPaddingBottom ?? padding.paddingBottom
   const screenOffsetY = options?.screenOffsetY ?? 0
 
-  const availW = Math.max(1, size.width - paddingX * 2)
-  const availH = Math.max(1, size.height - paddingTop - paddingBottom)
-  const fitScale = Math.min(availW / item.width, availH / item.height)
+  let availW: number
+  let availH: number
+  let viewCenterX: number
+  let fitScale: number
+
+  if (options?.studyHubMenuFocusFit) {
+    const { paddingLeft } = studyHubMenuFocusHorizontalPadding()
+    const inset = studyHubMenuFocusInsetAvail(
+      size.width,
+      size.height,
+      paddingTop,
+      paddingBottom,
+    )
+    availW = inset.availW
+    availH = inset.availH
+    const hubWidth = studyHubMenuFocusHubWidthForAvail(availW, availH)
+    fitScale = hubWidth / item.width
+    viewCenterX = paddingLeft + availW / 2
+  } else {
+    const paddingX = options?.fitPaddingX ?? padding.paddingX
+    availW = Math.max(1, size.width - paddingX * 2)
+    availH = Math.max(1, size.height - paddingTop - paddingBottom)
+    fitScale = Math.min(availW / item.width, availH / item.height)
+    viewCenterX = paddingX + availW / 2
+  }
 
   const minScale = getCanvasMinScale(size.width, size.height)
   const hardMax = options?.bypassMaxScale
@@ -374,7 +446,6 @@ export function computeCameraToFitItem(
       ? Math.min(hardMax, fitScale)
       : Math.min(hardMax, Math.max(minScale, fitScale))
 
-  const viewCenterX = paddingX + availW / 2
   const viewCenterY = paddingTop + availH / 2 + screenOffsetY
   const cx = item.x + item.width / 2
   const cy = item.y + item.height / 2

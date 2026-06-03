@@ -5,6 +5,10 @@ import {
   dismissStudyHubMenuFocus,
   isStudyHubMenuFocusActive,
 } from '../canvasItems/studyHubMenuFocus'
+import {
+  studyHubScratchPadUndoScope,
+  useStudyHubScratchPadStore,
+} from '../canvasItems/studyHubScratchPadStore'
 import { useCanvasLockStore } from '../canvasLock/canvasLockStore'
 import { useToolStore, type ToolMode } from '../drawing/toolStore'
 import { useStrokesStore } from '../drawing/strokesStore'
@@ -204,12 +208,26 @@ export function useKeyboardShortcuts(
       // ── Undo / Redo ───────────────────────────────────────────────────────
       if (matchesShortcut(e, 'redo')) {
         e.preventDefault()
+        if (
+          studyHubScratchPadUndoScope() &&
+          useStudyHubScratchPadStore.getState().redo()
+        ) {
+          fireToast('redo')
+          return
+        }
         if (redo()) fireToast('redo')
         return
       }
 
       if (matchesShortcut(e, 'undo')) {
         e.preventDefault()
+        if (
+          studyHubScratchPadUndoScope() &&
+          useStudyHubScratchPadStore.getState().undo()
+        ) {
+          fireToast('undo')
+          return
+        }
         if (useLassoStore.getState().undoClearSelection()) return
         if (undo()) fireToast('undo')
         return

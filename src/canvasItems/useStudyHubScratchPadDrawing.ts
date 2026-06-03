@@ -27,7 +27,15 @@ import { useToolStore } from '../drawing/toolStore'
 import type { DrawTool, Stroke, StrokePoint } from '../drawing/types'
 import { useThemeStore } from '../theme/themeStore'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
+import {
+  isPointerOverScratchPadContent,
+  scratchPadContentPoint,
+} from './scratchPadContentPoint'
 import { STUDY_HUB_SCRATCH_PAD_TRANSITION_MS } from './studyHubMenuFocusLayout'
+import { useStudyHubScratchPadStore } from './studyHubScratchPadStore'
+
+const SCRATCH_PAD_SCROLL_LOCK_ATTR = 'data-scratch-pad-scroll-locked'
+const SCRATCH_PAD_DRAWING_ATTR = 'data-scratch-pad-drawing'
 
 type StrokeConfig = {
   color: string
@@ -85,53 +93,32 @@ function isStylusDrawPointer(event: PointerEvent): boolean {
   return event.pointerType === 'pen' || isPenInput(event)
 }
 
-function localPointFromClient(
-  clientX: number,
-  clientY: number,
-  pad: HTMLElement,
-): StrokePoint | null {
-  const rect = pad.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return null
-  const x = clientX - rect.left
-  const y = clientY - rect.top
-  if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
-  return { x, y, pressure: 0.5 }
-}
-
-function localPoint(
-  event: PointerEvent,
-  pad: HTMLElement,
-): StrokePoint | null {
-  const rect = pad.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return null
-  const x = event.clientX - rect.left
-  const y = event.clientY - rect.top
-  if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
-  return { x, y, pressure: readPressure(event.pressure) }
-}
-
-function isPointerOverPad(
-  clientX: number,
-  clientY: number,
-  pad: HTMLElement,
-): boolean {
-  return localPointFromClient(clientX, clientY, pad) != null
-}
-
-function screenPolyToPadLocal(screenPoly: Pt[], pad: HTMLElement): Pt[] {
-  const rect = pad.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return []
+function screenPolyToPadLocal(
+  screenPoly: Pt[],
+  scrollEl: HTMLElement,
+  contentEl: HTMLElement,
+): Pt[] {
+  const viewRect = scrollEl.getBoundingClientRect()
+  if (viewRect.width <= 0 || viewRect.height <= 0) return []
+  const scrollTop = scrollEl.scrollTop
   return screenPoly.map((p) => ({
-    x: p.x - rect.left,
-    y: p.y - rect.top,
+    x: p.x - viewRect.left,
+    y: p.y - viewRect.top + scrollTop,
   }))
 }
 
 export function useStudyHubScratchPadDrawing(
   padRef: RefObject<HTMLElement | null>,
+  scrollRef: RefObject<HTMLElement | null>,
   active: boolean,
 ) {
-  const [strokes, setStrokes] = useState<Stroke[]>([])
+  const strokes = useStudyHubScratchPadStore((s) => s.strokes)
+  const appendStroke = useStudyHubScratchPadStore((s) => s.appendStroke)
+  const eraseStrokesAt = useStudyHubScratchPadStore((s) => s.eraseStrokesAt)
+  const deleteStrokes = useStudyHubScratchPadStore((s) => s.deleteStrokes)
+  const beginEraseSession = useStudyHubScratchPadStore((s) => s.beginEraseSession)
+  const endEraseSession = useStudyHubScratchPadStore((s) => s.endEraseSession)
+  const resetStrokes = useStudyHubScratchPadStore((s) => s.resetStrokes)
   const [activeStroke, setActiveStroke] = useState<Stroke | null>(null)
   const [lassoDrawingPoints, setLassoDrawingPoints] = useState<Pt[]>([])
   const activeStrokeRef = useRef<Stroke | null>(null)
@@ -161,7 +148,7 @@ export function useStudyHubScratchPadDrawing(
   useEffect(() => {
     if (active) return
     const timer = window.setTimeout(() => {
-      setStrokes([])
+      resetStrokes()
       setActiveStroke(null)
       activeStrokeRef.current = null
       setLassoDrawingPoints([])
@@ -170,14 +157,25 @@ export function useStudyHubScratchPadDrawing(
       eraseActiveRef.current = false
     }, STUDY_HUB_SCRATCH_PAD_TRANSITION_MS)
     return () => window.clearTimeout(timer)
-  }, [active])
+  }, [active, resetStrokes])
 
   useEffect(() => {
     const pad = padRef.current
-    if (!pad || !active) return
+    const scrollEl = scrollRef.current
+    if (!pad || !scrollEl || !active) return
 
     function penMenu() {
       return penToolMenuBridgeRef.current
+    }
+
+    function setScratchPadDrawingSession(active: boolean) {
+      if (active) {
+        scrollEl.setAttribute(SCRATCH_PAD_SCROLL_LOCK_ATTR, '')
+      } else {
+        scrollEl.removeAttribute(SCRATCH_PAD_SCROLL_LOCK_ATTR)
+      }
+      if (active) pad.setAttribute(SCRATCH_PAD_DRAWING_ATTR, '')
+      else pad.removeAttribute(SCRATCH_PAD_DRAWING_ATTR)
     }
 
     function cancelActiveStroke() {
@@ -188,6 +186,7 @@ export function useStudyHubScratchPadDrawing(
       lassoPointsRef.current = []
       setLassoDrawingPoints([])
       setActiveStroke(null)
+      setScratchPadDrawingSession(false)
     }
 
     function finishStroke() {
@@ -206,7 +205,7 @@ export function useStudyHubScratchPadDrawing(
       points = ensureMinimumStrokePoints(points, 3)
       const trimmed = { ...current, points }
       const path = strokeToSvgPath(trimmed, true)
-      setStrokes((prev) => [...prev, { ...trimmed, path }])
+      appendStroke({ ...trimmed, path })
     }
 
     function eraseAtPadPoint(x: number, y: number) {
@@ -217,12 +216,7 @@ export function useStudyHubScratchPadDrawing(
       if (now - lastEraseAtRef.current < ERASE_THROTTLE_MS) return
       lastEraseAtRef.current = now
 
-      setStrokes((prev) => {
-        const next = prev.filter(
-          (stroke) => !hitTestStroke(stroke, x, y, ERASE_HIT_RADIUS),
-        )
-        return next.length === prev.length ? prev : next
-      })
+      eraseStrokesAt((stroke) => hitTestStroke(stroke, x, y, ERASE_HIT_RADIUS))
     }
 
     function startScratchLasso(clientX: number, clientY: number) {
@@ -252,24 +246,26 @@ export function useStudyHubScratchPadDrawing(
 
       if (points.length < 3) return
 
-      const poly = screenPolyToPadLocal(points, pad)
+      const poly = screenPolyToPadLocal(points, scrollEl, pad)
       if (poly.length < 3) return
 
-      setStrokes((prev) =>
-        prev.filter((stroke) => !strokeIntersectsPolygon(stroke, poly)),
-      )
+      deleteStrokes((stroke) => strokeIntersectsPolygon(stroke, poly))
     }
 
     function endPointerSession() {
       if (lassoDrawingRef.current) {
         commitScratchLasso()
+        setScratchPadDrawingSession(false)
         return
       }
       if (eraseActiveRef.current) {
         eraseActiveRef.current = false
+        endEraseSession()
+        setScratchPadDrawingSession(false)
         return
       }
       finishStroke()
+      setScratchPadDrawingSession(false)
     }
 
     function beginPadToolAt(
@@ -277,20 +273,26 @@ export function useStudyHubScratchPadDrawing(
       clientX: number,
       clientY: number,
     ) {
+      setScratchPadDrawingSession(true)
       if (mode === 'lasso') {
         startScratchLasso(clientX, clientY)
         return
       }
       if (mode === 'erase') {
+        beginEraseSession()
         eraseActiveRef.current = true
         lastEraseAtRef.current = 0
-        const point = localPointFromClient(clientX, clientY, pad)
+        const point = scratchPadContentPoint(clientX, clientY, scrollEl, pad)
         if (point) eraseAtPadPoint(point.x, point.y)
         return
       }
       const config = strokeConfig()
-      const point = localPointFromClient(clientX, clientY, pad)
-      if (config && point) beginStrokeAt(point, config)
+      const point = scratchPadContentPoint(clientX, clientY, scrollEl, pad)
+      if (config && point) {
+        beginStrokeAt(point, config)
+        return
+      }
+      setScratchPadDrawingSession(false)
     }
 
     function continuePadToolAt(
@@ -303,11 +305,11 @@ export function useStudyHubScratchPadDrawing(
         return
       }
       if (mode === 'erase' && eraseActiveRef.current) {
-        const point = localPointFromClient(clientX, clientY, pad)
+        const point = scratchPadContentPoint(clientX, clientY, scrollEl, pad)
         if (point) eraseAtPadPoint(point.x, point.y)
         return
       }
-      const point = localPointFromClient(clientX, clientY, pad)
+      const point = scratchPadContentPoint(clientX, clientY, scrollEl, pad)
       if (point) continueStrokeAt(point)
     }
 
@@ -358,9 +360,10 @@ export function useStudyHubScratchPadDrawing(
       if (!isPenDrawMode() || penMenu()?.isActive()) return
       if (!lastPointerPos.current) return
       if (
-        !isPointerOverPad(
+        !isPointerOverScratchPadContent(
           lastPointerPos.current.clientX,
           lastPointerPos.current.clientY,
+          scrollEl,
           pad,
         )
       ) {
@@ -413,6 +416,8 @@ export function useStudyHubScratchPadDrawing(
     }
 
     function onPointerDown(event: PointerEvent) {
+      const stylusDown = event.pointerType === 'pen' || isPenInput(event)
+
       if (event.pointerType === 'mouse') {
         notePointerPos(event.clientX, event.clientY)
       }
@@ -420,6 +425,7 @@ export function useStudyHubScratchPadDrawing(
       const menuOnDown = penMenu()
       if (menuOnDown?.isMenuOpen()) {
         menuOnDown.onPointerDown(event)
+        if (stylusDown && activePointerId.current == null) setScratchPadDrawingSession(false)
         return
       }
       if (shouldArmScratchPadMenuHold(event)) {
@@ -428,7 +434,10 @@ export function useStudyHubScratchPadDrawing(
         if (menuOnDown?.isMenuOpen()) return
       }
 
-      if (!canUseScratchPadTool(event)) return
+      if (!canUseScratchPadTool(event)) {
+        if (stylusDown) setScratchPadDrawingSession(false)
+        return
+      }
       if (activePointerId.current != null) return
       if (event.pointerType === 'pen' || isPenInput(event)) noteStylusInput()
 
@@ -447,8 +456,15 @@ export function useStudyHubScratchPadDrawing(
         return
       }
 
-      const point = localPoint(event, pad)
+      const point = scratchPadContentPoint(
+        event.clientX,
+        event.clientY,
+        scrollEl,
+        pad,
+        readPressure(event.pressure),
+      )
       if (mode === 'erase') {
+        beginEraseSession()
         eraseActiveRef.current = true
         lastEraseAtRef.current = 0
         if (point) eraseAtPadPoint(point.x, point.y)
@@ -456,7 +472,14 @@ export function useStudyHubScratchPadDrawing(
       }
 
       const config = strokeConfig()
-      if (!config || !point) return
+      if (!config || !point) {
+        if (pad.hasPointerCapture(event.pointerId)) {
+          pad.releasePointerCapture(event.pointerId)
+        }
+        activePointerId.current = null
+        if (stylusDown) setScratchPadDrawingSession(false)
+        return
+      }
       beginStrokeAt(point, config)
     }
 
@@ -478,7 +501,12 @@ export function useStudyHubScratchPadDrawing(
           if (mode === 'lasso' && lassoDrawingRef.current) {
             addScratchLassoPoint(event.clientX, event.clientY)
           } else if (
-            isPointerOverPad(event.clientX, event.clientY, pad) ||
+            isPointerOverScratchPadContent(
+              event.clientX,
+              event.clientY,
+              scrollEl,
+              pad,
+            ) ||
             (mode === 'lasso' && lassoDrawingRef.current)
           ) {
             continuePadToolAt(mode, event.clientX, event.clientY)
@@ -517,15 +545,25 @@ export function useStudyHubScratchPadDrawing(
       if (mode === 'erase' && eraseActiveRef.current) {
         event.preventDefault()
         event.stopPropagation()
-        const point = localPoint(event, pad)
+        const point = scratchPadContentPoint(
+          event.clientX,
+          event.clientY,
+          scrollEl,
+          pad,
+          readPressure(event.pressure),
+        )
         if (point) eraseAtPadPoint(point.x, point.y)
         return
       }
 
-      if (!isPointerOverPad(event.clientX, event.clientY, pad)) return
-
       const current = activeStrokeRef.current
-      const point = localPoint(event, pad)
+      const point = scratchPadContentPoint(
+        event.clientX,
+        event.clientY,
+        scrollEl,
+        pad,
+        readPressure(event.pressure),
+      )
       if (!current || !point) return
 
       event.preventDefault()
@@ -575,6 +613,7 @@ export function useStudyHubScratchPadDrawing(
     window.addEventListener('blur', onWindowBlur)
 
     return () => {
+      setScratchPadDrawingSession(false)
       pad.removeEventListener('pointerdown', onPointerDown, { capture: true })
       pad.removeEventListener('pointerenter', onPadPointerEnter)
       document.removeEventListener('pointermove', onDocumentPointerMove, captureOpts)
@@ -591,7 +630,7 @@ export function useStudyHubScratchPadDrawing(
         penMenu()?.cancelSpaceHold()
       }
     }
-  }, [active, padRef])
+  }, [active, padRef, scrollRef])
 
   const themeMode = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeMode)

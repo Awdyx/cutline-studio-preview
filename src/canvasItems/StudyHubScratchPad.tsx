@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { strokeToSvgPath } from '../drawing/strokePath'
 import type { Stroke } from '../drawing/types'
+import { useStudyHubScratchPadWheelScroll } from './useStudyHubScratchPadWheelScroll'
 import { studyHubBorderRadiusCss } from './studyHubSpawnScale'
+import { studyHubScratchPadContentHeight } from './studyHubScratchPadScroll'
 import {
   scratchPadStrokeFill,
   useStudyHubScratchPadDrawing,
@@ -43,11 +45,20 @@ export default function StudyHubScratchPad({
   height: number
   hubWidth: number
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
   const padRef = useRef<HTMLDivElement>(null)
-  const [padSize, setPadSize] = useState({ width: 0, height: 0 })
+  const viewportHeight = Math.max(1, height)
+  const contentHeight = studyHubScratchPadContentHeight(viewportHeight)
+  const [padWidth, setPadWidth] = useState(0)
   const { strokes, activeStroke, isDark, lassoDrawingPoints } =
-    useStudyHubScratchPadDrawing(padRef, active && padSize.width > 0)
+    useStudyHubScratchPadDrawing(
+      padRef,
+      scrollRef,
+      active && padWidth > 0,
+    )
   const borderRadius = studyHubBorderRadiusCss(hubWidth)
+
+  useStudyHubScratchPadWheelScroll(scrollRef, active)
 
   const lassoPath =
     lassoDrawingPoints.length > 1
@@ -57,14 +68,16 @@ export default function StudyHubScratchPad({
       : null
 
   useEffect(() => {
+    if (active) return
+    scrollRef.current?.scrollTo({ top: 0, left: 0 })
+  }, [active])
+
+  useEffect(() => {
     const pad = padRef.current
     if (!pad) return
 
     const sync = () => {
-      setPadSize({
-        width: pad.clientWidth,
-        height: pad.clientHeight,
-      })
+      setPadWidth(pad.clientWidth)
     }
 
     sync()
@@ -73,51 +86,62 @@ export default function StudyHubScratchPad({
     return () => observer.disconnect()
   }, [])
 
-  const viewWidth = Math.max(1, padSize.width)
-  const viewHeight = Math.max(1, padSize.height || height)
+  const viewWidth = Math.max(1, padWidth)
+  const viewHeight = Math.max(1, contentHeight)
 
   return (
     <div
-      ref={padRef}
-      className="study-hub-scratch-pad"
-      data-study-hub-scratch-pad=""
+      className="study-hub-scratch-pad-viewport"
+      data-study-hub-scratch-pad-viewport=""
       style={{
         width: '100%',
-        height,
+        height: viewportHeight,
         borderRadius,
       }}
     >
-      <svg
-        aria-hidden
-        width="100%"
-        height="100%"
-        viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-        style={{ display: 'block', touchAction: 'none' }}
+      <div
+        ref={scrollRef}
+        className="study-hub-scratch-pad"
+        data-study-hub-scratch-pad=""
+        style={{ width: '100%', height: '100%', borderRadius }}
       >
-        {strokes
-          .filter((stroke) => stroke.tool === 'pen')
-          .map((stroke) => (
-            <ScratchStrokePath
-              key={stroke.id}
-              stroke={stroke}
-              isDark={isDark}
-              complete
-            />
-          ))}
-        {strokes
-          .filter((stroke) => stroke.tool === 'highlighter')
-          .map((stroke) => (
-            <ScratchStrokePath
-              key={stroke.id}
-              stroke={stroke}
-              isDark={isDark}
-              complete
-            />
-          ))}
-        {activeStroke && (
-          <ScratchStrokePath stroke={activeStroke} isDark={isDark} complete={false} />
-        )}
-      </svg>
+        <div
+          ref={padRef}
+          className="study-hub-scratch-pad__surface"
+          style={{ width: '100%', minHeight: viewportHeight, height: contentHeight }}
+        >
+        <svg
+          aria-hidden
+          width={viewWidth}
+          height={viewHeight}
+          style={{ display: 'block', pointerEvents: 'none' }}
+        >
+          {strokes
+            .filter((stroke) => stroke.tool === 'pen')
+            .map((stroke) => (
+              <ScratchStrokePath
+                key={stroke.id}
+                stroke={stroke}
+                isDark={isDark}
+                complete
+              />
+            ))}
+          {strokes
+            .filter((stroke) => stroke.tool === 'highlighter')
+            .map((stroke) => (
+              <ScratchStrokePath
+                key={stroke.id}
+                stroke={stroke}
+                isDark={isDark}
+                complete
+              />
+            ))}
+          {activeStroke && (
+            <ScratchStrokePath stroke={activeStroke} isDark={isDark} complete={false} />
+          )}
+        </svg>
+        </div>
+      </div>
       {lassoPath && (
         <svg
           aria-hidden

@@ -1,5 +1,7 @@
-import { motion, useReducedMotion } from 'framer-motion'
+import { animate, motion, useReducedMotion } from 'framer-motion'
 import {
+  useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -7,9 +9,11 @@ import {
   type RefObject,
 } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
+import { studyHubMenuFocusScreenRect } from '../canvas/canvasCamera'
 import { studyHubBorderRadiusForWidth } from './studyHubSpawnScale'
 import StudyHubMenuOutsideControls, {
   resolveStudyHubOutsideControlsPlacement,
+  studyHubOutsideControlsOverflowPx,
 } from './StudyHubMenuOutsideControls'
 import StudyHubScratchPad from './StudyHubScratchPad'
 import StudyHubMenuFocusSplitHandle from './StudyHubMenuFocusSplitHandle'
@@ -17,10 +21,12 @@ import { useCanvasItemsStore } from './canvasItemsStore'
 import { toggleStudyHubMenuFocusScratchPad } from './studyHubMenuFocus'
 import {
   STUDY_HUB_SCRATCH_PAD_EASE,
+  STUDY_HUB_SCRATCH_PAD_GAP,
   STUDY_HUB_SCRATCH_PAD_TRANSITION_MS,
   computeStudyHubMenuFocusLayout,
-  splitShareFromScratchWidth,
+  resolveMenuFocusScratchSplitShare,
   studyHubMenuFocusSplitBounds,
+  studyHubMenuFocusSplitControlsPlacement,
 } from './studyHubMenuFocusLayout'
 import { useStudyHubMenuFocusViewportTick } from './useStudyHubMenuFocusViewportTick'
 
@@ -30,6 +36,13 @@ const frameTransition = {
 } as const
 
 const snapTransition = { duration: 0 } as const
+
+const splitOvershootSpring = {
+  type: 'spring' as const,
+  stiffness: 400,
+  damping: 30,
+  mass: 0.45,
+}
 
 export default function StudyHubMenuFocusFrame({
   hubRect,
@@ -49,9 +62,6 @@ export default function StudyHubMenuFocusFrame({
   const reduceMotion = useReducedMotion()
   const scratchPadOpen = useCanvasItemsStore((s) => s.menuFocusScratchPadOpen)
   const scratchSplitShare = useCanvasItemsStore((s) => s.menuFocusScratchSplitShare)
-  const setScratchSplitShare = useCanvasItemsStore(
-    (s) => s.setMenuFocusScratchSplitShare,
-  )
   const dismissScratchClosing = useCanvasItemsStore(
     (s) => s.menuFocusDismissScratchClosing,
   )
@@ -70,6 +80,10 @@ export default function StudyHubMenuFocusFrame({
   )
   const [scratchAnimating, setScratchAnimating] = useState(false)
   const [splitDragging, setSplitDragging] = useState(false)
+  const [splitOvershootPx, setSplitOvershootPx] = useState(0)
+  const [splitOvershootSnapping, setSplitOvershootSnapping] = useState(false)
+  const splitOvershootPxRef = useRef(0)
+  const splitOvershootAnimRef = useRef<ReturnType<typeof animate> | null>(null)
   const prevScratchOpenRef = useRef(scratchPadOpen)
   const scratchJustToggled = prevScratchOpenRef.current !== scratchPadOpen
 
@@ -99,13 +113,17 @@ export default function StudyHubMenuFocusFrame({
   const splitBounds = scratchPadOpen
     ? studyHubMenuFocusSplitBounds(layout.container.width)
     : null
-
-  const seedSplitShareFromLayout = () => {
-    if (scratchSplitShare != null || !splitBounds) return
-    setScratchSplitShare(
-      splitShareFromScratchWidth(layout.container.width, layout.scratch.width),
-    )
-  }
+  const soloFocusRect = transformRef.current
+    ? studyHubMenuFocusScreenRect(transformRef.current)
+    : null
+  const effectiveSplitShare =
+    splitBounds && soloFocusRect
+      ? resolveMenuFocusScratchSplitShare(
+          layout.container.width,
+          soloFocusRect.width,
+          scratchSplitShare,
+        )
+      : (scratchSplitShare ?? 0.5)
 
   const hubBorderRadius = studyHubBorderRadiusForWidth(layout.hub.width)
   const smoothLayout =
@@ -116,21 +134,118 @@ export default function StudyHubMenuFocusFrame({
       scratchAnimating ||
       scratchJustToggled)
   const layoutTransition = smoothLayout ? frameTransition : snapTransition
-  const { right: controlsRight, top: controlsTop } =
-    resolveStudyHubOutsideControlsPlacement({
-      containerLeft: layout.container.left,
-      containerWidth: layout.container.width,
-      hubWidth: layout.hub.width,
-      scratchPadOpen,
-      viewportTick,
+  const splitPanelTransition =
+    splitDragging || reduceMotion
+      ? snapTransition
+      : splitOvershootSnapping
+        ? splitOvershootSpring
+        : layoutTransition
+
+  const splitHubWidth = layout.hub.width - splitOvershootPx
+  const splitScratchLeft = splitHubWidth + STUDY_HUB_SCRATCH_PAD_GAP
+  const splitScratchWidth = Math.max(0, layout.container.width - splitScratchLeft)
+
+  const snapSplitOvershoot = useCallback(() => {
+    const from = splitOvershootPxRef.current
+    if (from === 0 || reduceMotion) {
+      setSplitOvershootPx(0)
+      setSplitOvershootSnapping(false)
+      return
+    }
+    setSplitOvershootSnapping(true)
+    splitOvershootAnimRef.current?.stop()
+    splitOvershootAnimRef.current = animate(from, 0, {
+      ...splitOvershootSpring,
+      onUpdate: (v) => {
+        splitOvershootPxRef.current = v
+        setSplitOvershootPx(v)
+      },
+      onComplete: () => {
+        splitOvershootAnimRef.current = null
+        splitOvershootPxRef.current = 0
+        setSplitOvershootPx(0)
+        setSplitOvershootSnapping(false)
+      },
     })
+  }, [reduceMotion])
+
+  useEffect(() => {
+    splitOvershootPxRef.current = splitOvershootPx
+  }, [splitOvershootPx])
+
+  useEffect(() => {
+    if (!scratchPadOpen) setSplitOvershootPx(0)
+  }, [scratchPadOpen])
+
+  const hubDisplayWidth = scratchPadOpen ? splitHubWidth : layout.hub.width
+  const outsideControlsMetricsHubWidth =
+    scratchPadOpen && soloFocusRect ? soloFocusRect.width : layout.hub.width
+
+  const scratchClosingControls =
+    scratchAnimating && !scratchPadOpen && !reduceMotion
+  const closedControlsPlacement = resolveStudyHubOutsideControlsPlacement({
+    containerLeft: layout.container.left,
+    containerWidth: layout.container.width,
+    hubWidth: layout.hub.width,
+    metricsHubWidth: outsideControlsMetricsHubWidth,
+    scratchPadOpen: false,
+    viewportTick,
+  })
+  const openControlsPlacement = scratchPadOpen
+    ? resolveStudyHubOutsideControlsPlacement({
+        containerLeft: layout.container.left,
+        containerWidth: layout.container.width,
+        hubWidth: layout.hub.width,
+        metricsHubWidth: outsideControlsMetricsHubWidth,
+        scratchPadOpen: true,
+        viewportTick,
+      })
+    : transformRef.current
+      ? studyHubMenuFocusSplitControlsPlacement(
+          transformRef.current,
+          scratchSplitShare,
+          outsideControlsMetricsHubWidth,
+          viewportTick,
+        )
+      : null
+
+  const controlsCloseNudge = studyHubOutsideControlsOverflowPx(
+    outsideControlsMetricsHubWidth,
+  )
+  const settledClosedRight =
+    closedControlsPlacement.right - controlsCloseNudge * 0.35
+  const controlsTransition = scratchClosingControls
+    ? {
+        duration: STUDY_HUB_SCRATCH_PAD_TRANSITION_MS / 1000,
+        ease: STUDY_HUB_SCRATCH_PAD_EASE,
+      }
+    : layoutTransition
+
+  const controlsAnimate =
+    scratchClosingControls && openControlsPlacement
+      ? {
+          right: [openControlsPlacement.right, settledClosedRight],
+          top: [openControlsPlacement.top, closedControlsPlacement.top],
+        }
+      : {
+          right: scratchPadOpen
+            ? (openControlsPlacement ?? closedControlsPlacement).right
+            : settledClosedRight,
+          top: scratchPadOpen
+            ? (openControlsPlacement ?? closedControlsPlacement).top
+            : closedControlsPlacement.top,
+        }
 
   return (
     <motion.div
       className="study-hub-menu-focus-frame"
       data-study-hub-scratch-open={scratchPadOpen ? '' : undefined}
       data-study-hub-scratch-animating={scratchAnimating ? '' : undefined}
+      data-study-hub-scratch-closing={scratchClosingControls ? '' : undefined}
       data-study-hub-split-dragging={splitDragging ? '' : undefined}
+      data-study-hub-split-overshoot={
+        Math.abs(splitOvershootPx) > 0.5 ? '' : undefined
+      }
       data-study-hub-layout-smooth={smoothLayout ? '' : undefined}
       initial={false}
       animate={{
@@ -151,8 +266,8 @@ export default function StudyHubMenuFocusFrame({
           className="study-hub-menu-focus-frame__controls"
           data-study-hub-scratch-controls={scratchPadOpen ? '' : undefined}
           initial={false}
-          animate={{ right: controlsRight, top: controlsTop }}
-          transition={layoutTransition}
+          animate={controlsAnimate}
+          transition={controlsTransition}
           style={{
             position: 'absolute',
             zIndex: 5,
@@ -160,7 +275,7 @@ export default function StudyHubMenuFocusFrame({
           }}
         >
           <StudyHubMenuOutsideControls
-            hubWidth={layout.hub.width}
+            hubWidth={outsideControlsMetricsHubWidth}
             scratchPadOpen={scratchPadOpen}
             onDismiss={onDismiss}
             onPenClick={() => toggleStudyHubMenuFocusScratchPad()}
@@ -172,11 +287,11 @@ export default function StudyHubMenuFocusFrame({
         className={`study-hub-canvas-shell plus-fab-menu-glass study-hub-menu-focus-frame__hub study-hub-menu-focus-frame__hub--fluid${hubPanelClassName ? ` ${hubPanelClassName}` : ''}`}
         initial={false}
         animate={{
-          width: layout.hub.width,
+          width: hubDisplayWidth,
           height: layout.hub.height,
           borderRadius: hubBorderRadius,
         }}
-        transition={layoutTransition}
+        transition={scratchPadOpen ? splitPanelTransition : layoutTransition}
         style={{
           position: 'absolute',
           left: 0,
@@ -189,15 +304,26 @@ export default function StudyHubMenuFocusFrame({
 
       {scratchPadOpen && splitBounds && (
         <StudyHubMenuFocusSplitHandle
-          left={layout.hub.width}
+          left={splitHubWidth}
           height={layout.hub.height}
-          splittableW={splitBounds.splittableW}
+          scratchTravel={Math.max(
+            1,
+            splitBounds.scratchMax - splitBounds.scratchMin,
+          )}
+          splitShare={effectiveSplitShare}
           smoothLayout={smoothLayout}
           onDragStart={() => {
-            seedSplitShareFromLayout()
+            splitOvershootAnimRef.current?.stop()
+            splitOvershootAnimRef.current = null
+            setSplitOvershootSnapping(false)
             setSplitDragging(true)
           }}
-          onDragEnd={() => setSplitDragging(false)}
+          onDragEnd={() => {
+            setSplitDragging(false)
+            snapSplitOvershoot()
+          }}
+          onOvershootChange={setSplitOvershootPx}
+          panelTransition={splitPanelTransition}
         />
       )}
 
@@ -205,10 +331,10 @@ export default function StudyHubMenuFocusFrame({
         className="study-hub-menu-focus-frame__scratch-wrap"
         initial={false}
         animate={{
-          left: layout.scratch.left,
-          width: layout.scratch.width,
+          left: scratchPadOpen ? splitScratchLeft : layout.scratch.left,
+          width: scratchPadOpen ? splitScratchWidth : layout.scratch.width,
         }}
-        transition={layoutTransition}
+        transition={scratchPadOpen ? splitPanelTransition : layoutTransition}
         style={{
           position: 'absolute',
           top: 0,

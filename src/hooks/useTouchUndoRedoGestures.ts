@@ -2,6 +2,10 @@ import { useEffect, type RefObject } from 'react'
 import { isFingerTouch, isStylusTouch } from '../drawing/penInput'
 import type { PenToolMenuBridge } from '../drawing/usePenToolMenu'
 import { useStrokesStore } from '../drawing/strokesStore'
+import {
+  studyHubScratchPadUndoScope,
+  useStudyHubScratchPadStore,
+} from '../canvasItems/studyHubScratchPadStore'
 import { SHORTCUTS_BY_ID } from '../shortcuts/shortcutDefs'
 import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 
@@ -153,6 +157,17 @@ export function useTouchUndoRedoGestures(
       lastTriggerAt = now
       event.preventDefault()
 
+      if (studyHubScratchPadUndoScope()) {
+        const pad = useStudyHubScratchPadStore.getState()
+        if (ended.maxFingerCount === 2 && pad.undo()) {
+          fireToast('undo')
+          return
+        }
+        if (ended.maxFingerCount === 3 && pad.redo()) {
+          fireToast('redo')
+          return
+        }
+      }
       if (ended.maxFingerCount === 2) {
         if (useStrokesStore.getState().undo()) fireToast('undo')
       } else {

@@ -2,8 +2,10 @@ import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import {
   studyHubMenuFocusFitPadding,
   studyHubMenuFocusScreenRect,
+  studyHubMenuFocusSplitInsetAvail,
 } from '../canvas/canvasCamera'
 import { isPhoneLayout } from '../platform/layoutProfile'
+import { resolveStudyHubOutsideControlsPlacement } from './StudyHubMenuOutsideControls'
 import { STUDY_HUB_ASPECT } from './types'
 
 const FOCUS_FIT_PADDING_X = 40
@@ -23,7 +25,11 @@ const SCRATCH_PAD_MIN_WIDTH_RATIO = 0.22
 const HUB_PANEL_MIN_WIDTH = 280
 const HUB_PANEL_MIN_WIDTH_RATIO = 0.35
 
-export const STUDY_HUB_SCRATCH_SPLIT_HANDLE_WIDTH = 12
+/** Wide hit target; overlaps hub/pad slightly so the 2px grip is easy to grab. */
+export const STUDY_HUB_SCRATCH_SPLIT_HANDLE_WIDTH = 36
+
+/** Past min/max split share while dragging — visual give before snap-back. */
+export const STUDY_HUB_SCRATCH_SPLIT_RUBBER_BAND = 0.22
 
 export type StudyHubMenuFocusLayout = {
   container: { left: number; top: number; width: number; height: number }
@@ -64,12 +70,18 @@ function menuFocusAvailBounds(
   const paddingX = isPhoneLayout() ? FOCUS_FIT_PADDING_X_PHONE : FOCUS_FIT_PADDING_X
   const paddingTop = fitPaddingTop ?? FOCUS_FIT_PADDING_TOP_DESKTOP
   const paddingBottom = fitPaddingBottom ?? FOCUS_FIT_PADDING_BOTTOM
+  const { availW, availH } = studyHubMenuFocusSplitInsetAvail(
+    size.width,
+    size.height,
+    paddingTop,
+    paddingBottom,
+  )
 
   return {
     wrapperLeft: wrapperBounds.left,
     wrapperTop: wrapperBounds.top,
-    availW: Math.max(1, size.width - paddingX * 2),
-    availH: Math.max(1, size.height - paddingTop - paddingBottom),
+    availW,
+    availH,
     paddingX,
     paddingTop,
   }
@@ -154,6 +166,15 @@ function defaultScratchSplitShare(
   return splitShareFromScratchWidth(availW, scratchW)
 }
 
+/** Share used for layout and drag — matches auto-fit when store is null. */
+export function resolveMenuFocusScratchSplitShare(
+  availW: number,
+  soloHubWidth: number,
+  storedShare: number | null,
+): number {
+  return storedShare ?? defaultScratchSplitShare(availW, soloHubWidth)
+}
+
 function layoutFromHubRect(
   hubRect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
 ): StudyHubMenuFocusLayout {
@@ -191,8 +212,11 @@ function responsiveSplitLayout(
   if (!bounds || !soloRect) return null
 
   const panelHeight = splitPanelHeight(soloRect, bounds.availW, bounds.availH)
-  const share =
-    scratchSplitShare ?? defaultScratchSplitShare(bounds.availW, soloRect.width)
+  const share = resolveMenuFocusScratchSplitShare(
+    bounds.availW,
+    soloRect.width,
+    scratchSplitShare,
+  )
   const scratchW = scratchWidthFromSplitShare(bounds.availW, share)
   const hubW = Math.max(
     minHubPanelWidth(bounds.availW),
@@ -220,6 +244,25 @@ function responsiveSplitLayout(
       height: hub.height,
     },
   }
+}
+
+/** Split-layout anchor for outside controls during the draw-pad close animation. */
+export function studyHubMenuFocusSplitControlsPlacement(
+  ref: ReactZoomPanPinchContentRef,
+  scratchSplitShare: number | null,
+  metricsHubWidth: number,
+  viewportTick = 0,
+) {
+  const split = responsiveSplitLayout(ref, scratchSplitShare)
+  if (!split) return null
+  return resolveStudyHubOutsideControlsPlacement({
+    containerLeft: split.container.left,
+    containerWidth: split.container.width,
+    hubWidth: split.hub.width,
+    metricsHubWidth,
+    scratchPadOpen: true,
+    viewportTick,
+  })
 }
 
 export function computeStudyHubMenuFocusLayout(

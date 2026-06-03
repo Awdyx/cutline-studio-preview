@@ -75,7 +75,10 @@ export function isPointerOnStudyHubMenuFocusPortal(
 
 export function isStudyHubScratchPadTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
-  return target.closest('[data-study-hub-scratch-pad]') != null
+  return (
+    target.closest('[data-study-hub-scratch-pad]') != null ||
+    target.closest('[data-study-hub-scratch-pad-viewport]') != null
+  )
 }
 
 export function isPointerOverOpenStudyHubScratchPad(

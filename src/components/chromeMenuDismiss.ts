@@ -17,7 +17,7 @@ export function isSwapChromeMenuTarget(target: Node): boolean {
 export function isPenFabDrawKeepOpenTarget(target: Node): boolean {
   if (!(target instanceof Element)) return false
   return (
-    !!target.closest('[data-study-hub-scratch-pad]') ||
+    !!target.closest('[data-study-hub-scratch-pad], [data-study-hub-scratch-pad-viewport]') ||
     !!target.closest('.study-hub-menu-focus-portal') ||
     !!target.closest('.pen-tool-pill') ||
     !!target.closest('.pen-tool-pill-settings')

@@ -82,6 +82,18 @@ export function isStylusTouch(touch: Touch): boolean {
   return touchType === 'stylus' || touchType === 'pen'
 }
 
+/** Safari iPad: Pencil may omit touchType but reports fractional force. */
+export function isPenTouch(touch: Touch): boolean {
+  if (isStylusTouch(touch)) return true
+  const force = touch.force
+  if (typeof force === 'number' && force > 0 && force < 1) return true
+  const webkitForce = (touch as Touch & { webkitForce?: number }).webkitForce
+  if (typeof webkitForce === 'number' && webkitForce > 0 && webkitForce < 1) {
+    return true
+  }
+  return false
+}
+
 /** True when a new pointer down may start a canvas stroke. */
 export function canStartDrawingPointer(event: PointerEvent): boolean {
   if (isPhoneLayout() && !useCanvasEditStore.getState().enabled) return false
@@ -103,7 +115,7 @@ export function canStartDrawingPointer(event: PointerEvent): boolean {
 }
 
 export function isFingerTouch(touch: Touch): boolean {
-  return !isStylusTouch(touch)
+  return !isPenTouch(touch)
 }
 
 export function isCanvasCoordSane(

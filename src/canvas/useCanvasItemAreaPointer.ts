@@ -189,15 +189,41 @@ export function useCanvasItemAreaPointer({
           if (ev.pointerId !== pointerId) return
           lastPointerRef.current = { x: ev.clientX, y: ev.clientY }
           if (
-            Math.hypot(ev.clientX - startX, ev.clientY - startY) >
+            Math.hypot(ev.clientX - startX, ev.clientY - startY) <=
             CANVAS_TAP_MOVE_THRESHOLD_PX
           ) {
-            cleanupHoldWatch()
-            target.classList.remove(HOLD_DRAG_PAN_EXCLUDE_CLASS)
-            holdTargetRef.current = null
-            releasePointerFromBody(pointerId)
-            holdPointerIdRef.current = null
+            return
           }
+
+          cleanupHoldWatch()
+          tapCancelRef.current?.()
+          tapCancelRef.current = null
+          target.classList.remove(HOLD_DRAG_PAN_EXCLUDE_CLASS)
+          holdTargetRef.current = null
+
+          if (!holdEngagedRef.current && !moveBlocked) {
+            const canvasEl = resolveCanvasEl(target)
+            if (canvasEl) {
+              holdEngagedRef.current = true
+              releasePointerFromBody(pointerId)
+              holdPointerIdRef.current = null
+              attachCanvasItemDragContinuingPointer(
+                itemId,
+                pointerId,
+                canvasEl,
+                ev.clientX,
+                ev.clientY,
+              )
+              if (!shouldSkipItemSelectForOutsideDismiss(itemId)) {
+                selectItem(itemId, e.shiftKey)
+                target.classList.add('canvas-item-selected-focus')
+              }
+              return
+            }
+          }
+
+          releasePointerFromBody(pointerId)
+          holdPointerIdRef.current = null
         }
 
         const onHoldEnd = (ev: PointerEvent) => {
@@ -335,15 +361,41 @@ export function useCanvasItemAreaPointer({
         if (ev.pointerId !== pointerId) return
         lastPointerRef.current = { x: ev.clientX, y: ev.clientY }
         if (
-          Math.hypot(ev.clientX - startX, ev.clientY - startY) >
+          Math.hypot(ev.clientX - startX, ev.clientY - startY) <=
           CANVAS_TAP_MOVE_THRESHOLD_PX
         ) {
-          cleanupHoldWatch()
-          target.classList.remove(HOLD_DRAG_PAN_EXCLUDE_CLASS)
-          holdTargetRef.current = null
-          releasePointerFromBody(pointerId)
-          holdPointerIdRef.current = null
+          return
         }
+
+        cleanupHoldWatch()
+        tapCancelRef.current?.()
+        tapCancelRef.current = null
+        target.classList.remove(HOLD_DRAG_PAN_EXCLUDE_CLASS)
+        holdTargetRef.current = null
+
+        if (!holdEngagedRef.current && !moveBlocked) {
+          const canvasEl = resolveCanvasEl(target)
+          if (canvasEl) {
+            holdEngagedRef.current = true
+            releasePointerFromBody(pointerId)
+            holdPointerIdRef.current = null
+            attachCanvasItemDragContinuingPointer(
+              itemId,
+              pointerId,
+              canvasEl,
+              ev.clientX,
+              ev.clientY,
+            )
+            if (!shouldSkipItemSelectForOutsideDismiss(itemId)) {
+              selectItem(itemId, e.shiftKey)
+              target.classList.add('canvas-item-selected-focus')
+            }
+            return
+          }
+        }
+
+        releasePointerFromBody(pointerId)
+        holdPointerIdRef.current = null
       }
 
       const onHoldEnd = (ev: PointerEvent) => {

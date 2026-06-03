@@ -40,9 +40,26 @@ button {
   overflow: visible;
 }
 
-/* Pocket interior — edge-to-edge vertical strip. */.cutline-draw-target--pocket {
+/* Pocket interior — edge-to-edge vertical strip. */
+.cutline-draw-target--pocket {
   position: relative;
   z-index: 1;
+  /* Main draw target uses none for pan/zoom; pocket scrolls via .pocket-strip-viewport. */
+  touch-action: pan-y;
+}
+
+/* touch-action is not inherited — item subtrees need none so finger drag beats strip scroll. */
+.cutline-draw-target--pocket [data-canvas-item],
+.cutline-draw-target--pocket [data-canvas-item] * {
+  touch-action: none;
+}
+
+.cutline-draw-target--pocket [data-canvas-item] .study-hub-scroll {
+  touch-action: pan-y;
+}
+
+html[data-canvas-item-pointer-session] .pocket-strip-viewport,
+html.canvas-item-drag-active .pocket-strip-viewport {
   touch-action: none;
 }
 
@@ -105,22 +122,41 @@ button {
   background-color: var(--canvas-bg);
 }
 
-/* Tauri macOS — overlay title bar: nudge top chrome down without affecting web. */html[data-tauri-macos='1'] {
-  --tauri-chrome-top-delta: 16px;
-}
-
-/* Shared desktop chrome insets — top only widens on Tauri macOS for the overlay title bar. */html {
+/* Shared desktop chrome insets (web defaults). */
+html {
   --chrome-edge-base: 16px;
-  --tauri-chrome-top-delta: 0px;
+  --native-chrome-top-delta: 0px;
+  --tauri-chrome-top-delta: var(--native-chrome-top-delta);
   --chrome-edge-left: var(--chrome-edge-base);
   --chrome-edge-right: var(--chrome-edge-base);
-  --chrome-edge-top: calc(var(--chrome-edge-base) + var(--tauri-chrome-top-delta));
-  --chrome-panel-top: calc(64px + var(--tauri-chrome-top-delta));
+  --chrome-edge-top: calc(var(--chrome-edge-base) + var(--native-chrome-top-delta));
+  --chrome-panel-top: calc(64px + var(--native-chrome-top-delta));
   --chrome-panel-anchor-left: var(--chrome-edge-left);
   --chrome-panel-anchor-right: var(--chrome-edge-right);
 }
 
-html[data-tauri-macos='1'] .cutline-top-bar:not(.cutline-top-bar--phone) {
+/* macOS overlay title bar — drop top row + panels below traffic lights. */
+html[data-native-macos='1'],
+html[data-tauri-macos='1'] {
+  --native-chrome-top-delta: 16px;
+}
+
+html[data-electron-macos='1'] {
+  --native-chrome-top-delta: 28px;
+}
+
+html[data-native-macos='1'] .native-window-drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  z-index: 100;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+}
+
+html[data-native-macos='1'] .cutline-top-bar:not(.cutline-top-bar--phone) {
   top: var(--chrome-edge-top) !important;
 }
 
@@ -1708,7 +1744,8 @@ html[data-tool-mode='lasso'] [data-ui-customization-tray] [data-ui-draw-canvas] 
 
 .study-hub-menu-focus-frame__split:hover::before,
 .study-hub-menu-focus-frame__split:focus-visible::before,
-.study-hub-menu-focus-frame[data-study-hub-split-dragging] .study-hub-menu-focus-frame__split::before {
+.study-hub-menu-focus-frame[data-study-hub-split-dragging] .study-hub-menu-focus-frame__split::before,
+.study-hub-menu-focus-frame[data-study-hub-split-overshoot] .study-hub-menu-focus-frame__split::before {
   width: 3px;
   opacity: 0.95;
   background: color-mix(in srgb, var(--ui-text) 42%, transparent);
@@ -1785,13 +1822,43 @@ html[data-tool-mode='lasso'] [data-ui-customization-tray] [data-ui-draw-canvas] 
   z-index: 1;
 }
 
+.study-hub-scratch-pad-viewport {
+  overflow: hidden;
+  background: var(--chrome-solid-bg);
+}
+
 .study-hub-scratch-pad {
-  width: 100%;
-  height: 100%;
+  background: var(--chrome-solid-bg);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.study-hub-scratch-pad::-webkit-scrollbar {
+  display: none;
+}
+
+.study-hub-scratch-pad[data-scratch-pad-scroll-locked] {
+  overflow-y: hidden;
+  touch-action: none;
+}
+
+.study-hub-scratch-pad__surface {
+  position: relative;
   background: var(--chrome-solid-bg);
   box-shadow: var(--glass-shadow);
+  /* pan-y so finger scroll reaches `.study-hub-scratch-pad`; none only while drawing. */
+  touch-action: pan-y;
+}
+
+.study-hub-scratch-pad__surface[data-scratch-pad-drawing],
+.study-hub-scratch-pad[data-scratch-pad-scroll-locked] .study-hub-scratch-pad__surface,
+html[data-layout='phone'][data-pen-tool-menu-open] .study-hub-scratch-pad__surface {
   touch-action: none;
-  overflow: hidden;
 }
 
 html[data-tool-mode='pen'] .study-hub-scratch-pad,
@@ -1816,10 +1883,6 @@ html[data-tool-mode='lasso'][data-space-draw] .study-hub-scratch-pad {
 
 html[data-space-draw] .study-hub-scratch-pad {
   cursor: crosshair;
-}
-
-html[data-theme='dark'] .study-hub-scratch-pad {
-  background: var(--chrome-solid-bg);
 }
 
 @media (prefers-reduced-motion: reduce) {.study-hub-menu-dismiss {

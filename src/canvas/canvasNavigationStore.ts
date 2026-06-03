@@ -58,6 +58,7 @@ export const CANVAS_PAN_EXCLUDED = [
   'study-hub-practice',
   'study-hub-menu-dismiss',
   'study-hub-scratch-pad',
+  'study-hub-scratch-pad-viewport',
   'profile-media-frame-editor',
 ] as const
 
@@ -72,6 +73,7 @@ export const CANVAS_TRACKPAD_PAN_EXCLUDED = [
   'study-hub-practice',
   'study-hub-menu-dismiss',
   'study-hub-scratch-pad',
+  'study-hub-scratch-pad-viewport',
   'profile-media-frame-editor',
 ] as const
 

@@ -271,6 +271,7 @@ function clearActiveItem() {
 
 function setPointerSessionActive(active: boolean) {
   useCanvasItemDragStore.setState({ pointerSessionActive: active })
+  document.documentElement.toggleAttribute('data-canvas-item-pointer-session', active)
 }
 
 function removeDocumentListeners() {

@@ -1,18 +1,22 @@
-import { StrictMode, useState } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { syncLayoutProfileAttribute } from './platform/layoutProfile'
 import { syncTouchFirstAttribute } from './platform/compositor'
-import { isTauriDesktop, syncTauriDesktopAttribute } from './platform/tauriDesktop'
+import { isNativeDesktop, syncNativeShellAttributes } from './platform/nativeShell'
 import App from './App.tsx'
 import AppAccessGate from './components/AppAccessGate.tsx'
 
 syncLayoutProfileAttribute()
 syncTouchFirstAttribute()
-syncTauriDesktopAttribute()
+syncNativeShellAttributes()
 
 function Root() {
-  const [unlocked, setUnlocked] = useState(() => isTauriDesktop())
+  useEffect(() => {
+    syncNativeShellAttributes()
+  }, [])
+
+  const [unlocked, setUnlocked] = useState(() => isNativeDesktop())
 
   return (
     <>

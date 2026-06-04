@@ -40,19 +40,26 @@ export const canvasItemLiftSpring = {
   mass: 0.7,
 }
 
-/** Embedded image peeling off a sticky before reparenting. */
-export const stickyBringOutEmbeddedTransition = {
-  scale: { duration: 0.3, ease: [0.4, 0, 0.2, 1] as const },
-  opacity: { duration: 0.16, delay: 0.14, ease: [0.4, 0, 1, 1] as const },
-  boxShadow: { duration: 0.22, ease: [0.4, 0, 0.2, 1] as const },
+/** Canvas image shrink + fade while reparenting into a sticky on drop. */
+export const STICKY_DROP_ABSORB_MS = 210
+
+export const stickyDropAbsorbAnimate = {
+  scale: 0.96,
+  opacity: 0,
+} as const
+
+export const stickyDropAbsorbTransition = {
+  duration: 0.2,
+  ease: [0.4, 0, 0.2, 1] as const,
 }
 
-/** Canvas image settling after bring-out reparent. */
+/** Canvas image fade-in right after bring-out reparent. */
+export const stickyBringOutCanvasEnterInitial = {
+  opacity: 0,
+} as const
+
 export const stickyBringOutCanvasEnterTransition = {
-  type: 'spring' as const,
-  stiffness: 460,
-  damping: 32,
-  mass: 0.72,
+  opacity: { duration: 0.16, ease: [0.4, 0, 0.2, 1] as const },
 }
 
 /** Pasted image replacing a selected canvas image — subtle dissolve + settle. */

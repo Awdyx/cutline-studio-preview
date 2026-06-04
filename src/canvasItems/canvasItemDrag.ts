@@ -26,13 +26,13 @@ import {
   imageLocalPositionInSticky,
 } from './stickyImagePlacement'
 import { useCanvasItemDragStore, triggerBoundsSnapBack } from './canvasItemDragStore'
+import { STICKY_DROP_ABSORB_MS } from './canvasItemMotion'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import { isImageInSticky, isStickyItem } from './types'
 
 const DRAG_THRESHOLD_PX = 8
 const DRAG_ACTIVE_CLASS = 'canvas-item-drag-active'
 const HOLD_DRAG_PAN_EXCLUDE_CLASS = 'canvas-item-hold-drag-pending'
-const STICKY_DROP_ABSORB_MS = 340
 
 /** Item ids removed by an instant space drop (skip AnimatePresence exit). */
 let spaceDropInstantRemoveId: string | null = null
@@ -168,11 +168,10 @@ function executeStickyDrop(
   clearStickyDropTimer()
   stickyDropTimer = setTimeout(() => {
     stickyDropTimer = null
+    const dropStore = useStickyDropStore.getState()
     useCanvasItemsStore.getState().moveImageToSticky(itemId, hit.stickyId)
-    useStickyDropStore.getState().clearHover()
-    requestAnimationFrame(() => {
-      useStickyDropStore.getState().clearAbsorb()
-    })
+    dropStore.clearAbsorb()
+    dropStore.clearHover()
   }, STICKY_DROP_ABSORB_MS)
 }
 

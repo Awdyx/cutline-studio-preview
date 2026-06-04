@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { playSound } from '../sound/playSound'
-import { playSubmenuHover } from '../sound/submenuSound'
 import { clientToCanvas } from './canvasCoords'
 import { isPenInput, isPenMenuPointer, isPhoneFingerDrawMode, noteStylusInput } from './penInput'
 import {
@@ -245,6 +244,14 @@ export function usePenToolMenu(
     resetHoldInternal(playCloseSound, opts)
   }
 
+  const playOpenMenuSoundIfNeeded = () => {
+    const hold = holdRef.current
+    if (hold.phase !== 'open') return
+    // Upward drag into settings in the same frame — one confirm sound on release instead.
+    if (hold.settingsOpened) return
+    playSound('menuOpen')
+  }
+
   const openMenuUi = () => {
     const hold = holdRef.current
     const { cancelActiveStroke, cancelEraseSession } = useStrokesStore.getState()
@@ -252,7 +259,6 @@ export function usePenToolMenu(
     cancelEraseSession()
     cancelDrawRegistry.forEach((fn) => fn())
     useLassoStore.getState().cancelLasso()
-    playSound('menuOpen')
     hold.phase = 'open'
     const rail = initPenToolMenuRail(
       hold.anchorX,
@@ -285,6 +291,7 @@ export function usePenToolMenu(
       settingsPanel: null,
       toolOrder: hold.toolOrder,
     })
+    requestAnimationFrame(playOpenMenuSoundIfNeeded)
   }
 
   const cancelPendingHoldInternal = () => {
@@ -382,7 +389,6 @@ export function usePenToolMenu(
       if (!hold.settingsOpened) {
         hold.settingsOpened = true
         hold.settingsPanel = hold.pillAimTool
-        playSubmenuHover()
       }
       return hold.settingsPanel
     }
@@ -593,7 +599,7 @@ export function usePenToolMenu(
     }
 
     if (hovered) useToolStore.getState().setMode(hovered)
-    beginCloseUi(hovered, true)
+    beginCloseUi(hovered, false)
     return true
   }
 
@@ -622,6 +628,8 @@ export function usePenToolMenu(
   ) => {
     const hold = holdRef.current
     if (hold.phase === 'open') return
+
+    useShortcutUiStore.getState().dismissShortcutMenusForPenHover()
 
     clearHoldTimer(hold)
     hold.generation += 1

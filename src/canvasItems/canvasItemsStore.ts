@@ -91,8 +91,7 @@ import {
 } from './stickyImageLayers'
 import { isStoredTextEmpty } from './textEditorContent'
 import {
-  STICKY_BRING_OUT_ENTER_MS,
-  STICKY_BRING_OUT_MS,
+  STICKY_BRING_OUT_FADE_MS,
   useStickyBringOutStore,
 } from './stickyBringOutStore'
 
@@ -124,8 +123,22 @@ let restoreSizingFrameId: number | null = null
 let restoreSizingItemId: string | null = null
 let boundsSnapFrameId: number | null = null
 let boundsSnapItemId: string | null = null
-let stickyBringOutTimer: ReturnType<typeof setTimeout> | null = null
-let stickyBringOutEnterTimer: ReturnType<typeof setTimeout> | null = null
+let stickyBringOutFadeTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearStickyBringOutFadeTimer() {
+  if (stickyBringOutFadeTimer != null) {
+    clearTimeout(stickyBringOutFadeTimer)
+    stickyBringOutFadeTimer = null
+  }
+}
+
+function scheduleStickyBringOutFadeClear(itemId: string) {
+  clearStickyBringOutFadeTimer()
+  stickyBringOutFadeTimer = setTimeout(() => {
+    stickyBringOutFadeTimer = null
+    useStickyBringOutStore.getState().clearRecentlyBroughtOut(itemId)
+  }, STICKY_BRING_OUT_FADE_MS)
+}
 let lastEraseDeleteSoundAt = 0
 const ERASE_DELETE_SOUND_MS = 110
 
@@ -1150,52 +1163,37 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
     if (!itemIsMutable(item)) return false
 
     const bringOut = useStickyBringOutStore.getState()
-    if (bringOut.bringingOutItemId != null) return false
+    if (bringOut.recentlyBroughtOutItemId === itemId) return false
+
+    const sticky = get().getStickyById(item.stickyId)
+    const canvasPos = sticky
+      ? imageCanvasPosition(item, sticky)
+      : { x: item.x, y: item.y }
 
     pushUndoSnapshot()
-    bringOut.beginBringOut(itemId, item.stickyId)
+    clearStickyBringOutFadeTimer()
 
-    if (stickyBringOutTimer != null) clearTimeout(stickyBringOutTimer)
-    if (stickyBringOutEnterTimer != null) clearTimeout(stickyBringOutEnterTimer)
+    const origin = item.mainCanvasOrigin
+    const { stickyId: _stickyId, mainCanvasOrigin: _origin, ...rest } = item
+    const restored: ImageCanvasItem = {
+      ...rest,
+      x: canvasPos.x,
+      y: canvasPos.y,
+      zIndex: sticky
+        ? Math.max(origin?.zIndex ?? item.zIndex, sticky.zIndex + 1)
+        : (origin?.zIndex ?? item.zIndex),
+    }
 
-    stickyBringOutTimer = setTimeout(() => {
-      stickyBringOutTimer = null
+    set((state) => ({
+      items: state.items.map((entry) => (entry.id === itemId ? restored : entry)),
+      selectedIds: [itemId],
+    }))
+    persistItems({ immediate: true })
+    playSound('itemDrop')
 
-      const current = findItem(get().items, itemId)
-      if (!current || !isImageInSticky(current)) {
-        useStickyBringOutStore.getState().clearAll()
-        return
-      }
-
-      const sticky = get().getStickyById(current.stickyId)
-      const canvasPos = sticky
-        ? imageCanvasPosition(current, sticky)
-        : { x: current.x, y: current.y }
-
-      const origin = current.mainCanvasOrigin
-      const { stickyId: _stickyId, mainCanvasOrigin: _origin, ...rest } = current
-      const restored: ImageCanvasItem = {
-        ...rest,
-        x: canvasPos.x,
-        y: canvasPos.y,
-        zIndex: sticky
-          ? Math.max(origin?.zIndex ?? current.zIndex, sticky.zIndex + 1)
-          : (origin?.zIndex ?? current.zIndex),
-      }
-
-      set((state) => ({
-        items: state.items.map((entry) => (entry.id === itemId ? restored : entry)),
-        selectedIds: [itemId],
-      }))
-      persistItems({ immediate: true })
-      playSound('itemDrop')
-      useStickyBringOutStore.getState().completeBringOut(itemId)
-
-      stickyBringOutEnterTimer = setTimeout(() => {
-        stickyBringOutEnterTimer = null
-        useStickyBringOutStore.getState().clearRecentlyBroughtOut(itemId)
-      }, STICKY_BRING_OUT_ENTER_MS)
-    }, STICKY_BRING_OUT_MS)
+    const bringOutStore = useStickyBringOutStore.getState()
+    bringOutStore.completeBringOut(itemId)
+    scheduleStickyBringOutFadeClear(itemId)
 
     return true
   },

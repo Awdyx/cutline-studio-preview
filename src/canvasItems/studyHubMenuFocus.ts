@@ -14,6 +14,7 @@ import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import { applyPocketStripScrollNow } from '../spaces/usePocketStripScroll'
 import { usePocketStripStore } from '../spaces/pocketStripStore'
 import type { SpaceCamera } from '../spaces/types'
+import { useToolStore } from '../drawing/toolStore'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import type { StudyHubCanvasItem, StudySubjectId } from './types'
 import { STUDY_HUB_SCRATCH_PAD_TRANSITION_MS } from './studyHubMenuFocusLayout'
@@ -126,7 +127,12 @@ export function shouldBlockCanvasZoomForStudyHubMenuFocus(
 
 export function toggleStudyHubMenuFocusScratchPad(): void {
   playSubmenuTap()
-  useCanvasItemsStore.getState().toggleMenuFocusScratchPad()
+  const store = useCanvasItemsStore.getState()
+  const opening = !store.menuFocusScratchPadOpen
+  store.toggleMenuFocusScratchPad()
+  if (opening) {
+    useToolStore.getState().setMode('pen')
+  }
 }
 
 /** Open a shortcut-only overlay — no canvas item is created. */

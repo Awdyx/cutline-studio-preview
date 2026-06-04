@@ -46,8 +46,10 @@ import {
   canvasItemDeleteExit,
   canvasItemDeleteExitTransition,
   canvasItemLiftSpring,
+  stickyBringOutCanvasEnterInitial,
   stickyBringOutCanvasEnterTransition,
-  stickyBringOutEmbeddedTransition,
+  stickyDropAbsorbAnimate,
+  stickyDropAbsorbTransition,
 } from './canvasItemMotion'
 import { card } from '../styles/tokens'
 import { focusStudyHubOnCanvas } from './studyHubMenuFocus'
@@ -105,18 +107,14 @@ export default function CanvasItemShell({
   const boundsSnapPulse = useCanvasItemDragStore((s) =>
     s.boundsSnapBackItemId === item.id ? s.boundsSnapBackNonce : 0,
   )
-  const isAbsorbing = useStickyDropStore((s) => s.absorbingItemId === item.id)
+  const isAbsorbingIntoSticky =
+    !embeddedInSticky && useStickyDropStore((s) => s.absorbingItemId === item.id)
   const instantSpaceDropExit = isSpaceDropInstantRemove(item.id)
-  const bringingOutThisItem = useStickyBringOutStore(
-    (s) => s.bringingOutItemId === item.id,
-  )
-  const isBringingOutEmbedded = embeddedInSticky && bringingOutThisItem
   const broughtOutNonce = useStickyBringOutStore((s) =>
     s.recentlyBroughtOutItemId === item.id ? s.recentlyBroughtOutNonce : 0,
   )
   const isEnteringFromSticky =
     !embeddedInSticky && item.type === 'image' && broughtOutNonce > 0
-
   const selectSelf = useCallback(
     () => useCanvasItemsStore.getState().selectItem(item.id),
     [item.id],
@@ -208,7 +206,6 @@ export default function CanvasItemShell({
           forceLift,
           isActiveDrag: isDragging && isSelected,
         })
-    if (isBringingOutEmbedded) return Math.max(base, 5)
     return base
   }, [
     allItems,
@@ -218,7 +215,6 @@ export default function CanvasItemShell({
     isSelected,
     forceLift,
     embeddedInSticky,
-    isBringingOutEmbedded,
     isCustomizingItem,
     customizeExiting,
   ])
@@ -238,7 +234,6 @@ export default function CanvasItemShell({
   const suppressEmbeddedLift = embeddedInSticky && stickyParentCustomizing
   const lifted =
     !suppressEmbeddedLift && (isDragging || isResizing) && !parentStickyDragging
-  const absorbTransition = { duration: 0.34, ease: [0.4, 0, 0.2, 1] as const }
   // Stickies clip inside StickyNote so embedded-image overflow previews can extend out.
   const clipContent = item.type === 'study_hub'
   const stickyParentLassoSelected = useLassoStore((s) =>
@@ -327,10 +322,8 @@ export default function CanvasItemShell({
     menuFocusRevealed &&
     menuFocusReturnCamera != null &&
     zMenuSuppressedItemId === item.id
-  const peelLiftShadow = '0 10px 32px rgba(20, 30, 50, 0.2)'
-  const shellBoxShadow = isBringingOutEmbedded
-    ? peelLiftShadow
-    : skipLiftMotion || embeddedInSticky
+  const shellBoxShadow =
+    skipLiftMotion || embeddedInSticky
       ? 'none'
       : isStudyHub
         ? studyHubPortalActive
@@ -340,9 +333,7 @@ export default function CanvasItemShell({
             : card.shadow
         : lifted && !isResizing
           ? liftShadow
-          : isEnteringFromSticky
-            ? peelLiftShadow
-            : restShadow
+          : restShadow
 
   const uiCustomizable =
     !embeddedInSticky && isCanvasItemUiCustomizableType(item.type)
@@ -355,8 +346,7 @@ export default function CanvasItemShell({
     !interactionFrozen &&
     !hideItemHandles &&
     embeddedInteractive &&
-    !isLassoSelected &&
-    !isBringingOutEmbedded
+    !isLassoSelected
   const customizeChromeHidden =
     customizeHidesHandles || (uiCustomizable && showCustomizePortal)
   const mountItemHandles = itemHandleBase
@@ -478,7 +468,7 @@ export default function CanvasItemShell({
           ? false
           : textLayout || studyHubLayout
       }
-      initial={isEnteringFromSticky ? { scale: 0.968, opacity: 0.48 } : false}
+      initial={isEnteringFromSticky ? stickyBringOutCanvasEnterInitial : false}
       exit={
         instantSpaceDropExit
           ? { opacity: 0, transition: { duration: 0 } }
@@ -492,37 +482,29 @@ export default function CanvasItemShell({
           ? {
               x: lassoDx,
               y: lassoDy,
-              scale: isBringingOutEmbedded
-                ? 1.028
-                : isAbsorbing
-                  ? 0.86
-                  : skipLiftMotion
-                    ? 1
-                    : lifted && !isResizing
-                      ? 1.03
-                      : 1,
-              opacity: isBringingOutEmbedded
-                ? 0
-                : isAbsorbing
-                  ? 0.35
-                  : 1,
+              scale: isAbsorbingIntoSticky
+                ? stickyDropAbsorbAnimate.scale
+                : skipLiftMotion
+                  ? 1
+                  : lifted && !isResizing
+                    ? 1.03
+                    : 1,
+              opacity: isAbsorbingIntoSticky
+                ? stickyDropAbsorbAnimate.opacity
+                : 1,
               boxShadow: customizeChromeHidden ? 'none' : shellBoxShadow,
             }
           : {
-              scale: isBringingOutEmbedded
-                ? 1.028
-                : isAbsorbing
-                  ? 0.86
-                  : skipLiftMotion
-                    ? 1
-                    : lifted && !isResizing
-                      ? 1.03
-                      : 1,
-              opacity: isBringingOutEmbedded
-                ? 0
-                : isAbsorbing
-                  ? 0.35
-                  : 1,
+              scale: isAbsorbingIntoSticky
+                ? stickyDropAbsorbAnimate.scale
+                : skipLiftMotion
+                  ? 1
+                  : lifted && !isResizing
+                    ? 1.03
+                    : 1,
+              opacity: isAbsorbingIntoSticky
+                ? stickyDropAbsorbAnimate.opacity
+                : 1,
               boxShadow: customizeChromeHidden ? 'none' : shellBoxShadow,
             }
       }
@@ -534,12 +516,10 @@ export default function CanvasItemShell({
                 ...shellTransition,
                 boxShadow: { duration: 0.4, ease: 'easeOut' },
               }
-            : isBringingOutEmbedded
-            ? stickyBringOutEmbeddedTransition
             : isEnteringFromSticky
               ? stickyBringOutCanvasEnterTransition
-              : isAbsorbing
-                ? absorbTransition
+              : isAbsorbingIntoSticky
+                ? stickyDropAbsorbTransition
                 : shellTransition
       }
       style={{

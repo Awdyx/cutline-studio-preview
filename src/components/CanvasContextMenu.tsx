@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { LayoutGrid } from 'lucide-react'
 import { playSound } from '../sound/playSound'
 import { useCanvasContextMenuStore } from '../canvas/canvasContextMenuStore'
+import { useShortcutUiStore } from '../shortcuts/shortcutUiStore'
 import { watchCanvasContextMenuPointerDismiss } from '../canvas/canvasContextMenuPointerDismiss'
 import { useCanvasEditingAllowed } from '../canvasEdit/layer'
 import {
@@ -191,6 +192,14 @@ export default function CanvasContextMenu({
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [open])
+
+  useEffect(() => {
+    useShortcutUiStore.getState().registerCanvasContextMenu({
+      close: () => useCanvasContextMenuStore.getState().close(),
+      isOpen: () => useCanvasContextMenuStore.getState().open,
+    })
+    return () => useShortcutUiStore.getState().registerCanvasContextMenu(null)
+  }, [])
 
   if (!editingAllowed) return null
 

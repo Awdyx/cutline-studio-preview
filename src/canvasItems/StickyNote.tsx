@@ -117,6 +117,9 @@ export default function StickyNote({
   const dropGhost = useStickyDropStore((s) =>
     s.hover?.stickyId === item.id ? s.hover.ghostItem : null,
   )
+  const dropGhostSettling = useStickyDropStore(
+    (s) => s.absorbingItemId != null && s.absorbingItemId === dropGhost?.id,
+  )
   const isDropHoverTarget = dropHoverStickyId === item.id
   const isDropConfirmTarget = dropConfirmStickyId === item.id
   const [embeddedHandleHost, setEmbeddedHandleHost] = useState<HTMLElement | null>(null)
@@ -505,7 +508,13 @@ export default function StickyNote({
             width={item.width}
             height={item.height}
           />
-          {dropGhost ? <StickyDropGhost key={dropGhost.id} ghost={dropGhost} /> : null}
+          {dropGhost ? (
+            <StickyDropGhost
+              key={dropGhost.id}
+              ghost={dropGhost}
+              settling={dropGhostSettling}
+            />
+          ) : null}
           <div
             ref={containerRef}
             style={{

@@ -44,6 +44,11 @@ type ChromeSubmenuControls = {
   closeSubmenus: () => void
 }
 
+type CanvasContextMenuControls = {
+  close: () => void
+  isOpen: () => boolean
+}
+
 type NotificationProfilePreviewControls = {
   close: (opts?: ChromeMenuSoundOpts) => void
   isOpen: () => boolean
@@ -72,6 +77,8 @@ type ShortcutUiState = {
   registerCutlineMenu: (controls: ChromeSubmenuControls | null) => void
   profileMenu: ChromeSubmenuControls | null
   registerProfileMenu: (controls: ChromeSubmenuControls | null) => void
+  canvasContextMenu: CanvasContextMenuControls | null
+  registerCanvasContextMenu: (controls: CanvasContextMenuControls | null) => void
   notificationProfilePreview: NotificationProfilePreviewControls | null
   registerNotificationProfilePreview: (
     controls: NotificationProfilePreviewControls | null,
@@ -89,6 +96,8 @@ type ShortcutUiState = {
   closeFloatingSettings: (() => boolean) | null
   registerCloseFloatingSettings: (fn: (() => boolean) | null) => void
   closeAllChromeSubmenus: () => void
+  /** Close keyboard / right-click shortcut flyouts when the pen hover menu starts. */
+  dismissShortcutMenusForPenHover: () => void
   /** Close flyout submenus and actor profile cards before swapping chrome UI. */
   dismissPeerChromeOverlays: (opts?: ChromeMenuSoundOpts) => void
   dismissChromeForCanvasInteraction: () => void
@@ -135,6 +144,10 @@ export const useShortcutUiStore = create<ShortcutUiState>((set, get) => ({
   profileMenu: null,
   registerProfileMenu: (controls) => set({ profileMenu: controls ?? null }),
 
+  canvasContextMenu: null,
+  registerCanvasContextMenu: (controls) =>
+    set({ canvasContextMenu: controls ?? null }),
+
   notificationProfilePreview: null,
   registerNotificationProfilePreview: (controls) =>
     set({ notificationProfilePreview: controls ?? null }),
@@ -143,6 +156,13 @@ export const useShortcutUiStore = create<ShortcutUiState>((set, get) => ({
     const s = get()
     s.cutlineMenu?.closeSubmenus()
     s.profileMenu?.closeSubmenus()
+  },
+
+  dismissShortcutMenusForPenHover: () => {
+    const s = get()
+    s.closeFloatingSettings?.()
+    s.closeAllChromeSubmenus()
+    if (s.canvasContextMenu?.isOpen()) s.canvasContextMenu.close()
   },
 
   dismissPeerChromeOverlays: (opts) => {

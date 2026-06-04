@@ -57,8 +57,11 @@ export function StickyDropConfirmChrome() {
 
 export function StickyDropGhost({
   ghost,
+  settling = false,
 }: {
   ghost: Pick<ImageCanvasItem, 'mediaId' | 'id' | 'x' | 'y' | 'width' | 'height'>
+  /** Post-release absorb — ramp to full opacity before the embedded image takes over. */
+  settling?: boolean
 }) {
   const { url, status } = useMediaBlobUrl(ghost.mediaId, ghost.id)
   if (!url || status !== 'ready') return null
@@ -70,7 +73,7 @@ export function StickyDropGhost({
       draggable={false}
       initial={{ opacity: 0, scale: 0.968 }}
       animate={{
-        opacity: 0.56,
+        opacity: settling ? 1 : 0.56,
         scale: 1,
         left: ghost.x,
         top: ghost.y,
@@ -78,7 +81,9 @@ export function StickyDropGhost({
         height: ghost.height,
       }}
       transition={{
-        opacity: { duration: 0.24, ease: chromeEase },
+        opacity: settling
+          ? { duration: 0.2, ease: chromeEase }
+          : { duration: 0.24, ease: chromeEase },
         scale: ghostFollowSpring,
         left: ghostFollowSpring,
         top: ghostFollowSpring,

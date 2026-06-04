@@ -53,7 +53,7 @@ export default function CanvasItemZOrderMenu() {
 
   const itemId = getSoleSelectedItemId(selectedIds)
   const bringOutInProgress = useStickyBringOutStore(
-    (s) => s.bringingOutItemId === itemId,
+    (s) => s.recentlyBroughtOutItemId === itemId,
   )
   const zMenuSuppressedItemId = useCanvasItemsStore((s) => s.zMenuSuppressedItemId)
   const hasLassoItemSelection = useLassoStore((s) => s.selectedItemIds.length > 0)

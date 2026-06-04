@@ -14,6 +14,7 @@ import {
   isFontSizeShortcut,
   type FontSizeDirection,
 } from './textEditorFontSize'
+import { rememberEditorSelection } from './textEditorSelectionBookmark'
 
 /** macOS may defer ] keyup until ⌘ is released; OS key-repeat pulses end sooner. */
 const BRACKET_PULSE_TIMEOUT_MS = 140
@@ -110,8 +111,24 @@ export function useTextEditorShortcuts(
       if (!bracketStillHeld()) stopFontSizeHold()
     }
 
+    function rememberHighlightIfNeeded(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (
+        event.key === 'Meta' ||
+        event.key === 'Control' ||
+        isFontSizeShortcut(event)
+      ) {
+        rememberEditorSelection(editor)
+      }
+    }
+
+    function onSelectionChange() {
+      rememberEditorSelection(editor)
+    }
+
     function onKeyDown(event: KeyboardEvent) {
       trackKeyDown(event)
+      rememberHighlightIfNeeded(event)
 
       if (isFormatModifierShortcut(event)) {
         handleTextFormatShortcutEvent(event, editor, onFormatApplied)
@@ -179,6 +196,7 @@ export function useTextEditorShortcuts(
 
     editor.addEventListener('keydown', onKeyDown, true)
     editor.addEventListener('blur', onBlur)
+    document.addEventListener('selectionchange', onSelectionChange)
     window.addEventListener('keyup', onBracketKeyUp, true)
     window.addEventListener('blur', onWindowBlur)
 
@@ -188,6 +206,7 @@ export function useTextEditorShortcuts(
       stopFontSizeHold()
       editor.removeEventListener('keydown', onKeyDown, true)
       editor.removeEventListener('blur', onBlur)
+      document.removeEventListener('selectionchange', onSelectionChange)
       window.removeEventListener('keyup', onBracketKeyUp, true)
       window.removeEventListener('blur', onWindowBlur)
     }

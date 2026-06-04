@@ -10,6 +10,8 @@ import { getSoleSelectedItemId } from './canvasItemZMenuLayout'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import { useLassoStore } from '../drawing/useLassoStore'
 import type { StickyCanvasItem, TextCanvasItem } from './types'
+import { rememberEditorSelection } from './textEditorSelectionBookmark'
+import { persistEditorHtmlNow } from './persistEditorHtml'
 import {
   changeEditorFontSize,
   STICKY_DEFAULT_FONT_SIZE,
@@ -144,7 +146,9 @@ export default function TextFontSizeFloatingMenu() {
       if (!itemId) return
       const ctx = readActiveEditor(itemId)
       if (!ctx) return
+      rememberEditorSelection(ctx.editor)
       if (changeEditorFontSize(ctx.editor, direction, ctx.defaultPx)) {
+        persistEditorHtmlNow(itemId, ctx.editor)
         ctx.editor.dispatchEvent(new Event('input', { bubbles: true }))
       }
     },

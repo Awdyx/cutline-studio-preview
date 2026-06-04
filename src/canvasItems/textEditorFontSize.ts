@@ -1,5 +1,10 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { isEditorEmpty } from './textEditorContent'
+import {
+  editorBookmarkToRange,
+  recallEditorSelection,
+  rememberEditorSelection,
+} from './textEditorSelectionBookmark'
 import { STUDIO_SPAWN_SIZE_SCALE } from './types'
 
 export const TEXT_ITEM_DEFAULT_FONT_SIZE = Math.round(16 * STUDIO_SPAWN_SIZE_SCALE)
@@ -224,22 +229,36 @@ function shiftAllFontSizes(
  * relative to their current sizes.
  * Called directly from onKeyDown / button clicks — does NOT touch focus.
  */
+function partialRangeForFontSize(editor: HTMLElement): Range | null {
+  rememberEditorSelection(editor)
+
+  const selection = window.getSelection()
+  const live =
+    selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  if (
+    live &&
+    !live.collapsed &&
+    editor.contains(live.commonAncestorContainer)
+  ) {
+    return live
+  }
+
+  const bookmark = recallEditorSelection(editor)
+  if (!bookmark || bookmark.end <= bookmark.start) return null
+  const recalled = editorBookmarkToRange(editor, bookmark)
+  if (!recalled || recalled.collapsed) return null
+  return recalled
+}
+
 export function changeEditorFontSize(
   editor: HTMLElement,
   direction: FontSizeDirection,
   defaultPx: number,
 ): boolean {
   const delta = direction === 'increase' ? FONT_SIZE_STEP : -FONT_SIZE_STEP
+  const range = partialRangeForFontSize(editor)
 
-  const selection = window.getSelection()
-  const range =
-    selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
-
-  if (
-    range &&
-    !range.collapsed &&
-    editor.contains(range.commonAncestorContainer)
-  ) {
+  if (range) {
     const currentPx = getFontSizeAtRange(editor, range, defaultPx)
     const nextPx = clampFontSize(currentPx + delta)
     if (nextPx === currentPx) return false

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke-linecap="round">
+  <!-- White halo -->
+  <path d="M3 10 C1 6 3 1 9 1 C15 1 17 5 16 9 C15 12 13 14 11 13" stroke="white" stroke-width="3.5"/>
+  <path d="M3 10 C2 13 0 14 1 17" stroke="white" stroke-width="3.5"/>
+  <polygon points="11,13 19,19 15,15" fill="white" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Icon -->
+  <path d="M3 10 C1 6 3 1 9 1 C15 1 17 5 16 9 C15 12 13 14 11 13" stroke="#111" stroke-width="2"/>
+  <path d="M3 10 C2 13 0 14 1 17" stroke="#111" stroke-width="2"/>
+  <polygon points="11,13 19,19 15,15" fill="#111"/>
+</svg>

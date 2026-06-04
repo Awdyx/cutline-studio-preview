@@ -141,12 +141,18 @@ export default function TextFontSizeFloatingMenu() {
 
   const menuLayout = useTextFontSizeMenuLayout(menuRef, itemId, showMenu)
 
+  const snapshotHighlight = useCallback(() => {
+    if (!itemId) return
+    const ctx = readActiveEditor(itemId)
+    if (ctx) rememberEditorSelection(ctx.editor)
+  }, [itemId])
+
   const applyDirection = useCallback(
     (direction: 'increase' | 'decrease') => {
       if (!itemId) return
       const ctx = readActiveEditor(itemId)
       if (!ctx) return
-      rememberEditorSelection(ctx.editor)
+      ctx.editor.focus({ preventScroll: true })
       if (changeEditorFontSize(ctx.editor, direction, ctx.defaultPx)) {
         persistEditorHtmlNow(itemId, ctx.editor)
         ctx.editor.dispatchEvent(new Event('input', { bubbles: true }))
@@ -180,8 +186,12 @@ export default function TextFontSizeFloatingMenu() {
             pointerEvents: 'auto',
             transformOrigin: 'bottom left',
           }}
+          onPointerDownCapture={(e) => {
+            if (e.button !== 0) return
+            snapshotHighlight()
+            e.preventDefault()
+          }}
           onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.preventDefault()}
         >
           <FontSizeButton
             label="Decrease font size"

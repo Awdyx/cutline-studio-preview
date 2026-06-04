@@ -20,6 +20,7 @@ import {
   prepareEditorForTyping,
   TEXT_ITEM_DEFAULT_FONT_SIZE,
 } from './textEditorFontSize'
+import { isFontSizeMenuFocusTarget } from './fontSizeMenuFocus'
 import { restoreEditorBookmark } from './textEditorSelectionBookmark'
 import { useTextEditorShortcuts } from './useTextEditorShortcuts'
 import {
@@ -422,7 +423,8 @@ export default function TextItem({
             setEditorEmpty(isEditorEmpty(el))
             syncAutoSize()
           }}
-          onBlur={() => {
+          onBlur={(e) => {
+            if (isFontSizeMenuFocusTarget(e.relatedTarget)) return
             syncAutoSize()
             setIsEditing(false)
             flushSaveAndCommit()

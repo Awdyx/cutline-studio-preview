@@ -21,6 +21,7 @@ import { playSound } from '../sound/playSound'
 import { formatKindFromShortcutKey } from './textEditorFormat'
 import { isFontSizeShortcut, prepareEditorForTyping, STICKY_DEFAULT_FONT_SIZE } from './textEditorFontSize'
 import { useTextEditorShortcuts } from './useTextEditorShortcuts'
+import { isFontSizeMenuFocusTarget } from './fontSizeMenuFocus'
 import { restoreEditorBookmark } from './textEditorSelectionBookmark'
 import {
   textAlignmentContainerStyle,
@@ -598,8 +599,9 @@ export default function StickyNote({
             setEditorEmpty(isEditorEmpty(el))
             scheduleSave(readEditorHtml(el))
           }}
-          onBlur={() => {
+          onBlur={(e) => {
             if (customizeSessionActive) return
+            if (isFontSizeMenuFocusTarget(e.relatedTarget)) return
             flushSaveAndCommit()
             setIsEditing(false)
           }}

@@ -261,7 +261,7 @@ export default function CutlineMenu({
             userSelect: 'none',
           }}
         >
-          v1.7
+          v1.8
         </span>
         <SubmenuSoundScope>
         <CutlineAppNavSection
@@ -306,7 +306,7 @@ export default function CutlineMenu({
         )}
           <MenuRow
           icon={Sparkles}
-          label="Customize Cutline"
+          label="Customize Menu"
           inset
           submenuClickSound={false}
           right={<ChevronRight size={14} strokeWidth={2} color={font.colorMuted} />}

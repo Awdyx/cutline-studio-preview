@@ -159,6 +159,7 @@ export function useCanvasGestureCompositor(
         panningStuckClearRef.current = null
       }
       root.removeAttribute('data-canvas-panning')
+      root.removeAttribute('data-canvas-trackpad-pan-lock')
       if (!isOverviewHyperPanActive()) {
         refreshCanvasFrostedSurfaces(canvasRef.current)
       }
@@ -187,6 +188,13 @@ export function useCanvasGestureCompositor(
     }
 
     const syncPanningAttr = () => {
+      const { canvasPanActive } = usePanMotionStore.getState()
+      if (canvasPanActive) {
+        root.setAttribute('data-canvas-trackpad-pan-lock', '')
+      } else {
+        root.removeAttribute('data-canvas-trackpad-pan-lock')
+      }
+
       if (isCanvasGesturing()) {
         if (!meshPauseReleaseRef.current) {
           meshPauseReleaseRef.current = holdMeshPauseSync()

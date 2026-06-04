@@ -27,14 +27,16 @@ import { queryUiPinElement } from './uiPinDom'
 import { uiAnchorElement, uiAnchorFocusScale } from './uiAnchorFocusScale'
 import {
   UI_CUSTOMIZE_BACKDROP_BLUR_OFF,
+  UI_CUSTOMIZE_BACKDROP_ENTER,
+  UI_CUSTOMIZE_BACKDROP_EXIT,
   UI_CUSTOMIZE_CHROME_BACKDROP_BLUR,
+  UI_CUSTOMIZE_CHROME_BACKDROP_BLUR_ENTER_MS,
+  UI_CUSTOMIZE_CHROME_BACKDROP_BLUR_EXIT_MS,
   UI_CUSTOMIZE_EASE_OUT,
   UI_CUSTOMIZE_VIGNETTE_ENTER,
   UI_CUSTOMIZE_VIGNETTE_EXIT,
 } from './canvasItemCustomizeLayout'
 
-const CHROME_BACKDROP_BLUR_ENTER_MS = 900
-const CHROME_BACKDROP_BLUR_EXIT_MS = 1180
 import { useMediaBlobUrl } from '../hooks/useMediaBlobUrl'
 import { DrawingStrokesSvg } from './DrawingStrokesSvg'
 import { useCanvasCustomizeActive, useCanvasCustomizeStore } from '../canvasItemCustomize/canvasCustomizeStore'
@@ -730,22 +732,25 @@ export default function UiCustomizationLayer({
   const chromeBackdropRef = useRef<HTMLDivElement>(null)
   const [chromeBackdropBlurred, setChromeBackdropBlurred] = useState(false)
   const [chromeBackdropBlurMs, setChromeBackdropBlurMs] = useState(
-    CHROME_BACKDROP_BLUR_ENTER_MS,
+    UI_CUSTOMIZE_CHROME_BACKDROP_BLUR_ENTER_MS,
   )
   const chromeBackdropMotionTransition = reduceMotion
     ? { duration: 0.01 }
     : {
-        duration: 0.88,
-        ease: UI_CUSTOMIZE_EASE_OUT,
-        exit: { duration: 1.12, ease: [0.45, 0, 0.2, 1] as const },
+        ...UI_CUSTOMIZE_BACKDROP_ENTER,
+        exit: UI_CUSTOMIZE_BACKDROP_EXIT,
       }
 
   useLayoutEffect(() => {
     if (!showChromeCustomize) return
-    setChromeBackdropBlurMs(CHROME_BACKDROP_BLUR_ENTER_MS)
+    setChromeBackdropBlurMs(UI_CUSTOMIZE_CHROME_BACKDROP_BLUR_ENTER_MS)
     flushSync(() => setChromeBackdropBlurred(false))
     void chromeBackdropRef.current?.getBoundingClientRect()
-    setChromeBackdropBlurred(true)
+    // Defer blur-on to the next frame so CSS sees blur(0) as the start state.
+    const frame = requestAnimationFrame(() => {
+      setChromeBackdropBlurred(true)
+    })
+    return () => cancelAnimationFrame(frame)
   }, [showChromeCustomize])
 
   useLayoutEffect(() => {
@@ -827,13 +832,20 @@ export default function UiCustomizationLayer({
             key="chrome-customize-backdrop"
             data-ui-customization-backdrop=""
             data-ui-customize-backdrop-tone="chrome"
-            initial={{ opacity: 0 }}
+            initial={{ opacity: 1 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={chromeBackdropMotionTransition}
             onExitStart={() => {
-              setChromeBackdropBlurMs(CHROME_BACKDROP_BLUR_EXIT_MS)
+              setChromeBackdropBlurMs(UI_CUSTOMIZE_CHROME_BACKDROP_BLUR_EXIT_MS)
+              // Keep one painted frame at full blur/dim so the CSS transition runs.
+              requestAnimationFrame(() => {
+                setChromeBackdropBlurred(false)
+              })
+            }}
+            onExitComplete={() => {
               setChromeBackdropBlurred(false)
+              setChromeBackdropBlurMs(UI_CUSTOMIZE_CHROME_BACKDROP_BLUR_ENTER_MS)
             }}
             onPointerDown={onBackdropDown}
             style={{
@@ -842,7 +854,9 @@ export default function UiCustomizationLayer({
               zIndex: 50,
               cursor: 'default',
               pointerEvents: 'auto',
-              background: 'var(--ui-customize-backdrop)',
+              background: chromeBackdropBlurred
+                ? 'var(--ui-customize-backdrop)'
+                : 'transparent',
               backdropFilter: chromeBackdropBlurred
                 ? UI_CUSTOMIZE_CHROME_BACKDROP_BLUR
                 : UI_CUSTOMIZE_BACKDROP_BLUR_OFF,
@@ -850,7 +864,7 @@ export default function UiCustomizationLayer({
                 ? UI_CUSTOMIZE_CHROME_BACKDROP_BLUR
                 : UI_CUSTOMIZE_BACKDROP_BLUR_OFF,
               transition: !reduceMotion
-                ? `backdrop-filter ${chromeBackdropBlurMs}ms cubic-bezier(0.16, 1, 0.3, 1)`
+                ? `backdrop-filter ${chromeBackdropBlurMs}ms cubic-bezier(0.16, 1, 0.3, 1), -webkit-backdrop-filter ${chromeBackdropBlurMs}ms cubic-bezier(0.16, 1, 0.3, 1), background ${chromeBackdropBlurMs}ms cubic-bezier(0.16, 1, 0.3, 1)`
                 : undefined,
             }}
           />

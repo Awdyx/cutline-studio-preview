@@ -101,12 +101,16 @@ export const CANVAS_CUSTOMIZE_LIFT_TRANSITION = {
 export const CANVAS_CUSTOMIZE_LIFT_CSS_TRANSITION =
   'transform 380ms cubic-bezier(0.32, 1.2, 0.55, 1)'
 
+/** Chrome customize menu backdrop — blur + dim fade-in (matches motion + CSS). */
+export const UI_CUSTOMIZE_CHROME_BACKDROP_BLUR_ENTER_MS = 300
+export const UI_CUSTOMIZE_CHROME_BACKDROP_BLUR_EXIT_MS = 300
+
 export const UI_CUSTOMIZE_BACKDROP_ENTER = {
-  opacity: { duration: 0.48, ease: UI_CUSTOMIZE_EASE_OUT },
+  opacity: { duration: 0.3, ease: UI_CUSTOMIZE_EASE_OUT },
 } as const
 
 export const UI_CUSTOMIZE_BACKDROP_EXIT = {
-  opacity: { duration: 0.44, ease: [0.45, 0, 0.2, 1] },
+  opacity: { duration: 0.3, ease: UI_CUSTOMIZE_EASE_OUT },
 } as const
 
 /** Keep chrome customize backdrop visible while blur/dim CSS transition finishes. */

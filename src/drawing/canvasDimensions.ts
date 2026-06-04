@@ -27,8 +27,8 @@ export function canvasLayoutHeight(): number {
 export const CANVAS_ASPECT = CANVAS_VIRTUAL_WIDTH / CANVAS_VIRTUAL_HEIGHT
 
 /** Original 4:3 working area — logical coords for items, strokes, and pockets. */
-export const CANVAS_ORIGINAL_WIDTH = 2026
-export const CANVAS_ORIGINAL_HEIGHT = 1520
+export const CANVAS_ORIGINAL_WIDTH = 2533
+export const CANVAS_ORIGINAL_HEIGHT = 1900
 
 /** Default studio-centre top-left on the main canvas. */
 export const CANVAS_CONTENT_OFFSET_X = (CANVAS_WIDTH - CANVAS_ORIGINAL_WIDTH) / 2

@@ -51,3 +51,6 @@ export const RESIZE_SFX_LEVEL = 0.216
 
 /** Canvas pan whoosh — airy/bright bed, kept subtle since panning is frequent. */
 export const PAN_SFX_LEVEL = 2.08
+
+/** Canvas zoom air bed — quieter than pan; filter-only timbre. */
+export const ZOOM_SFX_LEVEL = 0.95

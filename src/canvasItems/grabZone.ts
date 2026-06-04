@@ -80,6 +80,7 @@ export function getGrabHandleSide(
   canvasWidth: number,
   hitSize = resolveCanvasHandleHitSize(),
 ): GrabHandleSide {
+  if (itemX < 0 || itemX + itemWidth > canvasWidth) return 'left'
   if (grabHandleFitsOnCanvas(itemX, itemWidth, 'left', canvasWidth, hitSize)) {
     return 'left'
   }
@@ -127,6 +128,7 @@ export function getGrabHandleVertical(
   canvasHeight: number,
   hitSize = resolveCanvasHandleHitSize(),
 ): GrabHandleVertical {
+  if (itemY < 0 || itemY + itemHeight > canvasHeight) return 'top'
   if (grabHandleFitsVerticallyOnCanvas(itemY, itemHeight, 'top', canvasHeight, hitSize)) {
     return 'top'
   }

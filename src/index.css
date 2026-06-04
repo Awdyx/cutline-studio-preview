@@ -32,10 +32,10 @@ button {
 
 .cutline-draw-target--positioned {
   position: absolute;
-  left: var(--canvas-studio-x, 5400px);
-  top: var(--canvas-studio-y, 5925px);
-  width: var(--canvas-studio-w, 4200px);
-  height: var(--canvas-studio-h, 3150px);
+  left: var(--canvas-studio-x, 2234px);
+  top: var(--canvas-studio-y, 1050px);
+  width: var(--canvas-studio-w, 2533px);
+  height: var(--canvas-studio-h, 1900px);
   z-index: 1;
   overflow: visible;
 }
@@ -638,8 +638,8 @@ html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: stretch;
+  gap: 0;
   width: max-content;
   pointer-events: auto;
 }
@@ -651,9 +651,12 @@ html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
 
 .pen-fab-settings-shell {
   overflow: hidden;
-  border-radius: 16px;
   align-self: stretch;
   flex-shrink: 0;
+}
+
+.pen-fab-settings-shell + .pen-fab-toolbar {
+  border-top: 1px solid var(--glass-border);
 }
 
 .pen-fab-settings-shell .pen-fab-tool-settings,
@@ -718,13 +721,13 @@ html[data-tool-mode="lasso"][data-space-draw] .cutline-canvas-viewport {
   pointer-events: none;
 }
 
-html[data-layout='phone'] .pen-fab-menu--phone.pen-fab-tool-settings,
-html[data-layout='phone'] .pen-fab-menu--phone.pen-fab-lasso-panel,
-html[data-layout='phone'] .pen-fab-menu--phone.pen-fab-eraser-panel {
+html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-tool-settings,
+html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-lasso-panel,
+html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-eraser-panel {
   pointer-events: auto;
 }
 
-html[data-layout='phone'] .pen-fab-menu--phone.pen-fab-toolbar {
+html[data-layout='phone'] .pen-fab-menu--phone .pen-fab-toolbar {
   pointer-events: auto;
 }
 
@@ -1912,10 +1915,14 @@ html[data-space-draw] .study-hub-scratch-pad {
   contain: layout style;
 }
 
-/* Trackpad / touch pan burst started outside — pass hits through the whole widget subtree. */html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'],
+/* Active canvas pan — pass hits through study hubs so scroll/practice chrome cannot steal the gesture. */html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'],
 html[data-canvas-trackpad-pan-lock] [data-canvas-item='study_hub'] * {
   pointer-events: none !important;
   touch-action: none !important;
+}
+
+html[data-canvas-trackpad-pan-lock] .study-hub-scroll {
+  overflow-y: hidden;
 }
 
 .study-hub-resize-snap-pulse,

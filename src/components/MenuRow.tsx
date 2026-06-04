@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { playSubmenuHover, playSubmenuTap } from '../sound/submenuSound'
 import { chromeLabel, font } from '../styles/tokens'
@@ -6,8 +6,19 @@ import { useSubmenuSoundScope } from './SubmenuSoundScope'
 import ProfileStatusDot from './ProfileStatusDot'
 import type { ProfileStatus } from '../profile/types'
 
-/** Hover pill is slightly smaller than active/tap pills. */
-const MENU_ROW_HOVER_SCALE = 0.97
+/** Shared absolute pill for hover, active, and tap — must match or both show on click. */
+function menuRowFillStyle(inset: boolean): CSSProperties {
+  return {
+    position: 'absolute',
+    top: 1,
+    bottom: 1,
+    left: inset ? 0 : 6,
+    right: inset ? 0 : 6,
+    zIndex: -1,
+    borderRadius: 10,
+    pointerEvents: 'none',
+  }
+}
 
 function MenuRowLabel({
   label,
@@ -44,6 +55,8 @@ export function MenuRow({
   labelSuffix,
   right,
   onClick,
+  onContextMenu,
+  onDoubleActivate,
   onMouseEnter,
   submenuSounds,
   submenuClickSound = true,
@@ -65,6 +78,9 @@ export function MenuRow({
   labelSuffix?: string
   right?: React.ReactNode
   onClick: () => void
+  onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void
+  /** Right-click (desktop) or double-tap / double-click — e.g. hidden menu unlock. */
+  onDoubleActivate?: () => void
   onMouseEnter?: () => void
   /** When omitted, uses SubmenuSoundScope ancestor. */
   submenuSounds?: boolean
@@ -90,6 +106,8 @@ export function MenuRow({
 }) {
   const [hovered, setHovered] = useState(false)
   const [tapNonce, setTapNonce] = useState(0)
+  const [tapping, setTapping] = useState(false)
+  const lastPointerUpAtRef = useRef(0)
   const reduceMotion = useReducedMotion()
   const inSubmenuScope = useSubmenuSoundScope()
   const sounds = submenuSounds ?? inSubmenuScope
@@ -104,7 +122,10 @@ export function MenuRow({
       onClick={() => {
         if (!canInteract) return
         if (sounds && submenuClickSound) playSubmenuTap()
-        if (!reduceMotion) setTapNonce((n) => n + 1)
+        if (!reduceMotion) {
+          setTapNonce((n) => n + 1)
+          setTapping(true)
+        }
         onClick()
       }}
       onMouseEnter={() => {
@@ -114,6 +135,38 @@ export function MenuRow({
         onMouseEnter?.()
       }}
       onMouseLeave={() => setHovered(false)}
+      onContextMenu={
+        onContextMenu
+          ? (event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onContextMenu(event)
+            }
+          : undefined
+      }
+      onDoubleClick={
+        onDoubleActivate
+          ? (event) => {
+              event.preventDefault()
+              onDoubleActivate()
+            }
+          : undefined
+      }
+      onPointerUp={
+        onDoubleActivate
+          ? (event) => {
+              if (event.pointerType === 'mouse') return
+              const now = performance.now()
+              if (now - lastPointerUpAtRef.current < 360) {
+                lastPointerUpAtRef.current = 0
+                event.preventDefault()
+                onDoubleActivate()
+                return
+              }
+              lastPointerUpAtRef.current = now
+            }
+          : undefined
+      }
       style={{
         position: 'relative',
         isolation: 'isolate',
@@ -149,22 +202,14 @@ export function MenuRow({
           : 'theme-surface'
       }
     >
-      {/* Hover fill — same pill shape as active/tap, scaled down slightly so hover reads lighter than selection. */}
+      {/* Hover fill — same geometry as active/tap; hidden while tap or selection is showing. */}
       {!noHoverFill && (
         <span
           aria-hidden
           style={{
-            position: 'absolute',
-            top: 1,
-            bottom: 1,
-            left: inset ? 0 : 6,
-            right: inset ? 0 : 6,
-            zIndex: -1,
-            transform: `scale(${MENU_ROW_HOVER_SCALE})`,
+            ...menuRowFillStyle(inset),
             background: destructive ? 'var(--menu-row-destructive-hover)' : 'var(--menu-row-hover-fill)',
-            borderRadius: 10,
-            pointerEvents: 'none',
-            opacity: hovered && canInteract ? 1 : 0,
+            opacity: hovered && canInteract && !active && !tapping ? 1 : 0,
             transition: 'opacity 120ms ease',
           }}
         />
@@ -179,15 +224,8 @@ export function MenuRow({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
             style={{
-              position: 'absolute',
-              top: 1,
-              bottom: 1,
-              left: inset ? 0 : 6,
-              right: inset ? 0 : 6,
-              zIndex: -1,
+              ...menuRowFillStyle(inset),
               background: 'var(--menu-row-active-bg)',
-              borderRadius: 10,
-              pointerEvents: 'none',
             }}
           />
         )}
@@ -199,18 +237,12 @@ export function MenuRow({
           initial={{ opacity: 0.4 }}
           animate={{ opacity: 0 }}
           transition={{ duration: 1.25, ease: [0.45, 0, 0.55, 1] }}
+          onAnimationComplete={() => setTapping(false)}
           style={{
-            position: 'absolute',
-            top: 1,
-            bottom: 1,
-            left: inset ? 0 : 6,
-            right: inset ? 0 : 6,
-            zIndex: -1,
+            ...menuRowFillStyle(inset),
             background: destructive
               ? 'var(--menu-row-destructive-tap)'
               : 'var(--menu-row-tap-bg)',
-            borderRadius: 10,
-            pointerEvents: 'none',
           }}
         />
       )}

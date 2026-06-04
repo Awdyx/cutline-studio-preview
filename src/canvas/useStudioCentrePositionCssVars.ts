@@ -1,11 +1,15 @@
 import { useEffect } from 'react'
+import {
+  centredStudioCentrePosition,
+  syncStudioCentreCssVars,
+} from './studioCentrePosition'
 import { useStudioCentrePositionStore } from './studioCentrePositionStore'
-import { syncStudioCentreCssVars } from './studioCentrePosition'
 
-/** One-time sync of studio-centre CSS vars on mount (drag updates vars directly). */
+/** Sync void-centred studio layout vars on mount (before async workspace hydrate). */
 export function useStudioCentrePositionCssVars() {
   useEffect(() => {
-    const { x, y } = useStudioCentrePositionStore.getState()
-    syncStudioCentreCssVars(x, y)
+    const next = centredStudioCentrePosition()
+    useStudioCentrePositionStore.setState(next)
+    syncStudioCentreCssVars(next.x, next.y)
   }, [])
 }

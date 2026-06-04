@@ -1,5 +1,8 @@
 import { create } from 'zustand'
-import type { ReloadIntroCopy } from './reloadIntroCopy'
+import {
+  type ReloadIntroCopy,
+  RELOAD_INTRO_SUFFIXES,
+} from './reloadIntroCopy'
 import {
   playReloadIntroArriveSound,
   playReloadIntroDismissSound,
@@ -18,7 +21,10 @@ type ReloadIntroState = {
   finish: () => void
 }
 
-const DEFAULT_COPY: ReloadIntroCopy = { name: 'studio', suffix: '<3' }
+const DEFAULT_COPY: ReloadIntroCopy = {
+  name: '',
+  suffix: RELOAD_INTRO_SUFFIXES[0],
+}
 
 function syncDom(phase: ReloadIntroPhase) {
   const root = document.documentElement

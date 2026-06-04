@@ -10,6 +10,7 @@ import {
   CHROME_FROSTED_MENU_CLASS,
   CHROME_GLASS_CLASS,
   CHROME_SURFACE_BG_TRANSITION,
+  PLUS_FAB_MENU_PANEL_CLASS,
   chromeBottomRightFixed,
   chromeFabMenuWrapperMotion,
   chromeFrostedMenuStyle,
@@ -536,13 +537,6 @@ export default function PenFab() {
     ? phoneFabMenuSlideMotion
     : chromeFabMenuWrapperMotion(reduceMotion)
 
-  const penFabMenuStyle: React.CSSProperties = {
-    ...chromeFrostedMenuStyle,
-    fontFamily: font.family,
-    color: font.colorPrimary,
-    transformOrigin: '100% 100%',
-  }
-
   return (
     <div
       ref={containerRef}
@@ -573,16 +567,22 @@ export default function PenFab() {
           minHeight: isOpen && !isPhone ? PEN_FAB_MENU_STACK_PX : undefined,
         }}
       >
-        {isOpen && (
-            <div
+        <AnimatePresence initial={false}>
+          {isOpen && (
+            <motion.div
+              key="pen-fab-menu"
               data-pen-fab-menu=""
-              className={`pen-fab-menu${isPhone ? ' pen-fab-menu--phone' : ''}`}
+              className={`pen-fab-menu theme-surface ${CHROME_FROSTED_MENU_CLASS} ${PLUS_FAB_MENU_PANEL_CLASS}${isPhone ? ' pen-fab-menu--phone' : ''}`}
               onMouseDown={(e) => e.stopPropagation()}
               style={{
+                ...chromeFrostedMenuStyle,
                 fontFamily: font.family,
                 color: font.colorPrimary,
+                overflow: 'hidden',
                 pointerEvents: isPhone ? 'none' : 'auto',
+                transformOrigin: '100% 100%',
               }}
+              {...penFabMenuMotion}
             >
               <AnimatePresence initial={false}>
                 {settingsPanelKey && (
@@ -591,8 +591,6 @@ export default function PenFab() {
                     {...(colorPopover ? { 'data-pen-fab-tool-settings': '' } : {})}
                     className={[
                       'pen-fab-settings-shell',
-                      'theme-surface',
-                      CHROME_FROSTED_MENU_CLASS,
                       colorPopover
                         ? 'pen-fab-tool-settings'
                         : lassoTargetOpen
@@ -600,7 +598,6 @@ export default function PenFab() {
                           : 'pen-fab-eraser-panel',
                     ].join(' ')}
                     style={{
-                      ...penFabMenuStyle,
                       position: 'relative',
                       width: '100%',
                       height: SUBMENU_PANEL_HEIGHT,
@@ -633,14 +630,11 @@ export default function PenFab() {
                 )}
               </AnimatePresence>
 
-              <motion.div
-                className={`pen-fab-toolbar theme-surface ${CHROME_FROSTED_MENU_CLASS}`}
+              <div
+                className="pen-fab-toolbar"
                 style={{
-                  ...penFabMenuStyle,
-                  transformOrigin: '100% 100%',
                   pointerEvents: isPhone ? 'none' : 'auto',
                 }}
-                {...penFabMenuMotion}
               >
                 <SubmenuSoundScope>
                   <PenFabMenuContent
@@ -658,9 +652,10 @@ export default function PenFab() {
                     compact={isPhone}
                   />
                 </SubmenuSoundScope>
-              </motion.div>
-            </div>
-        )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <ChromeTapSqueezeWrap>
             <button

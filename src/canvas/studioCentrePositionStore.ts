@@ -5,6 +5,7 @@ import { useCanvasWorkspaceStore } from '../spaces/canvasWorkspaceStore'
 import {
   clampStudioCentrePosition,
   defaultStudioCentrePosition,
+  resolveStudioCentrePosition,
   syncStudioCentreCssVars,
   syncStudioCentreLayoutVars,
   type StudioCentrePosition,
@@ -47,9 +48,7 @@ export const useStudioCentrePositionStore = create<StudioCentrePositionState>(
     },
 
     hydrate: (pos) => {
-      const next = pos
-        ? clampStudioCentrePosition(pos.x, pos.y)
-        : defaultStudioCentrePosition()
+      const next = resolveStudioCentrePosition(pos)
       set(next)
       syncStudioCentreCssVars(next.x, next.y)
     },

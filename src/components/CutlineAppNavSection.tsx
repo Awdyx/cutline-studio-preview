@@ -1,5 +1,5 @@
 import type { CSSProperties, RefObject } from 'react'
-import { LayoutDashboard } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, NotebookPen } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { panToAppDestination } from '../navigation/panToAppDestination'
 import { useAppDestinationStore } from '../navigation/appDestinationStore'
@@ -34,9 +34,13 @@ function ActiveDestinationDot() {
 export default function CutlineAppNavSection({
   onNavigate,
   transformRef,
+  onRevealAdvancedMenu,
+  onShowComingSoon,
 }: {
   onNavigate: (opts?: { silent?: boolean }) => void
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
+  onRevealAdvancedMenu: () => void
+  onShowComingSoon: () => void
 }) {
   const destination = useAppDestinationStore((s) => s.destination)
   const setDestination = useAppDestinationStore((s) => s.setDestination)
@@ -58,7 +62,11 @@ export default function CutlineAppNavSection({
         active={studioActive}
         right={studioActive ? <ActiveDestinationDot /> : undefined}
         onClick={goToStudio}
+        onContextMenu={() => onRevealAdvancedMenu()}
+        onDoubleActivate={() => onRevealAdvancedMenu()}
       />
+      <MenuRow icon={MessagesSquare} label="Forum" inset onClick={onShowComingSoon} />
+      <MenuRow icon={NotebookPen} label="Memo" inset onClick={onShowComingSoon} />
     </>
   )
 }

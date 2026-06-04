@@ -77,10 +77,23 @@ export const CANVAS_TRACKPAD_PAN_EXCLUDED = [
   'profile-media-frame-editor',
 ] as const
 
-export function canvasPanExcludedClasses(): string[] {
-  return [...CANVAS_PAN_EXCLUDED]
+/** Study-hub surfaces that steal trackpad pan / wheel unless a canvas pan session is active. */
+const STUDY_HUB_PAN_SURFACE_CLASSES = new Set<string>([
+  'study-hub-scroll',
+  'study-hub-practice',
+  'study-hub-menu-dismiss',
+  'study-hub-scratch-pad',
+  'study-hub-scratch-pad-viewport',
+])
+
+export function canvasPanExcludedClasses(canvasPanActive = false): string[] {
+  const all = [...CANVAS_PAN_EXCLUDED]
+  if (!canvasPanActive) return all
+  return all.filter((cls) => !STUDY_HUB_PAN_SURFACE_CLASSES.has(cls))
 }
 
-export function canvasTrackpadPanExcludedClasses(): string[] {
-  return [...CANVAS_TRACKPAD_PAN_EXCLUDED]
+export function canvasTrackpadPanExcludedClasses(canvasPanActive = false): string[] {
+  const all = [...CANVAS_TRACKPAD_PAN_EXCLUDED]
+  if (!canvasPanActive) return all
+  return all.filter((cls) => !STUDY_HUB_PAN_SURFACE_CLASSES.has(cls))
 }

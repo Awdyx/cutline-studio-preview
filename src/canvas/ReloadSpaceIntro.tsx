@@ -150,38 +150,40 @@ export default function ReloadSpaceIntro() {
         >
           cutline
         </motion.span>
-        <motion.span
-          className="reload-space-intro__name"
-          initial={reduceMotion ? false : { opacity: 0, y: 16, filter: 'blur(8px)' }}
-          animate={
-            revealing
-              ? {
-                  opacity: 0,
-                  y: -12,
-                  filter: reduceMotion ? 'blur(0px)' : 'blur(8px)',
-                }
-              : { opacity: 1, y: 0, filter: 'blur(0px)' }
-          }
-          transition={{
-            duration: revealing
-              ? reduceMotion
-                ? 0.14
-                : REST_EXIT_MS
-              : reduceMotion
-                ? 0.1
-                : ENTRY_MS * 0.82,
-            delay: revealing
-              ? reduceMotion
-                ? 0.04
-                : 0.07
-              : reduceMotion
-                ? 0.04
-                : 0.18,
-            ease: revealing ? REVEAL_EASE : ENTRY_EASE,
-          }}
-        >
-          {nameLabel}
-        </motion.span>
+        {nameLabel ? (
+          <motion.span
+            className="reload-space-intro__name"
+            initial={reduceMotion ? false : { opacity: 0, y: 16, filter: 'blur(8px)' }}
+            animate={
+              revealing
+                ? {
+                    opacity: 0,
+                    y: -12,
+                    filter: reduceMotion ? 'blur(0px)' : 'blur(8px)',
+                  }
+                : { opacity: 1, y: 0, filter: 'blur(0px)' }
+            }
+            transition={{
+              duration: revealing
+                ? reduceMotion
+                  ? 0.14
+                  : REST_EXIT_MS
+                : reduceMotion
+                  ? 0.1
+                  : ENTRY_MS * 0.82,
+              delay: revealing
+                ? reduceMotion
+                  ? 0.04
+                  : 0.07
+                : reduceMotion
+                  ? 0.04
+                  : 0.18,
+              ease: revealing ? REVEAL_EASE : ENTRY_EASE,
+            }}
+          >
+            {nameLabel}
+          </motion.span>
+        ) : null}
         <motion.span
           className="reload-space-intro__suffix"
           initial={reduceMotion ? false : { opacity: 0, scale: 0.6 }}

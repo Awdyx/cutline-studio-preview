@@ -33,6 +33,7 @@ import { desktopChromePanelAnchorLeft, desktopChromePanelTop } from '../platform
 interface CutlineMenuProps {
   isOpen: boolean
   onClose: (opts?: { silent?: boolean }) => void
+  onShowComingSoon: () => void
   mode: ThemeMode
   onModeChange: (mode: ThemeMode) => void
   isCanvasLocked: boolean
@@ -45,6 +46,7 @@ interface CutlineMenuProps {
 export default function CutlineMenu({
   isOpen,
   onClose,
+  onShowComingSoon,
   mode,
   onModeChange,
   isCanvasLocked,
@@ -61,6 +63,7 @@ export default function CutlineMenu({
   const [shortcutsSubmenuOpen, setShortcutsSubmenuOpen] = useState(false)
   const [backupBusy, setBackupBusy] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
+  const [advancedMenuRevealed, setAdvancedMenuRevealed] = useState(false)
   const resetArmTimerRef = useRef<number | null>(null)
 
   const closeAllSubmenus = useCallback(() => {
@@ -71,6 +74,7 @@ export default function CutlineMenu({
   useEffect(() => {
     if (!isOpen) {
       closeAllSubmenus()
+      setAdvancedMenuRevealed(false)
     }
   }, [isOpen, closeAllSubmenus])
 
@@ -260,7 +264,12 @@ export default function CutlineMenu({
           v1.7
         </span>
         <SubmenuSoundScope>
-        <CutlineAppNavSection onNavigate={onClose} transformRef={transformRef} />
+        <CutlineAppNavSection
+          onNavigate={onClose}
+          transformRef={transformRef}
+          onRevealAdvancedMenu={() => setAdvancedMenuRevealed(true)}
+          onShowComingSoon={onShowComingSoon}
+        />
         <div style={menuDividerStyle} />
         <input
           ref={importInputRef}
@@ -269,28 +278,32 @@ export default function CutlineMenu({
           style={{ display: 'none' }}
           onChange={handleImportFileChange}
         />
-        <MenuRow
-          icon={RotateCcw}
-          label={resetArmed ? 'Confirm Reset (No Undo)' : 'Reset to Defaults'}
-          inset
-          destructive
-          disabled={backupBusy}
-          onClick={() => void handleReset()}
-        />
-        <MenuRow
-          icon={Download}
-          label="Export"
-          inset
-          disabled={backupBusy}
-          onClick={() => void handleExportBackup()}
-        />
-        <MenuRow
-          icon={Upload}
-          label="Import"
-          inset
-          disabled={backupBusy}
-          onClick={handleImportBackup}
-        />
+        {advancedMenuRevealed && (
+          <>
+            <MenuRow
+              icon={RotateCcw}
+              label={resetArmed ? 'Confirm Reset (No Undo)' : 'Reset to Defaults'}
+              inset
+              destructive
+              disabled={backupBusy}
+              onClick={() => void handleReset()}
+            />
+            <MenuRow
+              icon={Download}
+              label="Export"
+              inset
+              disabled={backupBusy}
+              onClick={() => void handleExportBackup()}
+            />
+            <MenuRow
+              icon={Upload}
+              label="Import"
+              inset
+              disabled={backupBusy}
+              onClick={handleImportBackup}
+            />
+          </>
+        )}
           <MenuRow
           icon={Sparkles}
           label="Customize Cutline"

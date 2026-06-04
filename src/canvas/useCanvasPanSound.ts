@@ -16,6 +16,15 @@ export function useCanvasPanSound() {
 
     const unsub = usePanMotionStore.subscribe((s) => {
       const moving = Math.hypot(s.vx, s.vy) > MOVE_EPS
+
+      if (!s.canvasPanActive) {
+        if (playing) {
+          stopCanvasPanSound()
+          playing = false
+        }
+        return
+      }
+
       if (moving) {
         if (!playing) {
           startCanvasPanSound()

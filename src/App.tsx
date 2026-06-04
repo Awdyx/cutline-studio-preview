@@ -60,6 +60,7 @@ import { useCanvasWorkspaceStore } from './spaces/canvasWorkspaceStore'
 import PocketStripViewport from './spaces/PocketStripViewport'
 import SpaceBackPill, { SPACE_BACK_PILL_MOTION, SPACE_BACK_PILL_PHONE_CLASS } from './components/SpaceBackPill'
 import CutlineMenu from './components/CutlineMenu'
+import { ComingSoonOverlay } from './components/ComingSoonOverlay'
 import { NEWS_POSTS } from './content/news'
 import type { Notification, NotificationTab, NewsTab } from './types'
 import { useThemeCssVars } from './theme/useThemeCssVars'
@@ -99,6 +100,11 @@ import CanvasPlateBoundsOverlay from './canvas/CanvasPlateBoundsOverlay'
 import { useCanvasPanSession } from './canvas/useCanvasPanSession'
 import { useCanvasZMenuTrackpadPan } from './canvas/useCanvasZMenuTrackpadPan'
 import { useCanvasPanSound } from './canvas/useCanvasPanSound'
+import { useCanvasZoomSound } from './canvas/useCanvasZoomSound'
+import {
+  recordCanvasZoomFrame,
+  resetCanvasZoomVelocityTracking,
+} from './canvas/canvasZoomVelocity'
 import { useCanvasSelectionViewportPark } from './canvas/useCanvasSelectionViewportPark'
 import {
   registerStudioCentreTransformRef,
@@ -265,6 +271,7 @@ type OpenPanel =
 function App() {
   useLayoutProfile()
   useCanvasPanSound()
+  useCanvasZoomSound()
 
   const toolMode = useToolStore((s) => s.mode)
   useEffect(() => {
@@ -287,8 +294,15 @@ function App() {
     () => getCanvasHardMinScale(viewportSize.width, viewportSize.height),
     [viewportSize.width, viewportSize.height],
   )
-  const panExcluded = useMemo(() => canvasPanExcludedClasses(), [])
-  const trackpadPanExcluded = useMemo(() => canvasTrackpadPanExcludedClasses(), [])
+  const canvasPanActive = usePanMotionStore((s) => s.canvasPanActive)
+  const panExcluded = useMemo(
+    () => canvasPanExcludedClasses(canvasPanActive),
+    [canvasPanActive],
+  )
+  const trackpadPanExcluded = useMemo(
+    () => canvasTrackpadPanExcludedClasses(canvasPanActive),
+    [canvasPanActive],
+  )
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const canvasContextMenuPointer = useCanvasContextMenuPointer(transformRef, canvasRef)
   const [canvasMount, setCanvasMount] = useState<HTMLDivElement | null>(null)
@@ -430,10 +444,12 @@ function App() {
     viewportRef,
     zoomExcluded: trackpadPanExcluded,
     onZoom: (ref) => {
+      recordCanvasZoomFrame(ref)
       usePanMotionStore.getState().setZoomActive(true)
     },
     onZoomStop: (ref) => {
       usePanMotionStore.getState().setZoomActive(false)
+      resetCanvasZoomVelocityTracking()
       if (zoomReleaseActive) releaseZoomBounds(ref, hardMinScale)
     },
     disabled: isPenDown,
@@ -508,6 +524,7 @@ function App() {
   const topBarUser = profileToTopBarUser(profile)
 
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null)
+  const [appNavComingSoon, setAppNavComingSoon] = useState(false)
   const [activeTab, setActiveTab] = useState<NotificationTab>('all')
   const [activeNewsTab, setActiveNewsTab] = useState<NewsTab>('all')
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS)
@@ -544,6 +561,11 @@ function App() {
     useShortcutUiStore.getState().dismissPeerChromeOverlays(opts)
     setOpenPanel(null)
   }, [])
+
+  const showAppNavComingSoon = useCallback(() => {
+    closePanel({ silent: true })
+    setAppNavComingSoon(true)
+  }, [closePanel])
   useKeyboardShortcuts(openPanel, closePanel, transformRef)
   usePanelSounds(openPanel, suppressPanelSoundRef)
   useBackgroundMusic()
@@ -735,6 +757,9 @@ function App() {
             disablePadding
             centerZoomedOut={false}
             onInit={onTransformInit}
+            onPanningStart={() => {
+              usePanMotionStore.getState().setCanvasPanActive(true)
+            }}
             onPanning={(ref) => {
               canvasPanSession.onPanFrame(ref)
             }}
@@ -742,9 +767,11 @@ function App() {
               canvasPanSession.onPanStop(ref)
             }}
             onZoom={(ref) => {
+              recordCanvasZoomFrame(ref)
               usePanMotionStore.getState().setZoomActive(true)
             }}
             onPinch={(ref) => {
+              recordCanvasZoomFrame(ref)
               usePanMotionStore.getState().setZoomActive(true)
               // Safety fallback: iPad touch events don't always fire onPinchStop
               // reliably. Reset a countdown on every pinch frame so zoom state clears.
@@ -752,12 +779,14 @@ function App() {
               pinchStopTimer.current = setTimeout(() => {
                 pinchStopTimer.current = null
                 usePanMotionStore.getState().setZoomActive(false)
+                resetCanvasZoomVelocityTracking()
               }, 300)
             }}
             onZoomStop={(ref) => {
               if (zoomReleaseActive) releaseZoomBounds(ref, hardMinScale)
               else clampToLibraryBounds(ref)
               usePanMotionStore.getState().setZoomActive(false)
+              resetCanvasZoomVelocityTracking()
             }}
             onPinchStop={(ref) => {
               if (zoomReleaseActive) releaseZoomBounds(ref, hardMinScale)
@@ -767,6 +796,7 @@ function App() {
                 pinchStopTimer.current = null
               }
               usePanMotionStore.getState().setZoomActive(false)
+              resetCanvasZoomVelocityTracking()
             }}
             wheel={{
               step: CANVAS_WHEEL_ZOOM_STEP,
@@ -969,6 +999,7 @@ function App() {
             key="cutline"
             isOpen
             onClose={closePanel}
+            onShowComingSoon={showAppNavComingSoon}
             mode={themeMode}
             onModeChange={setMode}
             isCanvasLocked={isCanvasLocked}
@@ -1024,6 +1055,15 @@ function App() {
               if (dest === 'help') console.log('help & support')
             }}
             onSignOut={() => console.log('sign out')}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {appNavComingSoon && (
+          <ComingSoonOverlay
+            key="app-nav-coming-soon"
+            onDismiss={() => setAppNavComingSoon(false)}
           />
         )}
       </AnimatePresence>

@@ -13,11 +13,23 @@ export type StudioCentrePosition = {
   y: number
 }
 
-export function defaultStudioCentrePosition(): StudioCentrePosition {
+/** Studio top-left so the plate sits in the middle of the pannable void (7000×4000). */
+export function centredStudioCentrePosition(): StudioCentrePosition {
   return {
-    x: CANVAS_CONTENT_OFFSET_X,
-    y: CANVAS_CONTENT_OFFSET_Y,
+    x: Math.round(CANVAS_CONTENT_OFFSET_X),
+    y: Math.round(CANVAS_CONTENT_OFFSET_Y),
   }
+}
+
+export function defaultStudioCentrePosition(): StudioCentrePosition {
+  return centredStudioCentrePosition()
+}
+
+/** Always place the studio in the void centre (ignore stale saved offsets). */
+export function resolveStudioCentrePosition(
+  _raw?: StudioCentrePosition | null,
+): StudioCentrePosition {
+  return centredStudioCentrePosition()
 }
 
 /** Expanded minimap width — keep in sync with `CANVAS_MINIMAP_EXPANDED_WIDTH_PX`. */
@@ -42,15 +54,11 @@ export const STUDIO_CENTRE_POSITION_BORDER_INSET_TOP = canvasInsetFromMinimapGap
 )
 
 export function clampStudioCentrePosition(x: number, y: number): StudioCentrePosition {
-  const inset = STUDIO_CENTRE_POSITION_BORDER_INSET
-  const topInset = STUDIO_CENTRE_POSITION_BORDER_INSET_TOP
-  const minX = inset
-  const minY = topInset
-  const maxX = CANVAS_WIDTH - CANVAS_ORIGINAL_WIDTH - inset
-  const maxY = CANVAS_HEIGHT - CANVAS_ORIGINAL_HEIGHT - inset
+  const maxX = CANVAS_WIDTH - CANVAS_ORIGINAL_WIDTH
+  const maxY = CANVAS_HEIGHT - CANVAS_ORIGINAL_HEIGHT
   return {
-    x: Math.min(Math.max(minX, x), maxX),
-    y: Math.min(Math.max(minY, y), maxY),
+    x: Math.min(Math.max(0, x), maxX),
+    y: Math.min(Math.max(0, y), maxY),
   }
 }
 
@@ -81,5 +89,5 @@ export function normalizeStudioCentrePosition(
   const o = raw as StudioCentrePosition
   if (typeof o.x !== 'number' || typeof o.y !== 'number') return null
   if (!Number.isFinite(o.x) || !Number.isFinite(o.y)) return null
-  return clampStudioCentrePosition(o.x, o.y)
+  return resolveStudioCentrePosition(o)
 }

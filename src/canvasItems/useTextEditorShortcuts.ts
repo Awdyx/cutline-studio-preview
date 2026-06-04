@@ -1,6 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { startHoldRepeat, type HoldRepeatHandle } from '../hooks/holdRepeat'
-import { isRichTextEditorEngaged } from './textEditorContent'
 import {
   handleTextFormatShortcutEvent,
   isFormatModifierShortcut,
@@ -19,7 +18,10 @@ import {
 /** macOS may defer ] keyup until ⌘ is released; OS key-repeat pulses end sooner. */
 const BRACKET_PULSE_TIMEOUT_MS = 140
 
-/** Capture-phase Cmd/Ctrl shortcuts while a canvas rich-text editor is active. */
+/**
+ * Format + font-size shortcuts on the contenteditable element (capture phase).
+ * Uses document.execCommand for bold/italic/etc. — same approach as MDN contenteditable demos.
+ */
 export function useTextEditorShortcuts(
   editorRef: RefObject<HTMLElement | null>,
   isActive: boolean,
@@ -35,7 +37,10 @@ export function useTextEditorShortcuts(
   const lastBracketPulseRef = useRef(0)
 
   useEffect(() => {
-    if (!isActive) return
+    if (!isActive || !isEditing) return
+
+    const editor = editorRef.current
+    if (!editor) return
 
     function stopFontSizeHold() {
       fontSizeHoldRef.current?.stop()
@@ -108,20 +113,12 @@ export function useTextEditorShortcuts(
     function onKeyDown(event: KeyboardEvent) {
       trackKeyDown(event)
 
-      const editor = editorRef.current
-      if (!editor) return
-
-      const engaged = isRichTextEditorEngaged(editor, event.target)
-      const canHandle = isActive && engaged
-
-      if (isFormatModifierShortcut(event) && canHandle) {
-        if (handleTextFormatShortcutEvent(event, editor, onFormatApplied)) {
-          event.stopPropagation()
-        }
+      if (isFormatModifierShortcut(event)) {
+        handleTextFormatShortcutEvent(event, editor, onFormatApplied)
         return
       }
 
-      if (isFontSizeShortcut(event) && canHandle) {
+      if (isFontSizeShortcut(event)) {
         event.preventDefault()
         event.stopPropagation()
         pulseBracketShortcut()
@@ -165,11 +162,7 @@ export function useTextEditorShortcuts(
         } else if (!bracketStillHeld()) {
           stopFontSizeHold()
         }
-        return
       }
-
-      if (!isEditing || !editor.isContentEditable) return
-      if (!engaged) return
     }
 
     function onWindowBlur() {
@@ -184,20 +177,17 @@ export function useTextEditorShortcuts(
       stopFontSizeHold()
     }
 
-    const editor = editorRef.current
-    if (isEditing) {
-      editor?.addEventListener('blur', onBlur)
-    }
-
-    document.addEventListener('keydown', onKeyDown, true)
+    editor.addEventListener('keydown', onKeyDown, true)
+    editor.addEventListener('blur', onBlur)
     window.addEventListener('keyup', onBracketKeyUp, true)
     window.addEventListener('blur', onWindowBlur)
+
     return () => {
       keysDownRef.current.clear()
       modifierLatchRef.current = false
       stopFontSizeHold()
-      editor?.removeEventListener('blur', onBlur)
-      document.removeEventListener('keydown', onKeyDown, true)
+      editor.removeEventListener('keydown', onKeyDown, true)
+      editor.removeEventListener('blur', onBlur)
       window.removeEventListener('keyup', onBracketKeyUp, true)
       window.removeEventListener('blur', onWindowBlur)
     }

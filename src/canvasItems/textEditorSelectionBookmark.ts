@@ -3,11 +3,6 @@ export type EditorSelectionBookmark = {
   end: number
 }
 
-/** What a format/font-size shortcut should affect. */
-export type EditTarget =
-  | { mode: 'partial'; bookmark: EditorSelectionBookmark }
-  | { mode: 'document' }
-
 const lastNonCollapsedBookmark = new WeakMap<HTMLElement, EditorSelectionBookmark>()
 
 function normalizeEditorRange(range: Range): Range {
@@ -151,66 +146,6 @@ export function recallEditorSelection(
   return lastNonCollapsedBookmark.get(editor) ?? null
 }
 
-/** Prefer a live highlight; fall back to the last remembered non-collapsed range. */
-export function resolveEditorSelectionBookmark(
-  editor: HTMLElement,
-): EditorSelectionBookmark | null {
-  const liveRange = captureEditorSelection(editor)
-  if (liveRange) {
-    const liveBookmark = rangeToEditorBookmark(editor, liveRange)
-    if (liveBookmark && liveBookmark.end > liveBookmark.start) {
-      lastNonCollapsedBookmark.set(editor, liveBookmark)
-      return liveBookmark
-    }
-  }
-
-  const cached = recallEditorSelection(editor)
-  if (cached && cached.end > cached.start) return cached
-
-  return liveRange ? rangeToEditorBookmark(editor, liveRange) : null
-}
-
-function editorTextLength(editor: HTMLElement): number {
-  return editor.textContent?.length ?? 0
-}
-
-/**
- * Resolve partial highlight vs whole-document edit for shortcuts.
- * Call after rememberEditorSelection (e.g. on Meta or format keydown).
- */
-export function resolveEditTarget(editor: HTMLElement): EditTarget | null {
-  rememberEditorSelection(editor)
-
-  const partial =
-    resolveEditorSelectionBookmark(editor) ?? recallEditorSelection(editor)
-  if (partial && partial.end > partial.start) {
-    return { mode: 'partial', bookmark: partial }
-  }
-
-  if (editorTextLength(editor) > 0) return { mode: 'document' }
-
-  return null
-}
-
-/** Full-document bookmark for DOM mutations (no window selection restore). */
-export function documentEditBookmark(
-  editor: HTMLElement,
-): EditorSelectionBookmark | null {
-  const len = editorTextLength(editor)
-  return len > 0 ? { start: 0, end: len } : null
-}
-
-/** Collapsed caret at end of editor — avoids leaving the whole block highlighted. */
-export function collapseEditorCaretToEnd(editor: HTMLElement): void {
-  const sel = window.getSelection()
-  if (!sel) return
-  const range = document.createRange()
-  range.selectNodeContents(editor)
-  range.collapse(false)
-  sel.removeAllRanges()
-  sel.addRange(range)
-}
-
 export function restoreEditorBookmark(
   editor: HTMLElement,
   bookmark: EditorSelectionBookmark | null,
@@ -232,22 +167,4 @@ export function ensureEditorFocused(editor: HTMLElement): void {
   if (active === editor) return
   if (active instanceof Node && editor.contains(active)) return
   editor.focus({ preventScroll: true })
-}
-
-export function restoreEditorSelection(
-  editor: HTMLElement,
-  bookmark: EditorSelectionBookmark | null,
-): void {
-  ensureEditorFocused(editor)
-  if (bookmark && restoreEditorBookmark(editor, bookmark)) return
-  if (bookmark) return
-
-  const selection = window.getSelection()
-  if (!selection) return
-
-  const fallback = document.createRange()
-  fallback.selectNodeContents(editor)
-  fallback.collapse(false)
-  selection.removeAllRanges()
-  selection.addRange(fallback)
 }

@@ -21,8 +21,7 @@ import { playSound } from '../sound/playSound'
 import { formatKindFromShortcutKey } from './textEditorFormat'
 import { isFontSizeShortcut, prepareEditorForTyping, STICKY_DEFAULT_FONT_SIZE } from './textEditorFontSize'
 import { useTextEditorShortcuts } from './useTextEditorShortcuts'
-import { useTextEditorSelectionMemory } from './useTextEditorSelectionMemory'
-import { recallEditorSelection, restoreEditorBookmark } from './textEditorSelectionBookmark'
+import { restoreEditorBookmark } from './textEditorSelectionBookmark'
 import {
   textAlignmentContainerStyle,
   textAlignmentEditorStyle,
@@ -189,13 +188,8 @@ export default function StickyNote({
     setEditorEmpty(isEditorEmpty(el))
     scheduleSave(readEditorHtml(el))
     el.dispatchEvent(new Event('input', { bubbles: true }))
-    if (!isEditing) {
-      pendingSelectionRestoreRef.current = recallEditorSelection(el)
-      beginEditing(false)
-    }
-  }, [beginEditing, isEditing, scheduleSave])
+  }, [scheduleSave])
 
-  useTextEditorSelectionMemory(editableRef, isSelected || isEditing)
   useTextEditorShortcuts(
     editableRef,
     isSelected || isEditing,

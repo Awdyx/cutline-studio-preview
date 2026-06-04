@@ -20,9 +20,8 @@ import {
   prepareEditorForTyping,
   TEXT_ITEM_DEFAULT_FONT_SIZE,
 } from './textEditorFontSize'
-import { recallEditorSelection, restoreEditorBookmark } from './textEditorSelectionBookmark'
+import { restoreEditorBookmark } from './textEditorSelectionBookmark'
 import { useTextEditorShortcuts } from './useTextEditorShortcuts'
-import { useTextEditorSelectionMemory } from './useTextEditorSelectionMemory'
 import {
   textAlignmentContainerStyle,
   textAlignmentEditorStyle,
@@ -187,13 +186,8 @@ export default function TextItem({
     setEditorEmpty(isEditorEmpty(el))
     syncAutoSize()
     el.dispatchEvent(new Event('input', { bubbles: true }))
-    if (!isEditing) {
-      pendingSelectionRestoreRef.current = recallEditorSelection(el)
-      beginEditing(false)
-    }
-  }, [beginEditing, isEditing, scheduleSave, syncAutoSize])
+  }, [scheduleSave, syncAutoSize])
 
-  useTextEditorSelectionMemory(editorRef, isSelected || isEditing)
   useTextEditorShortcuts(
     editorRef,
     isSelected || isEditing,

@@ -4,6 +4,7 @@ export type SoundId =
   | 'itemSelect'
   | 'itemDeselect'
   | 'spawn'
+  | 'uiPinPlace'
   | 'lock'
   | 'unlock'
   | 'spaceEnter'

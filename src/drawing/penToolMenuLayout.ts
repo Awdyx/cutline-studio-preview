@@ -55,6 +55,11 @@ export function isUiDrawCanvasTarget(target: EventTarget | null): boolean {
   return target instanceof Element && !!target.closest('[data-ui-draw-canvas]')
 }
 
+export function isPointerOverUiDrawCanvas(clientX: number, clientY: number): boolean {
+  const el = document.elementFromPoint(clientX, clientY)
+  return isUiDrawCanvasTarget(el)
+}
+
 export function pillScreenRect(
   anchorX: number,
   anchorY: number,

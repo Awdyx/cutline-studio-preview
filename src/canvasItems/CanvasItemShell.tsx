@@ -80,6 +80,7 @@ export default function CanvasItemShell({
   forceLift = false,
   embeddedInSticky = false,
   handlesPortal = null,
+  persistWhileCustomizeHide = null,
 }: {
   item: CanvasItem
   transformRef: RefObject<ReactZoomPanPinchContentRef | null>
@@ -91,6 +92,8 @@ export default function CanvasItemShell({
   embeddedInSticky?: boolean
   /** When set, drag/resize handles portal here so they aren't clipped by the sticky face. */
   handlesPortal?: HTMLElement | null
+  /** Stays mounted while canvas copy hides for customize lift (e.g. sticky overflow ghost). */
+  persistWhileCustomizeHide?: React.ReactNode
 }) {
   const { isDragging, onGrabPointerDown } = useCanvasItemDrag(item.id)
   const activeDragItemId = useCanvasItemDragStore((s) => s.activeItemId)
@@ -549,20 +552,21 @@ export default function CanvasItemShell({
         transformOrigin: 'top left',
         overflow: 'visible',
         pointerEvents: showCustomizePortal ? 'none' : 'none',
-        visibility: hideCanvasCustomizeContent ? 'hidden' : 'visible',
         x: uiCustomizable ? undefined : lassoDx,
         y: uiCustomizable ? undefined : lassoDy,
         borderRadius: itemSurfaceRadius,
       }}
-      aria-hidden={hideCanvasCustomizeContent || undefined}
     >
+      {!hideCanvasCustomizeContent ? persistWhileCustomizeHide : null}
       <div
         ref={exitLandRef}
         style={{
           width: '100%',
           height: '100%',
           transformOrigin: 'top left',
+          visibility: hideCanvasCustomizeContent ? 'hidden' : 'visible',
         }}
+        aria-hidden={hideCanvasCustomizeContent || undefined}
       >
         {!hideCanvasCustomizeContent ? renderItemContent('canvas', false) : null}
       </div>
@@ -585,6 +589,7 @@ export default function CanvasItemShell({
           enterPhase={customizeEnterPhase}
           exiting={false}
         >
+          {hideCanvasCustomizeContent ? persistWhileCustomizeHide : null}
           {mountPortalCustomizeContent
             ? renderItemContent('portal', true)
             : null}

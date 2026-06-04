@@ -106,6 +106,7 @@ import {
 import { useStudioCentrePositionCssVars } from './canvas/useStudioCentrePositionCssVars'
 import { blurStrayTextFocus } from './platform/textFocus'
 import { idleAfterFirstPaint, isTouchFirstDevice } from './platform/compositor'
+import { isPhoneLayout } from './platform/layoutProfile'
 import { useLayoutProfile } from './hooks/useLayoutProfile'
 import { useShortcutUiStore } from './shortcuts/shortcutUiStore'
 import SettingsSubmenu from './components/SettingsSubmenu'
@@ -419,7 +420,10 @@ function App() {
       el.removeAttribute('data-pen-tool-menu-open')
     }
   }, [penToolMenuOpen])
-  const canvasGestureLocked = isPenDown || toolPaletteOpen || uiEditing
+  const canvasGestureLocked =
+    isPenDown ||
+    (toolPaletteOpen && (!isTouchFirstDevice() || isPhoneLayout())) ||
+    uiEditing
   useBlockPagePinchZoom()
   useCanvasCursorWheelZoom({
     transformRef,

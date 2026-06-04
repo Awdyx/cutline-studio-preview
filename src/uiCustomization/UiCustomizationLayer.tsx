@@ -4,6 +4,11 @@ import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } fr
 import { Check, Crop, Pencil } from 'lucide-react'
 import type { ReactZoomPanPinchContentRef } from 'react-zoom-pan-pinch'
 import { playSound } from '../sound/playSound'
+import {
+  startItemDragSound,
+  stopItemDragSound,
+  updateItemDragSound,
+} from '../sound/itemDragSound'
 import { font } from '../styles/tokens'
 import type { UiPinAsset } from './types'
 import UiPinTray from './UiPinTray'
@@ -577,10 +582,14 @@ export default function UiCustomizationLayer({
       // Show ghost once movement threshold crossed
       if (!ghostHasMovedRef.current && dist > 6) {
         ghostHasMovedRef.current = true
+        playSound('itemGrab')
+        startItemDragSound()
         setGhostVisible(true)
         animate(ghostScale, 1, { type: 'spring', stiffness: 380, damping: 22, mass: 0.6 })
         animate(ghostOpacity, 1, { duration: 0.14 })
       }
+
+      if (ghostHasMovedRef.current) updateItemDragSound(e.clientX, e.clientY)
 
       ghostX.set(e.clientX - GHOST_SIZE / 2)
       ghostY.set(e.clientY - GHOST_SIZE / 2)
@@ -599,6 +608,7 @@ export default function UiCustomizationLayer({
 
     const onUp = async (e: PointerEvent) => {
       const hasMoved = ghostHasMovedRef.current
+      stopItemDragSound()
       const anchorId = focusedAnchorIdRef.current
       // Re-evaluate position at the exact moment of release so that dragging
       // back to the source area (tray) and releasing correctly dismisses even
@@ -657,6 +667,7 @@ export default function UiCustomizationLayer({
     document.addEventListener('pointerup', onUp, true)
     document.addEventListener('pointercancel', onUp, true)
     return () => {
+      stopItemDragSound()
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp, true)
       document.removeEventListener('pointercancel', onUp, true)

@@ -1,12 +1,15 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { readEditorHtml } from './textEditorContent'
 import {
+  collapseEditorCaretToEnd,
+  documentEditBookmark,
   editorBookmarkToRange,
   rangeToEditorBookmark,
   recallEditorSelection,
   rememberEditorSelection,
-  resolveEditorSelectionBookmark,
+  resolveEditTarget,
   restoreEditorBookmark,
+  type EditTarget,
   type EditorSelectionBookmark,
 } from './textEditorSelectionBookmark'
 
@@ -27,10 +30,6 @@ const FORMAT_TAG_ALIASES: Record<TextFormatKind, readonly string[]> = {
 }
 
 type FormatKeyEvent = KeyboardEvent | ReactKeyboardEvent
-
-function editorTextLength(editor: HTMLElement): number {
-  return editor.textContent?.length ?? 0
-}
 
 function isFormatTagName(tagName: string, kind: TextFormatKind): boolean {
   return FORMAT_TAG_ALIASES[kind].includes(tagName.toLowerCase())
@@ -128,57 +127,71 @@ function wrapRangeWithFormat(range: Range, tagName: string): HTMLElement {
   return wrapper
 }
 
-/** Apply inline formatting to a bookmarked range without focus() or execCommand. */
+function postApplySelection(
+  editor: HTMLElement,
+  target: EditTarget,
+  bookmark: EditorSelectionBookmark,
+): void {
+  if (target.mode === 'document') collapseEditorCaretToEnd(editor)
+  else restoreEditorBookmark(editor, bookmark)
+}
+
+/** Apply inline formatting via DOM only (no execCommand, no pre-restore). */
+export function applyTextFormatForTarget(
+  editor: HTMLElement,
+  kind: TextFormatKind,
+  target: EditTarget,
+): boolean {
+  const bookmark =
+    target.mode === 'partial'
+      ? target.bookmark
+      : documentEditBookmark(editor)
+  if (!bookmark) return false
+
+  const range = editorBookmarkToRange(editor, bookmark)
+  if (!range || range.collapsed) return false
+
+  if (isRangeUniformlyFormatted(range, kind)) {
+    removeFormatFromRange(range, kind)
+    postApplySelection(editor, target, bookmark)
+    return true
+  }
+
+  const wrapper = wrapRangeWithFormat(range, FORMAT_TAG[kind])
+  const probe = document.createRange()
+  probe.selectNodeContents(wrapper)
+  const nextBookmark = rangeToEditorBookmark(editor, probe) ?? bookmark
+  postApplySelection(editor, target, nextBookmark)
+  return true
+}
+
+/** @deprecated Prefer applyTextFormatForTarget + resolveEditTarget. */
 export function applyTextFormatAtBookmark(
   editor: HTMLElement,
   kind: TextFormatKind,
   bookmark: EditorSelectionBookmark | null,
 ): EditorSelectionBookmark | null {
-  let target = bookmark ?? resolveEditorSelectionBookmark(editor)
-
-  if (!target || target.end <= target.start) {
-    const len = editorTextLength(editor)
-    if (len === 0) return null
-    target = { start: 0, end: len }
-  }
-
-  const range = editorBookmarkToRange(editor, target)
-  if (!range || range.collapsed) return null
-
-  if (isRangeUniformlyFormatted(range, kind)) {
-    removeFormatFromRange(range, kind)
-    restoreEditorBookmark(editor, target)
-    return target
-  }
-
-  const wrapper = wrapRangeWithFormat(range, FORMAT_TAG[kind])
-
-  const selection = document.createRange()
-  selection.selectNodeContents(wrapper)
-  const nextBookmark = rangeToEditorBookmark(editor, selection)
-  restoreEditorBookmark(editor, nextBookmark ?? target)
-  return nextBookmark ?? target
+  const target: EditTarget | null = bookmark
+    ? bookmark.end > bookmark.start
+      ? { mode: 'partial', bookmark }
+      : { mode: 'document' }
+    : resolveEditTarget(editor)
+  if (!target) return null
+  return applyTextFormatForTarget(editor, kind, target)
+    ? bookmark ?? (target.mode === 'partial' ? target.bookmark : documentEditBookmark(editor))
+    : null
 }
 
-/**
- * Format the current highlight, or all text when nothing is selected.
- * Works while the editor is or isn't contentEditable — no focus() calls.
- */
 export function applyTextFormatToAll(
   editor: HTMLElement,
   kind: TextFormatKind,
 ): string | null {
   if (!editor.textContent?.trim() && editor.innerHTML === '') return null
 
-  rememberEditorSelection(editor)
-  const bookmark =
-    resolveEditorSelectionBookmark(editor) ??
-    recallEditorSelection(editor) ??
-    (editorTextLength(editor) > 0
-      ? { start: 0, end: editorTextLength(editor) }
-      : null)
+  const target = resolveEditTarget(editor)
+  if (!target) return null
 
-  applyTextFormatAtBookmark(editor, kind, bookmark)
+  applyTextFormatForTarget(editor, kind, target)
   return readEditorHtml(editor)
 }
 
@@ -187,7 +200,14 @@ export function applyTextFormat(
   kind: TextFormatKind,
   bookmark?: EditorSelectionBookmark | null,
 ): boolean {
-  return applyTextFormatAtBookmark(editor, kind, bookmark ?? null) != null
+  if (bookmark && bookmark.end > bookmark.start) {
+    return applyTextFormatForTarget(editor, kind, {
+      mode: 'partial',
+      bookmark,
+    })
+  }
+  const target = resolveEditTarget(editor)
+  return target != null && applyTextFormatForTarget(editor, kind, target)
 }
 
 export function handleTextFormatShortcutEvent(
@@ -200,14 +220,14 @@ export function handleTextFormatShortcutEvent(
   const kind = formatKindFromShortcutKey(event.key, event.shiftKey)
   if (!kind) return false
 
-  rememberEditorSelection(editor)
-  const bookmark =
-    resolveEditorSelectionBookmark(editor) ?? recallEditorSelection(editor)
+  const target = resolveEditTarget(editor)
+  if (!target) return false
 
   event.preventDefault()
   event.stopPropagation()
 
-  applyTextFormatAtBookmark(editor, kind, bookmark)
+  if (!applyTextFormatForTarget(editor, kind, target)) return false
+
   onApplied?.()
   return true
 }

@@ -19,6 +19,8 @@ export const SOUND_LEVELS: Record<SoundId, number> = {
   itemGrab: 0.38,
   itemDrop: 0.09,
   spawn: 0.95,
+  /** Customize pin latch on UI anchor — quiet rising settle + soft ding. */
+  uiPinPlace: 1.05,
   lock: 0.09,
   unlock: 0.1,
   spaceEnter: 0.2,

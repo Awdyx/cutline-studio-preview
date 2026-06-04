@@ -82,8 +82,18 @@ export type SpaceCanvasItem = CanvasItemBase & {
   textAlign: ItemTextAlignment
   /** IndexedDB snapshot blob id — typically the space id. */
   snapshotId: string | null
+  /** Handwritten title ink (local coords in the title band) while name is still default. */
+  titleStrokes?: Stroke[]
   /** Highlighter tint — omitted means no tint; only visible in light mode. */
   tint?: SpaceTintId
+}
+
+export function spaceHasTitleInk(
+  space: SpaceCanvasItem,
+  activeStroke?: Stroke | null,
+): boolean {
+  if ((space.titleStrokes?.length ?? 0) > 0) return true
+  return activeStroke != null && activeStroke.points.length > 0
 }
 
 export type StudyHubCanvasItem = CanvasItemBase & {
@@ -101,6 +111,10 @@ export type DrawableSurfaceItem = StickyCanvasItem | StudyHubCanvasItem
 /** Pen ink clipped to item bounds — stickies only. */
 export function isStickyItem(item: CanvasItem): item is StickyCanvasItem {
   return item.type === 'sticky'
+}
+
+export function isSpaceItem(item: CanvasItem | undefined): item is SpaceCanvasItem {
+  return item?.type === 'space'
 }
 
 /** Ink on a sticky — same stroke sources rendered by StickyStrokesSvg. */

@@ -180,6 +180,10 @@ function normalizeItem(raw: unknown): CanvasItem | null {
         ? snapshotIdRaw
         : null
     const tint = normalizeSpaceTint((o as { tint?: unknown }).tint)
+    const titleStrokesRaw = (o as { titleStrokes?: unknown }).titleStrokes
+    const titleStrokes = Array.isArray(titleStrokesRaw)
+      ? titleStrokesRaw.map(normalizeStroke).filter((s): s is Stroke => s !== null)
+      : []
     return {
       id: o.id,
       type: 'space',
@@ -194,6 +198,7 @@ function normalizeItem(raw: unknown): CanvasItem | null {
         (o as { textAlign?: unknown }).textAlign != null
           ? normalizeTextAlignment((o as { textAlign?: unknown }).textAlign)
           : DEFAULT_SPACE_NAME_ALIGNMENT,
+      ...(titleStrokes.length > 0 ? { titleStrokes } : {}),
       ...(tint !== undefined ? { tint } : {}),
       ...(layer ? { layer } : {}),
     } as CanvasItem

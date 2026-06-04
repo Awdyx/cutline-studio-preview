@@ -208,6 +208,11 @@ html[data-studio-strokes-bleed] .cutline-draw-target,
   initial-value: 1406px;
 }
 
+@property --selection-depth-blur {syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
 /* Placeholder destination plates on the main canvas void. */.canvas-feature-plate {
   position: absolute;
   width: var(--feature-plate-width);
@@ -945,6 +950,8 @@ html[data-layout='phone'] .canvas-search-icon {
   --canvas-void-grid-opacity: 0.36;
   /* Selection dim + canvas customize backdrop — keep in sync with tokens.ts CANVAS_FOCUS_BACKDROP_BLUR_PX. */
   --canvas-focus-backdrop-blur: 12px;
+  --selection-depth-blur-transition-duration: 320ms;
+  --selection-depth-blur-transition-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --canvas-focus-backdrop-dim-light: rgba(0, 0, 0, 0.06);
   --canvas-focus-backdrop-dim-dark: rgba(0, 0, 0, 0.18);
   --ui-accent: #5a7ab0;
@@ -2557,14 +2564,39 @@ html[data-selection-blur-active] .pocket-strip-surface {
   isolation: auto;
 }
 
-/* Blur + dim canvas behind selection — matches canvas customize backdrop. */.ui-selection-depth {
-  background: var(--canvas-focus-backdrop-dim-light);
-  -webkit-backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
-  backdrop-filter: blur(var(--selection-depth-blur, var(--canvas-focus-backdrop-blur))) saturate(1);
+html {
+  --selection-depth-blur: 0px;
+  transition: --selection-depth-blur var(--selection-depth-blur-transition-duration)
+    var(--selection-depth-blur-transition-ease);
 }
 
-html[data-theme='dark'] .ui-selection-depth {
+html[data-selection-blur-active] {
+  --selection-depth-blur: var(--canvas-focus-backdrop-blur);
+}
+
+/* Blur + dim canvas behind selection — matches canvas customize backdrop. */.ui-selection-depth {
+  background: transparent;
+  -webkit-backdrop-filter: blur(var(--selection-depth-blur)) saturate(1);
+  backdrop-filter: blur(var(--selection-depth-blur)) saturate(1);
+  transition:
+    background var(--selection-depth-blur-transition-duration)
+      var(--selection-depth-blur-transition-ease),
+    backdrop-filter 0.42s ease-out,
+    -webkit-backdrop-filter 0.42s ease-out;
+}
+
+html[data-selection-blur-active] .ui-selection-depth {
+  background: var(--canvas-focus-backdrop-dim-light);
+}
+
+html[data-theme='dark'][data-selection-blur-active] .ui-selection-depth {
   background: var(--canvas-focus-backdrop-dim-dark);
+}
+
+@media (prefers-reduced-motion: reduce) {html,
+  .ui-selection-depth {
+    transition: none;
+  }
 }
 
 [data-canvas-item-z-menu] button {

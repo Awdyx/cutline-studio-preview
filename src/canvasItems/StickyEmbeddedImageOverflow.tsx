@@ -18,7 +18,11 @@ import {
   embeddedImageOverflowUnion,
 } from './stickyOverflowPreview'
 import { isImageInSticky, type ImageCanvasItem } from './types'
-import { useCanvasCustomizeItemHandoff } from '../canvasItemCustomize/canvasCustomizeStore'
+import {
+  useCanvasCustomizeExiting,
+  useCanvasCustomizeItemHandoff,
+  useCanvasCustomizeStore,
+} from '../canvasItemCustomize/canvasCustomizeStore'
 import { useLassoStore } from '../drawing/useLassoStore'
 
 const overflowEnter = { duration: 0.48, ease: [0.16, 1, 0.3, 1] as const }
@@ -35,6 +39,7 @@ function OverflowImagePreview({
   stickyHeight,
   interactive,
   fadeRevealed,
+  customizeFadeOut,
   instant,
 }: {
   image: ImageCanvasItem
@@ -42,6 +47,7 @@ function OverflowImagePreview({
   stickyHeight: number
   interactive: boolean
   fadeRevealed: boolean
+  customizeFadeOut: boolean
   instant: boolean
 }) {
   const { url, status } = useMediaBlobUrl(image.mediaId, image.id)
@@ -74,7 +80,7 @@ function OverflowImagePreview({
 
   const { union, clipPath } = layout
   const fadeEase = fadeRevealed ? overflowEnter.ease : overflowExit.ease
-  const fadeDuration = fadeRevealed ? overflowEnter.duration : overflowExit.duration
+  const fadeDuration = customizeFadeOut && !fadeRevealed ? 0.6 : fadeRevealed ? overflowEnter.duration : overflowExit.duration
 
   return (
     <div
@@ -154,6 +160,9 @@ export default function StickyEmbeddedImageOverflow({
   const selectedIds = useCanvasItemsStore((s) => s.selectedIds)
   const stickySelected = useItemSelected(stickyId)
   const stickyCustomizeHandoff = useCanvasCustomizeItemHandoff(stickyId)
+  const customizeHideReady = useCanvasCustomizeStore(
+    (s) => s.itemId === stickyId && s.enterCanvasHideReady,
+  )
   const stickyLassoSelected = useLassoStore((s) => s.selectedItemIds.includes(stickyId))
   const reduceMotion = useReducedMotion()
 
@@ -182,11 +191,12 @@ export default function StickyEmbeddedImageOverflow({
 
   const anyImageSelected = sorted.some((image) => selectedIds.includes(image.id))
   const active = stickySelected || anyImageSelected
-  const overflowRevealed = active && hasOverflow
+  const customizeExiting = useCanvasCustomizeExiting(stickyId)
+  const overflowRevealed = active && hasOverflow && !customizeExiting
   const overflowInteractive =
     interactive && overflowRevealed && !stickyCustomizeHandoff && !stickyLassoSelected
   const instant = reduceMotion
-  const [fadeRevealed, setFadeRevealed] = useState(false)
+  const [fadeRevealed, setFadeRevealed] = useState(overflowRevealed)
 
   // CSS opacity transition — rAF ensures fade-in always starts from 0 (not first-paint snap).
   useLayoutEffect(() => {
@@ -194,8 +204,9 @@ export default function StickyEmbeddedImageOverflow({
       setFadeRevealed(overflowRevealed && !stickyCustomizeHandoff)
       return
     }
-    if (stickyCustomizeHandoff && hasOverflow) {
-      setFadeRevealed(true)
+    if (stickyCustomizeHandoff && !customizeHideReady) return
+    if (stickyCustomizeHandoff) {
+      if (!fadeRevealed) return
       const id = requestAnimationFrame(() => setFadeRevealed(false))
       return () => cancelAnimationFrame(id)
     }
@@ -213,7 +224,7 @@ export default function StickyEmbeddedImageOverflow({
       cancelAnimationFrame(raf1)
       cancelAnimationFrame(raf2)
     }
-  }, [overflowRevealed, instant, stickyCustomizeHandoff, hasOverflow, fadeRevealed])
+  }, [overflowRevealed, instant, stickyCustomizeHandoff, customizeHideReady, hasOverflow, fadeRevealed])
 
   if (sorted.length === 0 || !hasOverflow) return null
 
@@ -239,6 +250,7 @@ export default function StickyEmbeddedImageOverflow({
           stickyHeight={stickyHeight}
           interactive={overflowInteractive}
           fadeRevealed={fadeRevealed}
+          customizeFadeOut={stickyCustomizeHandoff}
           instant={instant}
         />
       ))}

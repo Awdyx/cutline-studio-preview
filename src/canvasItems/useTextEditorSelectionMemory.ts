@@ -1,6 +1,18 @@
 import { useEffect, type RefObject } from 'react'
 import { isRichTextEditorEngaged } from './textEditorContent'
+import { formatKindFromShortcutKey } from './textEditorFormat'
+import {
+  fontSizeDirectionFromKeyboardEvent,
+  isFontSizeShortcut,
+} from './textEditorFontSize'
 import { rememberEditorSelection } from './textEditorSelectionBookmark'
+
+function isFormatOrFontSizeKey(event: KeyboardEvent): boolean {
+  if (formatKindFromShortcutKey(event.key, event.shiftKey)) return true
+  if (isFontSizeShortcut(event)) return true
+  if (fontSizeDirectionFromKeyboardEvent(event)) return true
+  return false
+}
 
 /** Remember the last in-editor highlight so ⌘ shortcuts survive focus/⌘ key quirks. */
 export function useTextEditorSelectionMemory(
@@ -24,17 +36,23 @@ export function useTextEditorSelectionMemory(
       rememberEditorSelection(editor)
     }
 
-    function onMetaKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Meta') return
-      rememberIfEngaged()
+    function onModifierKeyDown(event: KeyboardEvent) {
+      const editor = editorRef.current
+      if (!editor) return
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (event.key === 'Meta' || event.key === 'Control') {
+        rememberIfEngaged()
+        return
+      }
+      if (isFormatOrFontSizeKey(event)) rememberIfEngaged()
     }
 
     document.addEventListener('selectionchange', rememberIfEngaged)
-    document.addEventListener('keydown', onMetaKeyDown, true)
+    document.addEventListener('keydown', onModifierKeyDown, true)
     document.addEventListener('pointerup', onPointerUp, true)
     return () => {
       document.removeEventListener('selectionchange', rememberIfEngaged)
-      document.removeEventListener('keydown', onMetaKeyDown, true)
+      document.removeEventListener('keydown', onModifierKeyDown, true)
       document.removeEventListener('pointerup', onPointerUp, true)
     }
   }, [editorRef, isActive])

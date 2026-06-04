@@ -4,6 +4,7 @@ import {
   focusItemOnCanvas,
   readCameraFromRef,
   restoreTransformMaxScale,
+  studyHubEphemeralSelectionBlurPx,
   studyHubMenuFocusFitOptions,
 } from '../canvas/canvasCamera'
 import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
@@ -44,8 +45,28 @@ function restorePocketStripScroll(scrollY: number): void {
 /** Fade duration — keep in sync with placed-hub menu-focus portal. */
 export const STUDY_HUB_OVERLAY_TRANSITION_MS = 200
 
-/** Shortcut/ephemeral overlay — panel + selection blur fade (keep in sync with CSS). */
+/** Shortcut/ephemeral overlay — panel opacity fade (blur eases via `--selection-depth-blur` in CSS). */
 export const STUDY_HUB_EPHEMERAL_FADE_MS = 400
+
+function applyStudyHubMenuFocusSelectionBlur(
+  transformRef: ReactZoomPanPinchContentRef | null,
+): void {
+  document.documentElement.style.setProperty(
+    '--selection-depth-blur',
+    `${studyHubEphemeralSelectionBlurPx(transformRef)}px`,
+  )
+}
+
+function clearStudyHubMenuFocusSelectionBlur(): void {
+  document.documentElement.style.removeProperty('--selection-depth-blur')
+}
+
+function revealPlacedStudyHubMenuFocus(
+  transformRef: ReactZoomPanPinchContentRef | null,
+): void {
+  applyStudyHubMenuFocusSelectionBlur(transformRef)
+  useCanvasItemsStore.getState().revealMenuFocus()
+}
 
 export const STUDY_HUB_EPHEMERAL_FADE_EASE = [0.4, 0, 0.2, 1] as const
 
@@ -172,7 +193,7 @@ export function focusStudyHubOnCanvas(
     })
     scrollPocketStripToStudyHub(item)
     requestAnimationFrame(() => {
-      useCanvasItemsStore.getState().revealMenuFocus()
+      revealPlacedStudyHubMenuFocus(transformRef)
     })
     return true
   }
@@ -188,7 +209,7 @@ export function focusStudyHubOnCanvas(
   focusItemOnCanvas(transformRef, item, {
     ...studyHubMenuFocusFitOptions(),
     onComplete: () => {
-      useCanvasItemsStore.getState().revealMenuFocus()
+      revealPlacedStudyHubMenuFocus(transformRef)
     },
   })
   return true
@@ -207,6 +228,7 @@ function dismissStudyHubEphemeralOverlay(): boolean {
   })
 
   window.setTimeout(() => {
+    clearStudyHubMenuFocusSelectionBlur()
     useCanvasItemsStore.setState({
       menuFocusDismissing: false,
       menuFocusEphemeralSubjectId: null,
@@ -252,6 +274,7 @@ export function dismissStudyHubMenuFocus(
     }
 
     const finishDismiss = () => {
+      clearStudyHubMenuFocusSelectionBlur()
       useCanvasItemsStore.setState({
         menuFocusDismissing: false,
         menuFocusDismissItemId: null,

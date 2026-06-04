@@ -13,6 +13,7 @@ import {
 } from './penInput'
 import { isPhoneLayout } from '../platform/layoutProfile'
 import type { PenToolMenuBridge } from './usePenToolMenu'
+import { hitTestSpaceTitleAtCanvasPoint } from '../canvasItems/spaceTitleBand'
 import { hitTestStickyAtCanvasPoint } from '../canvasItems/stickyHitTest'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { useStrokesStore } from './strokesStore'
@@ -24,7 +25,10 @@ import { useLassoStore } from './useLassoStore'
 import { keepActiveLassoSelectionForPointer } from './lassoPointerGuard'
 import { isPointerOnCanvasItem } from '../canvas/canvasSelectionDismiss'
 import { isPointerOverOpenStudyHubScratchPad } from '../canvasItems/studyHubMenuFocus'
-import { isUiDrawCanvasTarget } from './penToolMenuLayout'
+import {
+  isPointerOverUiDrawCanvas,
+  isUiDrawCanvasTarget,
+} from './penToolMenuLayout'
 const captureOpts = { capture: true } as const
 const capturePassiveOpts = { capture: true, passive: false } as const
 const ERASE_THROTTLE_MS = 16
@@ -67,6 +71,10 @@ export function useDrawing(
       addStickyStrokePoint,
       endStickyStroke,
       getStickyById,
+      startSpaceTitleStroke,
+      addSpaceTitleStrokePoint,
+      endSpaceTitleStroke,
+      getSpaceById,
     } = useCanvasItemsStore.getState()
 
     let pointerPenActive = false
@@ -74,6 +82,7 @@ export function useDrawing(
     let eraseActive = false
     let lastEraseAt = 0
     let activeStickyId: string | null = null
+    let activeSpaceTitleId: string | null = null
     let lastPointerPos: { clientX: number; clientY: number } | null = null
     let drawPointerDownX = 0
     let drawPointerDownY = 0
@@ -124,6 +133,21 @@ export function useDrawing(
       }
     }
 
+    function toSpaceTitleLocalPoint(
+      canvasX: number,
+      canvasY: number,
+      spaceId: string,
+      pressure: number,
+    ): StrokePoint | null {
+      const space = getSpaceById(spaceId)
+      if (!space) return null
+      return {
+        x: canvasX - space.x,
+        y: canvasY - space.y,
+        pressure,
+      }
+    }
+
     function capturePointer(event: PointerEvent) {
       try {
         canvasEl.setPointerCapture(event.pointerId)
@@ -145,7 +169,10 @@ export function useDrawing(
       const { targetTypes } = useEraserStore.getState()
       const items = useCanvasItemsStore.getState()
       const overSticky = hitTestStickyAtCanvasPoint(coords.x, coords.y) != null
-      if (targetTypes.includes('strokes')) applyDragErase(coords)
+      if (targetTypes.includes('strokes')) {
+        applyDragErase(coords)
+        items.applySpaceTitleStrokeErase(coords)
+      }
       // Match pen routing: ink on a sticky is erased when Strokes is on and the tip
       // is over that sticky, without requiring a separate Stickies target toggle.
       if (
@@ -190,16 +217,34 @@ export function useDrawing(
       }
 
       const config = strokeConfig()
+
+      const spaceTitleId = hitTestSpaceTitleAtCanvasPoint(coords.x, coords.y)
+      if (spaceTitleId) {
+        const local = toSpaceTitleLocalPoint(
+          coords.x,
+          coords.y,
+          spaceTitleId,
+          pressure,
+        )
+        if (!local) return
+        activeSpaceTitleId = spaceTitleId
+        activeStickyId = null
+        startSpaceTitleStroke(spaceTitleId, local, config)
+        return
+      }
+
       const stickyId = hitTestStickyAtCanvasPoint(coords.x, coords.y)
       if (stickyId) {
         const local = toStickyLocalPoint(coords.x, coords.y, stickyId, pressure)
         if (!local) return
         activeStickyId = stickyId
+        activeSpaceTitleId = null
         startStickyStroke(stickyId, local, config)
         return
       }
 
       activeStickyId = null
+      activeSpaceTitleId = null
       startStroke({ ...coords, pressure }, config)
     }
 
@@ -210,6 +255,17 @@ export function useDrawing(
       const mode = useToolStore.getState().mode
       if (mode === 'erase' && eraseActive) {
         eraseAt(coords)
+        return
+      }
+
+      if (activeSpaceTitleId) {
+        const local = toSpaceTitleLocalPoint(
+          coords.x,
+          coords.y,
+          activeSpaceTitleId,
+          pressure,
+        )
+        if (local) addSpaceTitleStrokePoint(local)
         return
       }
 
@@ -236,6 +292,12 @@ export function useDrawing(
         return
       }
 
+      if (activeSpaceTitleId) {
+        endSpaceTitleStroke()
+        activeSpaceTitleId = null
+        return
+      }
+
       if (activeStickyId) {
         endStickyStroke()
         activeStickyId = null
@@ -254,6 +316,10 @@ export function useDrawing(
       if (!lastPointerPos) return
       if (
         isPointerOverOpenStudyHubScratchPad(
+          lastPointerPos.clientX,
+          lastPointerPos.clientY,
+        ) ||
+        isPointerOverUiDrawCanvas(
           lastPointerPos.clientX,
           lastPointerPos.clientY,
         )
@@ -283,10 +349,14 @@ export function useDrawing(
       if (!isSpaceDrawHeld()) return
       if (
         lastPointerPos &&
-        isPointerOverOpenStudyHubScratchPad(
+        (isPointerOverOpenStudyHubScratchPad(
           lastPointerPos.clientX,
           lastPointerPos.clientY,
-        )
+        ) ||
+          isPointerOverUiDrawCanvas(
+            lastPointerPos.clientX,
+            lastPointerPos.clientY,
+          ))
       ) {
         return
       }
@@ -310,7 +380,7 @@ export function useDrawing(
     }
 
     function isCanvasEventTarget(target: EventTarget | null): boolean {
-      if (isUiDrawCanvasTarget(target)) return true
+      if (isUiDrawCanvasTarget(target)) return false
       // Canvas DOM hit — always allow (covers items, mesh blobs, etc.).
       if (target instanceof Node && canvasEl.contains(target)) return true
       // Outside the canvas viewport (chrome UI: FABs, top bar, panels, menus)
@@ -333,6 +403,7 @@ export function useDrawing(
 
     function onTouchStart(event: TouchEvent) {
       if (event.touches.length !== 1) return
+      if (isUiDrawCanvasTarget(event.target)) return
       const touch = event.touches[0]
       if (!isCanvasEventTarget(event.target)) {
         return
@@ -374,6 +445,10 @@ export function useDrawing(
     }
 
     function onPointerDown(event: PointerEvent) {
+      if (isUiDrawCanvasTarget(event.target)) {
+        penMenu()?.onPointerDown(event)
+        return
+      }
       if (!isCanvasEventTarget(event.target)) return
       if (isHandleTarget(event.target)) return
       if (isLassoSelectionChromeTarget(event.target)) return
@@ -383,7 +458,6 @@ export function useDrawing(
         return
       }
       menuOnDown?.onPointerDown(event)
-      if (isUiDrawCanvasTarget(event.target)) return
       if (!canStartDrawingPointer(event)) return
 
       const mode = useToolStore.getState().mode
@@ -446,7 +520,8 @@ export function useDrawing(
 
       if (isSpaceDrawHeld() && event.pointerType === 'mouse') {
         if (
-          !isPointerOverOpenStudyHubScratchPad(event.clientX, event.clientY)
+          !isPointerOverOpenStudyHubScratchPad(event.clientX, event.clientY) &&
+          !isPointerOverUiDrawCanvas(event.clientX, event.clientY)
         ) {
           penMenu()?.moveSpaceHold(event.clientX, event.clientY)
           if (!penMenu()?.isMenuOpen()) {
@@ -483,6 +558,7 @@ export function useDrawing(
 
       if (menu?.onPointerMove(event)) return
       if (!pointerPenActive || event.pointerId !== activePointerId) return
+      if (isPointerOverUiDrawCanvas(event.clientX, event.clientY)) return
 
       const mode = useToolStore.getState().mode
 
@@ -521,8 +597,11 @@ export function useDrawing(
         }
         eraseActive = false
         activeStickyId = null
+        activeSpaceTitleId = null
         strokeStarted = false
-        useCanvasItemsStore.getState().cancelActiveStickyStroke()
+        const itemsStore = useCanvasItemsStore.getState()
+        itemsStore.cancelActiveStickyStroke()
+        itemsStore.cancelActiveSpaceTitleStroke()
         return
       }
 
@@ -629,6 +708,7 @@ export function useDrawing(
       penMenu()?.cancelSpaceHold()
       setPenDown(false)
       activeStickyId = null
+      activeSpaceTitleId = null
       activePointerId = null
     }
   }, [canvasMount, canvasRef, transformRef, onPenStateChange, penMenuBridgeRef])

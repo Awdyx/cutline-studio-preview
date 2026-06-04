@@ -5,7 +5,7 @@ import { syncLayoutProfileAttribute } from './platform/layoutProfile'
 import { syncTouchFirstAttribute } from './platform/compositor'
 import { isNativeDesktop, syncNativeShellAttributes } from './platform/nativeShell'
 import App from './App.tsx'
-import AppAccessGate from './components/AppAccessGate.tsx'
+import AppAccessGate, { APP_ACCESS_GATE_ENABLED } from './components/AppAccessGate.tsx'
 
 syncLayoutProfileAttribute()
 syncTouchFirstAttribute()
@@ -16,7 +16,9 @@ function Root() {
     syncNativeShellAttributes()
   }, [])
 
-  const [unlocked, setUnlocked] = useState(() => isNativeDesktop())
+  const [unlocked, setUnlocked] = useState(
+    () => !APP_ACCESS_GATE_ENABLED || isNativeDesktop(),
+  )
 
   return (
     <>

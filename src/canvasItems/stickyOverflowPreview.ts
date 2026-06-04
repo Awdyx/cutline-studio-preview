@@ -6,8 +6,6 @@ import {
 } from './stickyImagePlacement'
 import type { ImageCanvasItem, StickyCanvasItem } from './types'
 
-const OVERFLOW_EDGE_FADE_PX = 64
-
 type MaskStop = { pct: number; color: string }
 
 export type OverflowMaskLayers = {
@@ -19,10 +17,6 @@ export type OverflowMaskLayers = {
 export type OverflowPreviewLayout = {
   union: StickyLocalRect
   clipPath: string
-}
-
-function overflowFadeDistance(span: number, fadePx = OVERFLOW_EDGE_FADE_PX): number {
-  return Math.min(fadePx, Math.max(20, span * 0.94))
 }
 
 function pushMaskStop(stops: MaskStop[], pct: number, color: string) {
@@ -130,14 +124,12 @@ function buildHorizontalDistanceMask(
   const sw = sticky.width
   const { x: rx, width: rw } = union
   const rectEnd = rx + rw
-  const fade = overflowFadeDistance(rw)
   const toPct = (coord: number) => ((coord - rx) / rw) * 100
   const stops: MaskStop[] = []
 
   if (ix < 0 && rx < 0) {
-    pushMaskStop(stops, toPct(Math.max(rx, ix)), 'transparent')
-    pushMaskStop(stops, toPct(Math.min(rectEnd, ix + fade * 0.42)), 'rgba(0,0,0,0.28)')
-    pushMaskStop(stops, toPct(Math.min(rectEnd, ix + fade)), 'black')
+    pushMaskStop(stops, toPct(Math.max(rx, ix)), 'black')
+    pushMaskStop(stops, toPct(Math.min(rectEnd, 0)), 'black')
   }
 
   const plateauStart = Math.max(rx, 0)
@@ -149,8 +141,7 @@ function buildHorizontalDistanceMask(
 
   if (ib > sw && rectEnd > sw) {
     pushMaskStop(stops, toPct(Math.max(rx, sw)), 'black')
-    pushMaskStop(stops, toPct(Math.max(rx, ib - fade * 0.42)), 'rgba(0,0,0,0.28)')
-    pushMaskStop(stops, toPct(Math.min(rectEnd, ib)), 'transparent')
+    pushMaskStop(stops, toPct(Math.min(rectEnd, ib)), 'black')
   }
 
   return finalizeAxisMask(stops, 'to right')
@@ -166,14 +157,12 @@ function buildVerticalDistanceMask(
   const sh = sticky.height
   const { y: ry, height: rh } = union
   const rectEnd = ry + rh
-  const fade = overflowFadeDistance(rh)
   const toPct = (coord: number) => ((coord - ry) / rh) * 100
   const stops: MaskStop[] = []
 
   if (iy < 0 && ry < 0) {
-    pushMaskStop(stops, toPct(Math.max(ry, iy)), 'transparent')
-    pushMaskStop(stops, toPct(Math.min(rectEnd, iy + fade * 0.42)), 'rgba(0,0,0,0.28)')
-    pushMaskStop(stops, toPct(Math.min(rectEnd, iy + fade)), 'black')
+    pushMaskStop(stops, toPct(Math.max(ry, iy)), 'black')
+    pushMaskStop(stops, toPct(Math.min(rectEnd, 0)), 'black')
   }
 
   const plateauStart = Math.max(ry, 0)
@@ -185,14 +174,13 @@ function buildVerticalDistanceMask(
 
   if (ir > sh && rectEnd > sh) {
     pushMaskStop(stops, toPct(Math.max(ry, sh)), 'black')
-    pushMaskStop(stops, toPct(Math.max(ry, ir - fade * 0.42)), 'rgba(0,0,0,0.28)')
-    pushMaskStop(stops, toPct(Math.min(rectEnd, ir)), 'transparent')
+    pushMaskStop(stops, toPct(Math.min(rectEnd, ir)), 'black')
   }
 
   return finalizeAxisMask(stops, 'to bottom')
 }
 
-/** H×V distance falloff from sticky bounds — one mask on the union layer. */
+/** H×V hard mask from sticky bounds — one mask on the union layer. */
 export function buildOverflowDistanceMask(
   union: StickyLocalRect,
   image: Pick<ImageCanvasItem, 'x' | 'y' | 'width' | 'height'>,

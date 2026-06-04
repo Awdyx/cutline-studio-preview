@@ -1,31 +1,52 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { RotateCcw, Trash2 } from 'lucide-react'
-import { playSubmenuTap } from '../sound/submenuSound'
+import {
+  startItemDragSound,
+  stopItemDragSound,
+  updateItemDragSound,
+} from '../sound/itemDragSound'
+import {
+  startItemResizeSound,
+  stopItemResizeSound,
+  updateItemResizeSound,
+} from '../sound/itemResizeSound'
 import { uiPinScreenRect } from './uiPinDom'
 import { font } from '../styles/tokens'
 import { isFreeFormPin, readPinDimensions, clampPinSize, type UiPin } from './types'
 import { useCanvasCustomizeActive } from '../canvasItemCustomize/canvasCustomizeStore'
 import { useUiCustomizationStore } from './uiCustomizationStore'
 
+const PIN_TOOLBAR_FADE = { duration: 0.18, ease: [0.4, 0, 0.2, 1] as const }
+
 // ─── Drag-control hook ───────────────────────────────────────────────────────
 
 function useDragControl({
   onDelta,
   onEnd,
+  onGestureStart,
+  onGestureMove,
+  onGestureEnd,
 }: {
   onDelta: (dx: number) => void
   onEnd?: () => void
+  onGestureStart?: (clientX: number, clientY: number) => void
+  onGestureMove?: (clientX: number, clientY: number) => void
+  onGestureEnd?: () => void
 }) {
   const startXRef = useRef<number | null>(null)
 
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
-    e.stopPropagation()
-    e.preventDefault()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    startXRef.current = e.clientX
-  }, [])
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      e.stopPropagation()
+      e.preventDefault()
+      e.currentTarget.setPointerCapture(e.pointerId)
+      startXRef.current = e.clientX
+      onGestureStart?.(e.clientX, e.clientY)
+    },
+    [onGestureStart],
+  )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
@@ -33,23 +54,58 @@ function useDragControl({
       const delta = e.clientX - startXRef.current
       startXRef.current = e.clientX
       onDelta(delta)
+      onGestureMove?.(e.clientX, e.clientY)
     },
-    [onDelta],
+    [onDelta, onGestureMove],
   )
 
-  const onPointerUp = useCallback(
+  const endGesture = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (startXRef.current === null) return
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId)
       }
       startXRef.current = null
+      onGestureEnd?.()
       onEnd?.()
     },
-    [onEnd],
+    [onEnd, onGestureEnd],
   )
 
-  return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp }
+  return {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: endGesture,
+    onPointerCancel: endGesture,
+  }
+}
+
+const PIN_ROTATE_DRAG_SFX = {
+  onGestureStart: () => startItemDragSound(),
+  onGestureMove: (x: number, y: number) => updateItemDragSound(x, y),
+  onGestureEnd: () => stopItemDragSound(),
+} as const
+
+function usePinResizeDragSfx(readLiveSize: () => number) {
+  const startSizeRef = useRef(1)
+  return {
+    onGestureStart: useCallback(
+      (x: number, y: number) => {
+        startSizeRef.current = readLiveSize()
+        startItemResizeSound(x, y)
+      },
+      [readLiveSize],
+    ),
+    onGestureMove: useCallback(
+      (x: number, y: number) => {
+        const ratio =
+          startSizeRef.current > 0 ? readLiveSize() / startSizeRef.current : 1
+        updateItemResizeSound(x, y, ratio)
+      },
+      [readLiveSize],
+    ),
+    onGestureEnd: useCallback(() => stopItemResizeSound(), []),
+  }
 }
 
 // ─── Sub-controls ────────────────────────────────────────────────────────────
@@ -65,6 +121,7 @@ function RotateControl({ pin }: { pin: UiPin }) {
       rotatePin(pin.id, Math.round(signed))
     },
     onEnd: () => setDragging(false),
+    ...PIN_ROTATE_DRAG_SFX,
   })
 
   const onPointerDown = useCallback(
@@ -121,10 +178,18 @@ function RotateControl({ pin }: { pin: UiPin }) {
 function ResizeUniformControl({ pin }: { pin: UiPin }) {
   const resizePinUniform = useUiCustomizationStore((s) => s.resizePinUniform)
   const [dragging, setDragging] = useState(false)
+  const readSize = useCallback(() => {
+    return (
+      useUiCustomizationStore.getState().pins.find((p) => p.id === pin.id)?.size ??
+      pin.size
+    )
+  }, [pin.id, pin.size])
+  const resizeSfx = usePinResizeDragSfx(readSize)
 
   const sizeDrag = useDragControl({
     onDelta: (dx) => resizePinUniform(pin.id, pin.size + dx * 0.7),
     onEnd: () => setDragging(false),
+    ...resizeSfx,
   })
 
   const onPointerDown = useCallback(
@@ -191,14 +256,26 @@ function ResizeFreeControl({ pin }: { pin: UiPin }) {
   const { width: w, height: h } = readPinDimensions(pin)
   const [draggingW, setDraggingW] = useState(false)
   const [draggingH, setDraggingH] = useState(false)
+  const readWidth = useCallback(() => {
+    const p = useUiCustomizationStore.getState().pins.find((x) => x.id === pin.id)
+    return p ? readPinDimensions(p).width : w
+  }, [pin.id, w])
+  const readHeight = useCallback(() => {
+    const p = useUiCustomizationStore.getState().pins.find((x) => x.id === pin.id)
+    return p ? readPinDimensions(p).height : h
+  }, [pin.id, h])
+  const widthSfx = usePinResizeDragSfx(readWidth)
+  const heightSfx = usePinResizeDragSfx(readHeight)
 
   const wDrag = useDragControl({
     onDelta: (dx) => resizePinRect(pin.id, clampPinSize(w + dx * 0.8), h),
     onEnd: () => setDraggingW(false),
+    ...widthSfx,
   })
   const hDrag = useDragControl({
     onDelta: (dx) => resizePinRect(pin.id, w, clampPinSize(h + dx * 0.8)),
     onEnd: () => setDraggingH(false),
+    ...heightSfx,
   })
 
   return (
@@ -269,6 +346,13 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
   const canvasItemCustomize = useCanvasCustomizeActive()
 
   useEffect(() => {
+    return () => {
+      stopItemDragSound()
+      stopItemResizeSound()
+    }
+  }, [])
+
+  useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Backspace' && e.key !== 'Delete') return
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
@@ -315,42 +399,37 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
   const free = isFreeFormPin(pin)
 
   const toolbar = (
-    // Outer div handles centering so Framer Motion's scale/y don't fight translateX(-50%)
-    <div
+    <motion.div
       data-ui-pin-toolbar=""
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={PIN_TOOLBAR_FADE}
       style={{
         position: 'fixed',
         left: 0,
         top: 0,
         transform: `translate(${pos.x}px, ${pos.y}px) translateX(-50%)`,
-        zIndex: canvasItemCustomize ? 102 : 90,
+        zIndex: 90,
         pointerEvents: 'auto',
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-    <motion.div
-      initial={canvasItemCustomize ? false : { opacity: 0, y: 6, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={canvasItemCustomize ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
-      transition={
-        canvasItemCustomize
-          ? { duration: 0 }
-          : { type: 'spring', stiffness: 400, damping: 28, mass: 0.6 }
-      }
-      style={{
-        display: 'flex',
-        alignItems: 'stretch',
-        height: 36,
-        borderRadius: 999,
-        background: 'var(--card-bg)',
-        border: '1px solid var(--glass-border)',
-        boxShadow: 'var(--card-shadow)',
-        backdropFilter: 'blur(22px) saturate(1.4)',
-        WebkitBackdropFilter: 'blur(22px) saturate(1.4)',
-        overflow: 'hidden',
-        whiteSpace: 'nowrap',
-      }}
-    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'stretch',
+          height: 36,
+          borderRadius: 999,
+          background: 'var(--card-bg)',
+          border: '1px solid var(--glass-border)',
+          boxShadow: 'var(--card-shadow)',
+          backdropFilter: 'blur(22px) saturate(1.4)',
+          WebkitBackdropFilter: 'blur(22px) saturate(1.4)',
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+        }}
+      >
       {/* Rotate */}
       <RotateControl pin={pin} />
 
@@ -374,7 +453,6 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
           // Fire on pointerUp so iOS doesn't require two taps (first tap
           // "activates" a button inside position:fixed on iPad Safari).
           e.stopPropagation()
-          playSubmenuTap()
           deletePin(pin.id)
         }}
         style={{
@@ -401,8 +479,8 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
       >
         <Trash2 size={13} strokeWidth={2.2} />
       </button>
+      </div>
     </motion.div>
-    </div>
   )
 
   if (canvasItemCustomize && typeof document !== 'undefined') {
@@ -412,9 +490,5 @@ function UiPinToolbarInner({ pinId }: UiPinToolbarProps) {
 }
 
 export default function UiPinToolbar({ pinId }: UiPinToolbarProps) {
-  return (
-    <AnimatePresence mode="wait">
-      <UiPinToolbarInner key={pinId} pinId={pinId} />
-    </AnimatePresence>
-  )
+  return <UiPinToolbarInner pinId={pinId} />
 }

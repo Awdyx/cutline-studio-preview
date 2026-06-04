@@ -1,8 +1,9 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { isEditorEmpty } from './textEditorContent'
 import {
-  rememberEditorSelection,
-  resolveEditorSelectionBookmark,
+  collapseEditorCaretToEnd,
+  editorBookmarkToRange,
+  resolveEditTarget,
   restoreEditorBookmark,
 } from './textEditorSelectionBookmark'
 import { STUDIO_SPAWN_SIZE_SCALE } from './types'
@@ -235,22 +236,23 @@ export function changeEditorFontSize(
   defaultPx: number,
 ): boolean {
   const delta = direction === 'increase' ? FONT_SIZE_STEP : -FONT_SIZE_STEP
+  const target = resolveEditTarget(editor)
+  if (!target) return false
 
-  const selection = window.getSelection()
-  const range = selection && selection.rangeCount > 0
-    ? selection.getRangeAt(0)
-    : null
-
-  // No selection (or selection outside editor) → shift everything
-  if (!range || !editor.contains(range.commonAncestorContainer) || range.collapsed) {
-    return shiftAllFontSizes(editor, defaultPx, delta)
+  if (target.mode === 'partial') {
+    const range = editorBookmarkToRange(editor, target.bookmark)
+    if (!range || range.collapsed) return false
+    const currentPx = getFontSizeAtRange(editor, range, defaultPx)
+    const nextPx = clampFontSize(currentPx + delta)
+    if (nextPx === currentPx) return false
+    if (!wrapRangeWithFontSpan(range, nextPx)) return false
+    restoreEditorBookmark(editor, target.bookmark)
+    return true
   }
 
-  // Selection → only wrap selected text
-  const currentPx = getFontSizeAtRange(editor, range, defaultPx)
-  const nextPx = clampFontSize(currentPx + delta)
-  if (nextPx === currentPx) return false
-  return wrapRangeWithFontSpan(range, nextPx)
+  const changed = shiftAllFontSizes(editor, defaultPx, delta)
+  if (changed) collapseEditorCaretToEnd(editor)
+  return changed
 }
 
 export function setEditorFontSize(
@@ -349,13 +351,7 @@ export function handleFontSizeShortcutEvent(
 
   event.preventDefault()
 
-  rememberEditorSelection(editor)
-  const bookmark = resolveEditorSelectionBookmark(editor)
-  if (bookmark) restoreEditorBookmark(editor, bookmark)
-
   const changed = changeEditorFontSize(editor, direction, defaultPx)
-  if (bookmark) restoreEditorBookmark(editor, bookmark)
-
   if (changed) onApplied?.()
   return true
 }

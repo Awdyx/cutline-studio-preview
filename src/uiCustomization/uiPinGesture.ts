@@ -5,6 +5,12 @@ import {
   type UiPin,
 } from './types'
 import { useUiCustomizationStore } from './uiCustomizationStore'
+import { playSound } from '../sound/playSound'
+import {
+  startItemDragSound,
+  stopItemDragSound,
+  updateItemDragSound,
+} from '../sound/itemDragSound'
 import {
   readUiAnchorVisualScale,
   uiAnchorElement,
@@ -42,6 +48,8 @@ type PinGestureSession = {
   activePointers: Map<number, { x: number; y: number }>
   drag: DragState | null
   pinch: PinchState | null
+  /** Pointer-down started on the already-selected pin — tap-up without drag deselects. */
+  tapToDeselectOnRelease: boolean
 }
 
 let session: PinGestureSession | null = null
@@ -165,8 +173,14 @@ function handlePointerMove(e: PointerEvent) {
   const dy = e.clientY - session.drag.startY
   if (!session.drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
 
+  const dragJustStarted = !session.drag.moved
   session.drag.moved = true
   setPinDragging(true)
+  if (dragJustStarted) {
+    playSound('itemGrab')
+    startItemDragSound()
+  }
+  updateItemDragSound(e.clientX, e.clientY)
 
   const scale = uiAnchorFocusScale(session.anchorId)
   const newOffsetX = session.drag.startOffsetX + dx / scale
@@ -204,6 +218,14 @@ function releasePointer(e: PointerEvent) {
   if (session.activePointers.size === 0) {
     if (session.drag?.outOfBoundsDelete) {
       useUiCustomizationStore.getState().deletePin(session.pinId)
+    } else if (
+      session.tapToDeselectOnRelease &&
+      session.drag &&
+      !session.drag.moved &&
+      !session.pinch
+    ) {
+      useUiCustomizationStore.getState().setSelectedPinId(null)
+      playSound('itemDeselect')
     }
     endPinGesture()
     return
@@ -253,6 +275,12 @@ function detachDocumentListeners() {
 export function endPinGesture() {
   if (!session) return
 
+  const drag = session.drag
+  if (drag?.moved && !drag.outOfBoundsDelete) {
+    playSound('itemDrop')
+  }
+  stopItemDragSound()
+
   for (const pointerId of session.activePointers.keys()) {
     if (
       session.captureEl.isConnected &&
@@ -274,6 +302,7 @@ export function beginPinPointerDown({
   pointerId,
   clientX,
   clientY,
+  wasSelected = false,
 }: {
   pinId: string
   anchorId: UiAnchorId
@@ -281,6 +310,7 @@ export function beginPinPointerDown({
   pointerId: number
   clientX: number
   clientY: number
+  wasSelected?: boolean
 }) {
   if (session && session.pinId !== pinId) {
     endPinGesture()
@@ -294,11 +324,13 @@ export function beginPinPointerDown({
       activePointers: new Map(),
       drag: null,
       pinch: null,
+      tapToDeselectOnRelease: wasSelected,
     }
     attachDocumentListeners()
   } else {
     session.captureEl = captureEl
     session.anchorId = anchorId
+    session.tapToDeselectOnRelease = wasSelected
   }
 
   try {

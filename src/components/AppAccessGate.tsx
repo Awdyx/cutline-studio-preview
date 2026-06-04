@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { font } from '../styles/tokens'
 
+/** Set to true to show the coming-soon password gate on web. */
+export const APP_ACCESS_GATE_ENABLED = false
+
 const ACCESS_PASSWORD = 'meow'
 
 type Props = {

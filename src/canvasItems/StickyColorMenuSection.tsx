@@ -1,4 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import {
+  LIGHT_MODE_TAUNT_TEXT,
+  MenuEphemeralTaunt,
+  useMenuEphemeralTaunt,
+} from '../components/MenuEphemeralTaunt'
 import { playSubmenuHover, runSubmenuClick } from '../sound/submenuSound'
 import { menuDividerStyle } from '../styles/tokens'
 import { STICKY_SWATCH_COLORS } from '../theme/paletteGenerator'
@@ -19,12 +24,14 @@ function ColorSwatch({
   active,
   label,
   onClick,
+  onBlockedClick,
   disabled = false,
 }: {
   colorId: StickyColorId
   active: boolean
   label: string
   onClick: () => void
+  onBlockedClick?: () => void
   disabled?: boolean
 }) {
   const [hovered, setHovered] = useState(false)
@@ -38,7 +45,6 @@ function ColorSwatch({
   return (
     <button
       type="button"
-      disabled={disabled}
       aria-label={label}
       aria-pressed={active}
       aria-disabled={disabled || undefined}
@@ -49,7 +55,10 @@ function ColorSwatch({
       }}
       onMouseLeave={() => setHovered(false)}
       onClick={() => {
-        if (!canInteract) return
+        if (!canInteract) {
+          onBlockedClick?.()
+          return
+        }
         runSubmenuClick(onClick)
       }}
       style={{
@@ -95,10 +104,16 @@ export default function StickyColorMenuSection({
   const effectiveMode = useEffectiveMode(themeMode)
   const colorsDisabled = effectiveMode === 'dark'
   const active = currentColor ?? 'yellow'
+  const sectionRef = useRef<HTMLDivElement>(null)
+  const { show: showTaunt, trigger: triggerTaunt } = useMenuEphemeralTaunt()
 
   return (
     <>
+      <MenuEphemeralTaunt show={showTaunt} anchorRef={sectionRef}>
+        {LIGHT_MODE_TAUNT_TEXT}
+      </MenuEphemeralTaunt>
       <div
+        ref={sectionRef}
         style={{
           display: 'flex',
           gap: 4,
@@ -114,6 +129,7 @@ export default function StickyColorMenuSection({
             active={active === id}
             label={label}
             disabled={colorsDisabled}
+            onBlockedClick={triggerTaunt}
             onClick={() => setStickyColor(itemId, id === 'yellow' ? undefined : id)}
           />
         ))}

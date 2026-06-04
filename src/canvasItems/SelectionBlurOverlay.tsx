@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect } from 'react'
 import { SELECTION_DEPTH_CLASS } from '../styles/tokens'
+import { useSelectionBlurDocumentState } from './useSelectionBlurDocumentState'
 import { Z_MENU_FOCUS_BLOCKER, Z_SELECTION_DIM } from './canvasZOrder'
 import { useCanvasItemsStore } from './canvasItemsStore'
 import { useLassoStore } from '../drawing/useLassoStore'
@@ -57,8 +57,12 @@ export default function SelectionBlurOverlay() {
   const showFullBlur =
     (show || ephemeralStudyHub || holdSelectionBlur) && !isLassoActive
   const keepSelectionBlurAttr = showFullBlur || blurReleasing
-  /** Only skip the fade when selection blur was already visible — not when customize first mounts it. */
-  const skipBlurEnter = show
+  /** Only skip the fade when selection blur was already visible — not when study-hub focus is starting. */
+  const skipBlurEnter = useCanvasItemsStore(
+    (s) =>
+      s.selectedIds.length > 0 &&
+      (s.menuFocusReturnCamera == null || s.menuFocusRevealed),
+  )
   const scrimBleed = !isInsideSpace && (menuFocusBlocksInteraction || showFullBlur)
   const pocketScrimHeight = pocketViewportHeight / Math.max(pocketScale, 0.001)
   const pocketScrimTop = pocketScrollY - pocketScrimHeight / 2
@@ -81,14 +85,7 @@ export default function SelectionBlurOverlay() {
       ? 0
       : 1
 
-  useEffect(() => {
-    if (!keepSelectionBlurAttr) {
-      document.documentElement.removeAttribute('data-selection-blur-active')
-      return
-    }
-    document.documentElement.setAttribute('data-selection-blur-active', '')
-    return () => document.documentElement.removeAttribute('data-selection-blur-active')
-  }, [keepSelectionBlurAttr])
+  useSelectionBlurDocumentState(keepSelectionBlurAttr)
 
   return (
     <>

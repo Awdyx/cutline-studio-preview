@@ -112,15 +112,16 @@ export function useTextEditorShortcuts(
       if (!editor) return
 
       const engaged = isRichTextEditorEngaged(editor, event.target)
+      const canHandle = isActive && engaged
 
-      if (isFormatModifierShortcut(event) && engaged) {
+      if (isFormatModifierShortcut(event) && canHandle) {
         if (handleTextFormatShortcutEvent(event, editor, onFormatApplied)) {
           event.stopPropagation()
         }
         return
       }
 
-      if (isFontSizeShortcut(event) && engaged) {
+      if (isFontSizeShortcut(event) && canHandle) {
         event.preventDefault()
         event.stopPropagation()
         pulseBracketShortcut()

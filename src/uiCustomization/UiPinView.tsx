@@ -6,6 +6,7 @@ import {
   shouldPlayPinEnterAnimation,
   markPinEnterAnimationDone,
 } from './uiPinEnterAnimation'
+import { playSound } from '../sound/playSound'
 import {
   UI_PIN_ENTER_DURATION_MS,
   useUiCustomizationStore,
@@ -177,6 +178,7 @@ function UiPinViewInner({ pin, editing, selected, anchorId }: UiPinViewProps) {
     if (!currentlySelected) {
       setSelectedPinId(pin.id)
       bringPinToFront(pin.id)
+      playSound('itemSelect')
     }
 
     beginPinPointerDown({
@@ -186,6 +188,7 @@ function UiPinViewInner({ pin, editing, selected, anchorId }: UiPinViewProps) {
       pointerId: e.pointerId,
       clientX: e.clientX,
       clientY: e.clientY,
+      wasSelected: currentlySelected,
     })
   }
 

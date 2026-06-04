@@ -14,7 +14,6 @@ import {
   clampSpaceName,
   isDefaultSpaceName,
 } from '../spaces/types'
-import { useCanvasNavigationStore } from '../canvas/canvasNavigationStore'
 import { useCanvasItemAreaPointer } from '../canvas/useCanvasItemAreaPointer'
 import {
   dismissSelectionForOutsideItemTap,
@@ -43,7 +42,11 @@ import { card, font, glass, SPACE_GLASS_CLASS } from '../styles/tokens'
 import { useThemeStore } from '../theme/themeStore'
 import { useEffectiveMode } from '../theme/useEffectiveMode'
 import { resolveSpaceTintGlassOverlay } from './spaceTint'
+import { isPenInput } from '../drawing/penInput'
+import SpaceTitleStrokesSvg from './SpaceTitleStrokesSvg'
+import { spaceTitleBandHeight, spaceTitleBandLocalRect } from './spaceTitleBand'
 import type { SpaceCanvasItem } from './types'
+import { spaceHasTitleInk } from './types'
 import {
   canvasItemDeleteExit,
   canvasItemDeleteExitTransition,
@@ -204,10 +207,8 @@ export default function SpaceItem({
   }, [item.id, transformRef])
 
   const tryOpenPreview = useCallback(() => {
-    if (useCanvasNavigationStore.getState().shouldSuppressItemTap()) return
     if (shouldSkipItemSelectForOutsideDismiss(item.id)) {
       dismissSelectionForOutsideItemTap(item.id)
-      return
     }
     enterSpace()
   }, [enterSpace, item.id])
@@ -217,6 +218,14 @@ export default function SpaceItem({
   const [titleDraft, setTitleDraft] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
   const titleEditAllowed = editingAllowed && !frozen && isSelected
+  const titleStrokes = item.titleStrokes ?? []
+  const activeTitleStroke = useCanvasItemsStore((s) =>
+    s.activeSpaceTitleStroke?.spaceId === item.id
+      ? s.activeSpaceTitleStroke.stroke
+      : null,
+  )
+  const showHandwrittenTitle = isDefaultName && spaceHasTitleInk(item, activeTitleStroke)
+  const titleBand = spaceTitleBandLocalRect(item.width)
 
   useEffect(() => {
     if (titleEditing) titleInputRef.current?.focus()
@@ -238,6 +247,9 @@ export default function SpaceItem({
       setTitleDraft(clamped)
       const next = clamped.trim() || DEFAULT_SPACE_NAME
       updateSpaceName(item.id, next)
+      if (!isDefaultSpaceName(next)) {
+        useCanvasItemsStore.getState().clearSpaceTitleStrokes(item.id)
+      }
     },
     [item.id, updateSpaceName],
   )
@@ -264,12 +276,6 @@ export default function SpaceItem({
       if (e.pointerType === 'pen') return
       e.stopPropagation()
       previewTapMovedRef.current = false
-      if (shouldSkipItemSelectForOutsideDismiss(item.id)) {
-        if (e.pointerType === 'mouse') {
-          dismissSelectionForOutsideItemTap(item.id)
-        }
-        return
-      }
       if (e.pointerType === 'mouse' && e.button === 2) {
         areaPointer.onPointerDown(e as ReactPointerEvent<HTMLElement>)
         return
@@ -286,17 +292,9 @@ export default function SpaceItem({
     [],
   )
 
-  const handlePreviewPointerUp = useCallback((_e: ReactPointerEvent) => {}, [])
-
-  const handlePreviewPointerCancel = useCallback(
-    (_e: ReactPointerEvent) => {
-      previewTapMovedRef.current = false
-    },
-    [],
-  )
-
-  const handlePreviewClick = useCallback(
-    (e: React.MouseEvent) => {
+  const handlePreviewPointerUp = useCallback(
+    (e: ReactPointerEvent) => {
+      if (e.pointerType === 'pen') return
       if (previewTapMovedRef.current) {
         previewTapMovedRef.current = false
         return
@@ -305,6 +303,13 @@ export default function SpaceItem({
       tryOpenPreview()
     },
     [tryOpenPreview],
+  )
+
+  const handlePreviewPointerCancel = useCallback(
+    (_e: ReactPointerEvent) => {
+      previewTapMovedRef.current = false
+    },
+    [],
   )
 
   const [hovered, setHovered] = useState(false)
@@ -382,6 +387,7 @@ export default function SpaceItem({
           />
         )}
         <div
+          data-space-title-band=""
           style={{
             padding: '7px 8px 9px',
             fontSize: SPACE_NAME_DEFAULT_FONT_SIZE,
@@ -390,9 +396,18 @@ export default function SpaceItem({
             flexShrink: 0,
             position: 'relative',
             overflow: 'visible',
+            minHeight: spaceTitleBandHeight(),
             ...textAlignmentEditorStyle(resolveItemTextAlignment(item)),
           }}
         >
+          {isDefaultName && (
+            <SpaceTitleStrokesSvg
+              strokes={titleStrokes}
+              width={titleBand.width}
+              height={titleBand.height}
+              spaceId={item.id}
+            />
+          )}
           <AnimatePresence initial={false} mode="popLayout">
             {titleEditing ? (
               <motion.input
@@ -438,15 +453,21 @@ export default function SpaceItem({
               <motion.div
                 key="title-view"
                 initial={{ opacity: 1 }}
-                animate={{ opacity: 1 }}
+                animate={{ opacity: showHandwrittenTitle ? 0 : isDefaultName ? 0.55 : 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.24, ease: 'easeOut' }}
-                style={{ display: 'inline-block' }}
+                transition={{ duration: 0.28, ease: 'easeOut' }}
+                style={{
+                  display: 'inline-block',
+                  pointerEvents: showHandwrittenTitle ? 'none' : 'auto',
+                }}
               >
                 {titleEditAllowed ? (
                   <button
                     type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => {
+                      if (e.pointerType === 'pen' || isPenInput(e)) return
+                      e.stopPropagation()
+                    }}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -461,7 +482,6 @@ export default function SpaceItem({
                       margin: 0,
                       font: 'inherit',
                       color: isDefaultName ? font.colorFaint : font.colorMuted,
-                      opacity: isDefaultName ? 0.55 : 1,
                       cursor: 'text',
                       textAlign: 'inherit',
                       userSelect: 'none',
@@ -474,7 +494,6 @@ export default function SpaceItem({
                     style={{
                       display: 'inline-block',
                       color: isDefaultName ? font.colorFaint : font.colorMuted,
-                      opacity: isDefaultName ? 0.55 : 1,
                       userSelect: 'none',
                     }}
                   >
@@ -501,7 +520,6 @@ export default function SpaceItem({
           onPointerMove={handlePreviewPointerMove}
           onPointerUp={handlePreviewPointerUp}
           onPointerCancel={handlePreviewPointerCancel}
-          onClick={handlePreviewClick}
           onContextMenu={areaPointer.onContextMenu}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {

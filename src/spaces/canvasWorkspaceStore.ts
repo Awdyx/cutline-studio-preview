@@ -444,6 +444,7 @@ export const useCanvasWorkspaceStore = create<CanvasWorkspaceState>((set, get) =
     useCanvasItemsStore.setState({
       items,
       activeStickyStroke: null,
+      activeSpaceTitleStroke: null,
       selectedIds: [],
     })
     useStrokesStore.setState({

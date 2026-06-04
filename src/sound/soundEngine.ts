@@ -620,6 +620,13 @@ function spawnTick(context: AudioContext, t0: number): void {
   })
 }
 
+/** Customize pin placed on a UI anchor — soft magnetic latch (not chrome blip / canvas knock). */
+function uiPinPlaceTick(context: AudioContext, t0: number): void {
+  sweep(context, 185, 498, 0.052, 0.01, t0)
+  tone(context, 286, 0.013, 0.005, 0.08, t0 + 0.016, 'sine')
+  tone(context, 358, 0.009, 0.004, 0.065, t0 + 0.024, 'sine')
+}
+
 /** Brand pill area focus — whisper loader: soft swell, three sine steps, quiet resolve. */
 function plateFocusTick(context: AudioContext, t0: number, pitchMul = 1): void {
   const hz = (base: number) => base * pitchMul
@@ -870,6 +877,10 @@ const PLAYERS: Record<SoundId, (context: AudioContext, t0: number) => void> = {
 
   spawn(context, t0) {
     spawnTick(context, t0)
+  },
+
+  uiPinPlace(context, t0) {
+    uiPinPlaceTick(context, t0)
   },
 
   lock(context, t0) {

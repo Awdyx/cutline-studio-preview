@@ -51,6 +51,9 @@ export const SELECTION_DEPTH_CLASS = 'ui-selection-depth'
 /** Shared with canvas customize backdrop — keep in sync with `--canvas-focus-backdrop-blur` in index.css. */
 export const CANVAS_FOCUS_BACKDROP_BLUR_PX = 12
 
+/** Selection / study-hub backdrop blur ramp — keep in sync with index.css. */
+export const SELECTION_DEPTH_BLUR_TRANSITION_MS = 320
+
 export const glass = {
   bg: 'var(--glass-bg)',
   border: '1px solid var(--glass-border)',

@@ -186,6 +186,7 @@ export default function TextItem({
     scheduleSave(readEditorHtml(el))
     setEditorEmpty(isEditorEmpty(el))
     syncAutoSize()
+    el.dispatchEvent(new Event('input', { bubbles: true }))
     if (!isEditing) {
       pendingSelectionRestoreRef.current = recallEditorSelection(el)
       beginEditing(false)

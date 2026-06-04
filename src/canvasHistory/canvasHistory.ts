@@ -104,6 +104,7 @@ function applySnapshot(snap: CanvasSnapshot) {
   useCanvasItemsStore.setState({
     items: cloneItems(snap.items),
     activeStickyStroke: null,
+    activeSpaceTitleStroke: null,
   })
   const pins = clonePins(snap.pins ?? [])
   const clippedAnchorIds = useUiCustomizationStore.getState().clippedAnchorIds

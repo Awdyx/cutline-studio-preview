@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { playSound } from '../sound/playSound'
 import { useCanvasCustomizeStore } from '../canvasItemCustomize/canvasCustomizeStore'
 import { useCanvasItemsStore } from '../canvasItems/canvasItemsStore'
 import { generateItemId } from '../canvasItems/itemId'
@@ -52,7 +53,6 @@ export const UI_FOCUS_SCALE = 1.6
 export const UI_PIN_EXIT_DURATION_MS = 180
 /** Pin enter spawn animation — keep in sync with `ui-pin-enter` keyframes. */
 export const UI_PIN_ENTER_DURATION_MS = 200
-
 export type PinDrag = {
   asset: UiPinAsset
   /** Blob / object URL for image or gif preview while dragging. */
@@ -233,6 +233,7 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
       }
       set((s) => ({ pins: [...s.pins, pin], selectedPinId: id }))
       persist(get().pins, get().clippedAnchorIds)
+      playSound('uiPinPlace')
       return id
     },
 
@@ -314,6 +315,7 @@ export const useUiCustomizationStore = create<UiCustomizationState>(
     deletePin: (id) => {
       if (!get().pins.some((p) => p.id === id)) return
       if (get().deletingPinIds.has(id)) return
+      playSound('deleteElement', { layer: true })
       set((s) => {
         const next = new Set(s.deletingPinIds)
         next.add(id)

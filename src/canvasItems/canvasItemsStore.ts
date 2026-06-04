@@ -56,6 +56,7 @@ import {
   type ImageCanvasItem,
   type SpaceCanvasItem,
   isImageInSticky,
+  isSpaceItem,
   isStickyItem,
   type StickyCanvasItem,
   type StudyHubCanvasItem,
@@ -72,7 +73,7 @@ import {
   studyHubStackOffset,
 } from './studyHubSpawnScale'
 import type { StudySubjectId } from './types'
-import { DEFAULT_SPACE_NAME } from '../spaces/types'
+import { DEFAULT_SPACE_NAME, isDefaultSpaceName } from '../spaces/types'
 import {
   DEFAULT_SPACE_NAME_ALIGNMENT,
   DEFAULT_TEXT_ALIGNMENT,
@@ -199,6 +200,7 @@ type CanvasItemsState = {
   /** Set when user spawns text; consumed on mount to focus editor once. */
   pendingEditorFocusId: string | null
   activeStickyStroke: { stickyId: string; stroke: Stroke } | null
+  activeSpaceTitleStroke: { spaceId: string; stroke: Stroke } | null
   lastStickyColor: import('./types').StickyColorId | undefined
   /** Sole-selected item parked after panning off-screen — may restore within 5s. */
   viewportSelectionPark: {
@@ -293,6 +295,13 @@ type CanvasItemsState = {
   addStickyStrokePoint: (point: StrokePoint) => void
   endStickyStroke: () => void
   cancelActiveStickyStroke: () => void
+  getSpaceById: (id: string) => SpaceCanvasItem | undefined
+  startSpaceTitleStroke: (spaceId: string, point: StrokePoint, config: StrokeConfig) => void
+  addSpaceTitleStrokePoint: (point: StrokePoint) => void
+  endSpaceTitleStroke: () => void
+  cancelActiveSpaceTitleStroke: () => void
+  applySpaceTitleStrokeErase: (canvasPos: { x: number; y: number }) => void
+  clearSpaceTitleStrokes: (spaceId: string) => void
   applyStickyStrokeErase: (canvasPos: { x: number; y: number }) => void
   /** Remove text/image items under the eraser tip (undo batched by beginDragErase). */
   applyDragItemErase: (canvasPos: { x: number; y: number }) => void
@@ -473,6 +482,7 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
   menuFocusDismissScratchClosing: false,
   pendingEditorFocusId: null,
   activeStickyStroke: null,
+  activeSpaceTitleStroke: null,
   lastStickyColor: undefined,
   viewportSelectionPark: null,
 
@@ -731,6 +741,11 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
           remove.has(state.activeStickyStroke.stickyId)
             ? null
             : state.activeStickyStroke,
+        activeSpaceTitleStroke:
+          state.activeSpaceTitleStroke &&
+          remove.has(state.activeSpaceTitleStroke.spaceId)
+            ? null
+            : state.activeSpaceTitleStroke,
       }
     })
     dismissEmptyTextItemsOnDeselect(get, set, prevSelected)
@@ -1073,6 +1088,10 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
         state.activeStickyStroke?.stickyId === itemId
           ? null
           : state.activeStickyStroke,
+      activeSpaceTitleStroke:
+        state.activeSpaceTitleStroke?.spaceId === itemId
+          ? null
+          : state.activeSpaceTitleStroke,
     }))
 
     useCanvasWorkspaceStore.setState((state) => {
@@ -1202,6 +1221,10 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
         state.activeStickyStroke?.stickyId === itemId
           ? null
           : state.activeStickyStroke,
+      activeSpaceTitleStroke:
+        state.activeSpaceTitleStroke?.spaceId === itemId
+          ? null
+          : state.activeSpaceTitleStroke,
     }))
 
     workspace.insertMainCanvasItem(restored)
@@ -1558,6 +1581,10 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
       }),
       activeStickyStroke:
         state.activeStickyStroke?.stickyId === id ? null : state.activeStickyStroke,
+      activeSpaceTitleStroke:
+        state.activeSpaceTitleStroke?.spaceId === id
+          ? null
+          : state.activeSpaceTitleStroke,
       selectedIds: state.selectedIds.filter((sid) => sid !== id),
     }))
     persistItems({ immediate: true })
@@ -1819,6 +1846,122 @@ export const useCanvasItemsStore = create<CanvasItemsState>((set, get) => ({
         return { ...item, strokes: [...item.strokes, completed] }
       }),
       activeStickyStroke: null,
+    }))
+    persistItems({ immediate: true })
+  },
+
+  getSpaceById: (id) => {
+    const item = get().items.find((i) => i.id === id)
+    return item && isSpaceItem(item) ? item : undefined
+  },
+
+  startSpaceTitleStroke: (spaceId, point, config) => {
+    set({ activeSpaceTitleStroke: { spaceId, stroke: createStroke(point, config) } })
+  },
+
+  addSpaceTitleStrokePoint: (point) => {
+    const { activeSpaceTitleStroke } = get()
+    if (!activeSpaceTitleStroke) return
+    const last = activeSpaceTitleStroke.stroke.points.at(-1)
+    if (!shouldAppendStrokePoint(last, point)) return
+    set({
+      activeSpaceTitleStroke: {
+        ...activeSpaceTitleStroke,
+        stroke: {
+          ...activeSpaceTitleStroke.stroke,
+          points: [...activeSpaceTitleStroke.stroke.points, point],
+        },
+      },
+    })
+  },
+
+  cancelActiveSpaceTitleStroke: () => {
+    set({ activeSpaceTitleStroke: null })
+  },
+
+  clearSpaceTitleStrokes: (spaceId) => {
+    set((state) => ({
+      items: state.items.map((entry) => {
+        if (!isSpaceItem(entry) || entry.id !== spaceId) return entry
+        if (!entry.titleStrokes?.length) return entry
+        return { ...entry, titleStrokes: undefined }
+      }),
+      activeSpaceTitleStroke:
+        state.activeSpaceTitleStroke?.spaceId === spaceId
+          ? null
+          : state.activeSpaceTitleStroke,
+    }))
+    persistItems()
+  },
+
+  applySpaceTitleStrokeErase: (canvasPos) => {
+    const { items } = get()
+    const ws = useCanvasWorkspaceStore.getState()
+
+    const removeTitleStroke = (itemId: string, strokeId: string) => {
+      set((state) => ({
+        items: state.items.map((entry) => {
+          if (!isSpaceItem(entry) || entry.id !== itemId) return entry
+          const list = entry.titleStrokes ?? []
+          const next = list.filter((stroke) => stroke.id !== strokeId)
+          if (next.length === list.length) return entry
+          return next.length > 0
+            ? { ...entry, titleStrokes: next }
+            : { ...entry, titleStrokes: undefined }
+        }),
+      }))
+      persistItems()
+    }
+
+    for (const item of items) {
+      if (!isSpaceItem(item)) continue
+      const name = ws.getSpaceName(item.id) ?? item.name
+      if (!isDefaultSpaceName(name)) continue
+      const strokes = item.titleStrokes ?? []
+      if (strokes.length === 0) continue
+
+      const localX = canvasPos.x - item.x
+      const localY = canvasPos.y - item.y
+
+      for (const stroke of strokes) {
+        if (!hitTestStroke(stroke, localX, localY, ERASE_HIT_RADIUS)) continue
+        scheduleStrokeErase(stroke.id, () =>
+          removeTitleStroke(item.id, stroke.id),
+        )
+      }
+    }
+  },
+
+  endSpaceTitleStroke: () => {
+    const active = get().activeSpaceTitleStroke
+    if (!active) return
+
+    let points = [...active.stroke.points]
+    if (points.length > 2 && points[points.length - 1].pressure < 0.05) {
+      points.pop()
+    }
+
+    if (points.length === 0) {
+      set({ activeSpaceTitleStroke: null })
+      return
+    }
+
+    points = decimateStrokePoints(points)
+    points = ensureMinimumStrokePoints(points, 3)
+
+    pushUndoSnapshot()
+
+    const trimmed: Stroke = { ...active.stroke, points }
+    const path = strokeToSvgPath(trimmed, true)
+    const completed = { ...trimmed, path }
+
+    set((state) => ({
+      items: state.items.map((item) => {
+        if (item.id !== active.spaceId || !isSpaceItem(item)) return item
+        const titleStrokes = [...(item.titleStrokes ?? []), completed]
+        return { ...item, titleStrokes }
+      }),
+      activeSpaceTitleStroke: null,
     }))
     persistItems({ immediate: true })
   },

@@ -188,6 +188,7 @@ export default function StickyNote({
     if (!el) return
     setEditorEmpty(isEditorEmpty(el))
     scheduleSave(readEditorHtml(el))
+    el.dispatchEvent(new Event('input', { bubbles: true }))
     if (!isEditing) {
       pendingSelectionRestoreRef.current = recallEditorSelection(el)
       beginEditing(false)
@@ -450,13 +451,15 @@ export default function StickyNote({
       transformRef={transformRef}
       onItemResizeStateChange={onItemResizeStateChange}
       forceLift={isDropHoverTarget}
+      persistWhileCustomizeHide={
+        <StickyEmbeddedImageOverflow
+          stickyId={item.id}
+          stickyWidth={item.width}
+          stickyHeight={item.height}
+          interactive={!frozen && !customizeSessionActive && !moveBlocked}
+        />
+      }
     >
-      <StickyEmbeddedImageOverflow
-        stickyId={item.id}
-        stickyWidth={item.width}
-        stickyHeight={item.height}
-        interactive={!frozen && !customizeSessionActive && !moveBlocked}
-      />
       <div
         ref={setEmbeddedHandleHost}
         aria-hidden

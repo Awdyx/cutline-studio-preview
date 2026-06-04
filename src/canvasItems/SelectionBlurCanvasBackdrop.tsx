@@ -31,8 +31,12 @@ export default function SelectionBlurCanvasBackdrop() {
     (show || ephemeralStudyHub || holdSelectionBlur) &&
     !isLassoActive &&
     !isInsideSpace
-  /** Only skip the fade when selection blur was already visible — not when customize first mounts it. */
-  const skipBlurEnter = show
+  /** Only skip the fade when selection blur was already visible — not when study-hub focus is starting. */
+  const skipBlurEnter = useCanvasItemsStore(
+    (s) =>
+      s.selectedIds.length > 0 &&
+      (s.menuFocusReturnCamera == null || s.menuFocusRevealed),
+  )
   const ephemeralBlurOpacity = ephemeralStudyHub
     ? menuFocusRevealed && !menuFocusDismissing
       ? 1

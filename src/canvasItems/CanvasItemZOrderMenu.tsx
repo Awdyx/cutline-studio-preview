@@ -128,7 +128,7 @@ export default function CanvasItemZOrderMenu() {
             background: glass.bg,
             border: glass.border,
             boxShadow: glass.shadow,
-            pointerEvents: 'none',
+            pointerEvents: 'auto',
             transformOrigin: menuLayout.transformOrigin,
             overflow: 'hidden',
           }}

@@ -3,6 +3,11 @@ export type EditorSelectionBookmark = {
   end: number
 }
 
+/** What a format/font-size shortcut should affect. */
+export type EditTarget =
+  | { mode: 'partial'; bookmark: EditorSelectionBookmark }
+  | { mode: 'document' }
+
 const lastNonCollapsedBookmark = new WeakMap<HTMLElement, EditorSelectionBookmark>()
 
 function normalizeEditorRange(range: Range): Range {
@@ -163,6 +168,47 @@ export function resolveEditorSelectionBookmark(
   if (cached && cached.end > cached.start) return cached
 
   return liveRange ? rangeToEditorBookmark(editor, liveRange) : null
+}
+
+function editorTextLength(editor: HTMLElement): number {
+  return editor.textContent?.length ?? 0
+}
+
+/**
+ * Resolve partial highlight vs whole-document edit for shortcuts.
+ * Call after rememberEditorSelection (e.g. on Meta or format keydown).
+ */
+export function resolveEditTarget(editor: HTMLElement): EditTarget | null {
+  rememberEditorSelection(editor)
+
+  const partial =
+    resolveEditorSelectionBookmark(editor) ?? recallEditorSelection(editor)
+  if (partial && partial.end > partial.start) {
+    return { mode: 'partial', bookmark: partial }
+  }
+
+  if (editorTextLength(editor) > 0) return { mode: 'document' }
+
+  return null
+}
+
+/** Full-document bookmark for DOM mutations (no window selection restore). */
+export function documentEditBookmark(
+  editor: HTMLElement,
+): EditorSelectionBookmark | null {
+  const len = editorTextLength(editor)
+  return len > 0 ? { start: 0, end: len } : null
+}
+
+/** Collapsed caret at end of editor — avoids leaving the whole block highlighted. */
+export function collapseEditorCaretToEnd(editor: HTMLElement): void {
+  const sel = window.getSelection()
+  if (!sel) return
+  const range = document.createRange()
+  range.selectNodeContents(editor)
+  range.collapse(false)
+  sel.removeAllRanges()
+  sel.addRange(range)
 }
 
 export function restoreEditorBookmark(

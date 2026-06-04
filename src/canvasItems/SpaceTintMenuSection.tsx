@@ -1,5 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { X } from 'lucide-react'
+import {
+  LIGHT_MODE_TAUNT_TEXT,
+  MenuEphemeralTaunt,
+  useMenuEphemeralTaunt,
+} from '../components/MenuEphemeralTaunt'
 import { playSubmenuHover, runSubmenuClick } from '../sound/submenuSound'
 import { menuDividerStyle } from '../styles/tokens'
 import { useThemeStore } from '../theme/themeStore'
@@ -21,6 +26,7 @@ function TintSwatch({
   label,
   swatchColor,
   onClick,
+  onBlockedClick,
   disabled = false,
 }: {
   tintId: SpaceTintId
@@ -28,12 +34,12 @@ function TintSwatch({
   label: string
   swatchColor: string
   onClick: () => void
+  onBlockedClick?: () => void
   disabled?: boolean
 }) {
   return (
     <button
       type="button"
-      disabled={disabled}
       aria-label={label}
       aria-pressed={active}
       aria-disabled={disabled || undefined}
@@ -42,7 +48,10 @@ function TintSwatch({
         playSubmenuHover()
       }}
       onClick={() => {
-        if (disabled) return
+        if (disabled) {
+          onBlockedClick?.()
+          return
+        }
         runSubmenuClick(onClick)
       }}
       style={{
@@ -70,10 +79,12 @@ function ClearTintButton({
   active,
   disabled,
   onClick,
+  onBlockedClick,
 }: {
   active: boolean
   disabled?: boolean
   onClick: () => void
+  onBlockedClick?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   const canInteract = !disabled
@@ -86,7 +97,6 @@ function ClearTintButton({
   return (
     <button
       type="button"
-      disabled={disabled}
       aria-label="No tint"
       aria-pressed={active}
       aria-disabled={disabled || undefined}
@@ -97,7 +107,10 @@ function ClearTintButton({
       }}
       onMouseLeave={() => setHovered(false)}
       onClick={() => {
-        if (!canInteract) return
+        if (!canInteract) {
+          onBlockedClick?.()
+          return
+        }
         runSubmenuClick(onClick)
       }}
       style={{
@@ -130,10 +143,16 @@ export default function SpaceTintMenuSection({
   const themeMode = useThemeStore((s) => s.mode)
   const effectiveMode = useEffectiveMode(themeMode)
   const colorsDisabled = effectiveMode === 'dark'
+  const sectionRef = useRef<HTMLDivElement>(null)
+  const { show: showTaunt, trigger: triggerTaunt } = useMenuEphemeralTaunt()
 
   return (
     <>
+      <MenuEphemeralTaunt show={showTaunt} anchorRef={sectionRef}>
+        {LIGHT_MODE_TAUNT_TEXT}
+      </MenuEphemeralTaunt>
       <div
+        ref={sectionRef}
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -162,6 +181,7 @@ export default function SpaceTintMenuSection({
               label={label}
               swatchColor={resolveSpaceTintSwatchColor(id)}
               disabled={colorsDisabled}
+              onBlockedClick={triggerTaunt}
               onClick={() => setSpaceTint(itemId, id)}
             />
           ))}
@@ -169,6 +189,7 @@ export default function SpaceTintMenuSection({
         <ClearTintButton
           active={currentTint == null}
           disabled={colorsDisabled}
+          onBlockedClick={triggerTaunt}
           onClick={() => setSpaceTint(itemId, undefined)}
         />
       </div>
